@@ -29,6 +29,17 @@ class Settings:
     whatsapp_phone_number_id: str
     whatsapp_webhook_verify_token: str
     whatsapp_waba_id: Optional[str]
+    # App Secret de la app de Meta (Configuración de la app -> Básica).
+    # Con él se verifica la firma X-Hub-Signature-256 de cada POST al
+    # webhook de WhatsApp. Opcional acá para no impedir que el resto del
+    # sistema arranque, pero SIN él el webhook rechaza todo POST (falla
+    # cerrado) salvo que whatsapp_skip_signature=True (solo desarrollo).
+    whatsapp_app_secret: Optional[str]
+    whatsapp_skip_signature: bool
+    # Si True, create_app() arranca el APScheduler (reconciliación y
+    # stock watcher). En producción (gunicorn) hay que ponerlo en true:
+    # el bloque `if __name__ == "__main__"` de app.py no se ejecuta ahí.
+    enable_scheduler: bool
     anthropic_api_key: Optional[str]
     telegram_bot_token: Optional[str]
     telegram_chat_id: Optional[str]
@@ -47,6 +58,10 @@ class Settings:
     bot_max_mensajes_historial: int
 
 
+def _env_bool(nombre: str) -> bool:
+    return os.getenv(nombre, "").strip().lower() in ("1", "true", "yes", "si", "sí")
+
+
 def load_settings() -> Settings:
     return Settings(
         rocketfy_base_url=os.environ["ROCKETFY_BASE_URL"],
@@ -62,6 +77,9 @@ def load_settings() -> Settings:
         whatsapp_phone_number_id=os.environ["WHATSAPP_PHONE_NUMBER_ID"],
         whatsapp_webhook_verify_token=os.environ["WHATSAPP_WEBHOOK_VERIFY_TOKEN"],
         whatsapp_waba_id=os.getenv("WHATSAPP_WABA_ID") or None,
+        whatsapp_app_secret=os.getenv("WHATSAPP_APP_SECRET") or None,
+        whatsapp_skip_signature=_env_bool("WHATSAPP_SKIP_SIGNATURE"),
+        enable_scheduler=_env_bool("ENABLE_SCHEDULER"),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,
         telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID") or None,
