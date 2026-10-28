@@ -255,6 +255,26 @@ para consultas interactivas. Pendiente que el usuario entregue
 `SUPABASE_DB_URL` (ya con placeholder en `backend/.env`) y registre el MCP
 con un Personal Access Token acotado a `--project-ref` de este proyecto.
 
+### ADR-008 — Mantener el monorepo (backend + frontend en un solo repositorio) y hosting elegido
+**Contexto:** antes de desplegar a producción se evaluó si convenía separar
+`backend/` y `frontend/` en dos repositorios. El dashboard consume la API
+del backend y los cambios de una funcionalidad (ej. módulo de
+Conversaciones) tocan ambos lados a la vez; el proyecto lo mantiene una sola
+persona.
+**Decisión:** (a) **se mantiene el monorepo**. Separarlo resuelve problemas
+de equipos grandes (permisos distintos, ciclos de versión independientes,
+código de uno público y otro privado), que hoy no existen; y si algún día
+hiciera falta, extraer una carpeta con su historial es reversible. (b)
+**Hosting elegido por el usuario:** backend en **Railway**, frontend en
+**Vercel**, ambos con despliegue automático desde GitHub apuntando a su
+carpeta (*Root Directory* `backend` y `frontend`) y filtros de rutas
+(*Watch Paths*) para que un cambio en una carpeta no redespliegue la otra.
+(c) El backend debe correr como proceso persistente (no serverless) por los
+jobs de APScheduler y el `BotWorker`; con gunicorn en 1 worker con varios
+threads, para no duplicar jobs.
+**Estado:** aceptado por el usuario (2026-10-28). Pendiente de ejecutar:
+ver pendientes #4, #6, #14 y #17 en la sección 5.
+
 ---
 
 ## 3. Plan de Desarrollo y Checklist de Progreso
@@ -1343,6 +1363,7 @@ Claude, mismo patrón que todas las etapas anteriores del frontend).
 | 2026-09-27 | 0.0.36 | Desarrollo | **Ajuste posterior a la Etapa 3.2 — resuelve el pendiente #23 (variante/color).** Encargo de 4 tareas de Claude web, ejecutado sin desvíos (detalle completo en la subsección "Ajuste posterior" dentro de "Etapa 3.2" arriba). `leads.producto_variante` (migración 010), `registrar_producto` con parámetro opcional `variante` (nunca motivo de escalar, reforzado en la herramienta y en el system prompt), el nombre de línea que se manda a Rocketfy incluye la variante cuando existe, y nueva resiliencia: si `registrar_producto` no encuentra ningún producto real ni por SKU ni por nombre, ya no guarda nada — le devuelve a Victoria la lista real de productos para que pregunte de nuevo. Documentado en `cargar_producto_bot.py` que el SKU cargado siempre debe ser real de Rocketfy. Verificado contra la API real de Claude: cliente ambiguo sobre el color, Victoria registra sin variante y cierra la venta contraentrega igual (pedido real confirmado y luego rechazado como limpieza). 4 tests nuevos, **177/177 en total**. |
 | 2026-09-27 | 0.0.37 | Validación real | **Telegram configurado por el usuario (bot `@AzoShopBot` vía `@BotFather`, `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` en `.env`) y verificado con una escalación real.** De paso, se corrigió un hueco real en `TelegramNotifier.notificar_escalado()`: solo atrapaba `requests.RequestException` y nunca revisaba el cuerpo de la respuesta — Telegram responde HTTP 200 con `ok=false` para varios errores de negocio (chat_id inválido, bot que nunca recibió `/start`, etc.), que antes se habrían dado silenciosamente por enviados sin serlo. Ahora se revisa `ok` en la respuesta: loguea advertencia si falla, info con el `message_id` si tuvo éxito, y el `except` se amplió a `Exception` para que ningún fallo (red, JSON inválido, lo que sea) se escape del best-effort. Verificado disparando una escalación real con `tools/chat_con_victoria.py` ("prefiero hablar con una persona real") contra la API real de Claude: la conversación escaló (`estado='escalada'`) y el log del servidor confirmó `Notificación de escalado enviada a Telegram (message_id=3)`, es decir que Telegram devolvió `ok=true` de verdad — el usuario confirmó además haber visto el mensaje llegar a su Telegram. 1 test nuevo, **178/178 en total**. |
 | 2026-09-27 | 0.0.38 | Desarrollo | **Módulo de Conversaciones completo — backend + dashboard (detalle completo en la sección "Etapa 3.3" arriba).** Encargo de 4 tareas de Claude web. Backend nuevo (`src/routes/conversaciones/`) reutilizando los repositorios de `routes/whatsapp` en vez de duplicarlos; ventana de mensajería (24h servicio + 72h FEP) calculada en un solo lugar y validada antes de tocar BD o WhatsApp; 5 endpoints. Dos extensiones necesarias no pedidas literalmente: `conversaciones.estado` ahora sí se marca `esperando_pago` de verdad (antes solo `leads.estado` lo hacía, la pestaña nueva habría estado siempre vacía), y la limpieza de `vista_en` al escalar se aplicó también al camino determinista de `WebhookService`, no solo al de Victoria. Dashboard: 2 páginas nuevas (`/conversaciones`, `/conversaciones/[id]`) con pestañas de acceso rápido, ventana de mensajería visible, notas internas, reactivar, y botón hacia el formulario de pedido manual existente (se le agregó soporte de prefill por querystring, antes no lo tenía). Antes de tocar el frontend se revisó `node_modules/next/dist/docs` por instrucción del propio repo (Next.js 16 con cambios de ruptura) — encontró que `useSearchParams()` exige un límite `Suspense` o `next build` falla, ya resuelto. 26 tests nuevos en el backend, **205/205 en total**; frontend sin tests automatizados (decisión de alcance), `build`/`lint` limpios y verificado de punta a punta contra Supabase real (no solo mocks) vía el cliente de test de Flask. Sin verificar: el envío real a un teléfono de WhatsApp de verdad (todos los números de prueba de esta fase son inventados) y la confirmación visual del usuario en el navegador. |
+| 2026-10-28 | 0.0.39 | Decisión | **Decisiones previas al despliegue a producción (ADR-008).** Se revisó el estado general del proyecto y se acordó llevar backend y frontend a producción antes de configurar Meta/webhooks definitivos. El usuario decidió mantener el monorepo y usar Railway (backend) + Vercel (frontend). No se modificó código en esta entrada. Pendientes de código identificados antes de desplegar: arranque de los jobs bajo gunicorn (`start_scheduler()` solo corre en `__main__`) y verificación de la firma `X-Hub-Signature-256` del webhook de WhatsApp (requiere `WHATSAPP_APP_SECRET`). Recomendado también: rotar las credenciales que se compartieron en una conversación de planificación. |
 
 **Estado actual:** Fase 1 (backend) completa, probada (105/105 tests) y
 **validada contra Rocketfy real** de punta a punta. Etapas 8 y 9 quedaron
