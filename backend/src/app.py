@@ -25,6 +25,9 @@ from src.routes.whatsapp.factory import get_bot_worker
 # ver src/routes/webhooks/controllers.py -- Rocketfy no puede loguearse).
 _RUTAS_SIN_LOGIN = {"/health"}
 
+# Scheduler del proceso (singleton). Ver start_scheduler().
+_scheduler = None
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -76,9 +79,19 @@ def create_app() -> Flask:
     # PROGRESS.md, Fase 3, para el detalle completo de esta decisión.
     get_bot_worker()
 
+    # Jobs de fondo (reconciliación + stock watcher). En producción el
+    # servidor es gunicorn, que importa `app` y nunca ejecuta el bloque
+    # `if __name__ == "__main__"` del final -- por eso se encienden acá,
+    # con ENABLE_SCHEDULER=true. Con gunicorn debe haber UN solo worker
+    # (ver gunicorn.conf.py): cada worker tendría su propio scheduler.
+    if settings.enable_scheduler:
+        start_scheduler()
+
     @app.get("/health")
     def health():
-        return jsonify(status="ok"), 200
+        # `scheduler` permite confirmar desde fuera (curl /health) que los
+        # jobs quedaron encendidos en producción, sin tener que leer logs.
+        return jsonify(status="ok", scheduler=_scheduler is not None), 200
 
     return app
 
@@ -98,21 +111,29 @@ def _job_stock_watcher() -> None:
 
 
 def start_scheduler():
-    """Arranca APScheduler para el proceso dev-server (`__main__`).
+    """Arranca APScheduler (reconciliación cada 45 min, stock watcher cada
+    60 min). Idempotente: create_app() puede ejecutarse más de una vez en
+    el mismo proceso (import del módulo + factory de Flask) y el bloque
+    `__main__` también lo llama -- nunca debe haber dos schedulers.
 
-    NOTA (Etapa 8 pendiente): con gunicorn multi-worker, cada worker
-    importaría este módulo y arrancaría su propio scheduler — el lock de
-    job_locks garantiza que solo una ejecución real ocurra a la vez (ver
-    ReconciliacionRepository/StockWatcherRepository.acquire_lock), pero
-    sigue siendo un desperdicio de recursos tener N schedulers idle.
-    Definir el mecanismo de arranque de jobs en producción (proceso
-    dedicado, hook de gunicorn, o cron externo) es tarea de la Etapa 8."""
+    Con varios workers de gunicorn habría un scheduler por worker; el lock
+    de job_locks (ReconciliacionRepository/StockWatcherRepository
+    .acquire_lock) evita que dos ejecuciones reales se pisen, pero sigue
+    siendo desperdicio. Por eso producción corre con un solo worker."""
+    global _scheduler
+    if _scheduler is not None:
+        return _scheduler
+
     from apscheduler.schedulers.background import BackgroundScheduler
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(_job_reconciliacion, "interval", minutes=45, id="reconciliacion_pedidos")
     scheduler.add_job(_job_stock_watcher, "interval", minutes=60, id="stock_watcher")
     scheduler.start()
+    _scheduler = scheduler
+    # Logger propio: el de Flask se llama igual que este módulo ("src.app")
+    # y tiene su propio handler, así que un mensaje de __name__ salía doble.
+    logging.getLogger("src.scheduler").info("Scheduler iniciado (reconciliación 45 min, stock watcher 60 min)")
     return scheduler
 
 

@@ -22,6 +22,13 @@
 7. [Por qué hace falta reiniciar la sesión para ver nuevas herramientas MCP](#7-por-qué-reiniciar-la-sesión)
 8. [Qué significa "publicar/desplegar" el backend, y por qué hace falta para el webhook](#8-qué-significa-publicardesplegar-el-backend)
 9. [Por qué Victoria "usa herramientas" en vez de solo escribir texto, y qué significa que el LLM esté "desacoplado"](#9-por-qué-victoria-usa-herramientas-y-qué-significa-que-el-llm-esté-desacoplado)
+10. [Proceso e hilo (thread) — la base para entender worker y gunicorn](#10-proceso-e-hilo-thread)
+11. [Worker — las dos cosas distintas que se llaman así en este proyecto](#11-worker)
+12. [Gunicorn — el servidor que corre tu backend en producción](#12-gunicorn)
+13. [Scheduler — el "despertador" de las tareas automáticas](#13-scheduler)
+14. [Job — cada tarea automática concreta](#14-job)
+15. [Firma del webhook (HMAC) y App Secret](#15-firma-del-webhook-hmac-y-app-secret)
+16. [Monorepo y Root Directory](#16-monorepo-y-root-directory)
 
 ---
 
@@ -310,3 +317,185 @@ hay una prueba automática que corre cada vez que se hacen cambios y que
 falla sola si alguien, sin darse cuenta, mezcla código específico de
 Claude fuera de ese único archivo permitido — para que esta propiedad no
 se rompa con el tiempo sin que nadie lo note.
+
+
+---
+
+## 10. Proceso e hilo (thread)
+
+Dos palabras que aparecen todo el tiempo y que conviene tener claras.
+
+- **Proceso:** un programa en ejecución. Cuando arrancas tu backend, el
+  sistema operativo crea *un proceso*: su propio espacio de memoria, aislado
+  de los demás. Si dos procesos quieren compartir algo, tienen que
+  comunicarse por fuera (una base de datos, la red).
+- **Hilo (thread):** una "línea de trabajo" *dentro* de un proceso. Un
+  proceso puede tener varios hilos haciendo cosas a la vez, y **todos
+  comparten la misma memoria**.
+
+**Analogía:** el proceso es un restaurante; los hilos son los meseros que
+trabajan dentro. Todos comparten la misma cocina (memoria). Otro restaurante
+(otro proceso) tiene su propia cocina y no ve la tuya.
+
+**En tu proyecto:** el backend es un proceso. Dentro de él hay varios hilos:
+unos atienden las peticiones web, uno es el del bot (ver §11) y otro es el
+del scheduler (ver §13). Por eso importa cuántos procesos corre gunicorn: si
+hubiera dos, habría *dos cocinas*, cada una con su propio bot y sus propios
+jobs.
+
+---
+
+## 11. Worker
+
+"Worker" significa "trabajador" y en este proyecto se usa para **dos cosas
+distintas**. Es normal confundirlas.
+
+### a) El `BotWorker` (el trabajador de Victoria)
+Archivo: `backend/src/routes/whatsapp/worker.py`.
+
+Cuando un cliente escribe, Meta exige que tu webhook responda en menos de
+unos 5 segundos. Pero pensar la respuesta de Victoria (llamar a Claude,
+usar herramientas, enviar por WhatsApp) puede tardar 10 o 15 segundos.
+
+La solución: el webhook **solo anota la tarea** ("responderle a este
+cliente") y contesta "recibido" a Meta enseguida. Un **hilo aparte, el
+BotWorker**, saca las tareas de una cola y hace el trabajo lento sin
+presión de tiempo. Es como un mesero que toma tu pedido y se lo pasa a la
+cocina, en vez de quedarse parado a esperar que el plato esté listo.
+
+Para que no se pierdan tareas si el servidor se reinicia, cada tarea se
+guarda también en la tabla `cola_mensajes` de la base de datos.
+
+### b) Un *worker de gunicorn*
+Es otra cosa: es **un proceso entero** que gunicorn arranca para atender
+peticiones web (ver §12). "Tener 4 workers" significa tener 4 copias del
+backend corriendo a la vez.
+
+**La conexión entre ambas:** como el BotWorker (a) vive *dentro* del
+proceso, si gunicorn arrancara 4 workers (b) habría 4 BotWorkers
+compitiendo por la misma cola. Por eso en producción usamos **1 worker de
+gunicorn con varios hilos**.
+
+---
+
+## 12. Gunicorn
+
+**Qué es:** un servidor de aplicaciones web para Python. Su trabajo es
+recibir las peticiones de internet y entregárselas a tu aplicación Flask.
+
+**Por qué no usamos solo Flask:** cuando corres `python app.py` (o
+`flask run`), Flask levanta un servidor de **desarrollo**: cómodo para
+probar, pero no está pensado para aguantar tráfico real, errores ni
+reinicios. Gunicorn es el servidor de **producción**: más robusto, maneja
+varias peticiones a la vez y se recupera de fallos.
+
+**Analogía:** Flask es la cocina y el menú; gunicorn es el equipo de sala
+que recibe a los clientes y les lleva los pedidos a la cocina.
+
+**Cómo lo arrancamos:** `gunicorn -c gunicorn.conf.py src.app:app`.
+Significa: "usa la configuración de `gunicorn.conf.py` y carga el objeto
+`app` que está en el archivo `src/app.py`".
+
+**Detalle que nos mordió:** gunicorn *importa* `src/app.py`, pero no lo
+*ejecuta como programa principal*. El bloque `if __name__ == "__main__":`
+del final del archivo solo corre con `python app.py`. Allí arrancaba el
+scheduler, así que en producción los jobs **no se habrían encendido**. Ahora
+se encienden dentro de `create_app()` con la variable `ENABLE_SCHEDULER=true`.
+
+**Nuestra configuración** (`backend/gunicorn.conf.py`): 1 worker, 4 hilos,
+puerto tomado de la variable `PORT` que inyecta Railway.
+
+---
+
+## 13. Scheduler
+
+**Qué es:** un "despertador" para código. Le dices "ejecuta esta función
+cada 45 minutos" y él se encarga de dispararla a su hora, sin que nadie
+tenga que hacer una petición.
+
+**Cuál usamos:** `APScheduler`, un paquete de Python. Corre en un hilo
+dentro del mismo proceso del backend (ver §10).
+
+**Qué agenda en tu proyecto** (`backend/src/app.py`, `start_scheduler()`):
+| Job | Frecuencia |
+|---|---|
+| Reconciliación de pedidos | cada 45 min |
+| Stock watcher | cada 60 min |
+
+**Cómo sabes si está encendido en producción:** abre `/health` del backend;
+debe responder `{"scheduler": true, "status": "ok"}`.
+
+**Candado anti-duplicados:** si por error hubiera dos schedulers, ambos
+intentarían ejecutar el mismo job. Para eso existe la tabla `job_locks`: el
+primero toma el candado y el segundo se retira. Aun así evitamos tener dos.
+
+---
+
+## 14. Job
+
+**Qué es:** una tarea concreta que el sistema ejecuta por su cuenta, sin que
+nadie se la pida. Es "lo que hay que hacer" (el scheduler es "cuándo").
+
+**Los dos jobs de tu proyecto:**
+
+1. **Reconciliación** (`backend/src/jobs/reconciliacion/`). Rocketfy te
+   avisa de cambios de estado de los pedidos por webhook, pero un aviso
+   puede perderse en el camino. Este job le pregunta periódicamente a
+   Rocketfy "¿cómo van estos pedidos?" y corrige lo que se haya quedado
+   desactualizado. Es la red de seguridad del webhook.
+2. **Stock watcher** (`backend/src/jobs/stock_watcher/`). Revisa los
+   productos que estás pautando en publicidad. Si el stock baja del límite
+   que definiste, o cambia el precio, crea una **alerta** que ves en
+   `/incidencias`. Protege tu inversión: no quieres pagar anuncios de un
+   producto agotado.
+
+**Si un job falla:** los dos están envueltos para que una excepción se
+registre en el log y **nunca tumbe el backend**. El siguiente ciclo lo
+vuelve a intentar.
+
+---
+
+## 15. Firma del webhook (HMAC) y App Secret
+
+**El problema:** un webhook es una dirección pública. Cualquiera que la
+conozca puede enviarle datos haciéndose pasar por Meta. Eso permitiría
+gastar tu dinero en llamadas a Claude o crear pedidos falsos.
+
+**La solución:** Meta y tú comparten una clave secreta, el **App Secret** de
+tu app en Facebook Developers (Configuración de la app → Básica). Con ella,
+Meta calcula un código a partir del contenido de cada mensaje y lo manda en
+el encabezado `X-Hub-Signature-256`. Ese código se llama **HMAC-SHA256**.
+
+Tu backend calcula el mismo código con su copia de la clave y lo compara. Si
+coinciden, el mensaje viene de Meta y nadie lo modificó. Si no, responde
+**401** y descarta el mensaje. Quien no tenga la clave no puede fabricar una
+firma válida; y si alguien cambia aunque sea una letra del mensaje, la firma
+deja de coincidir.
+
+**No confundir con otras llaves:**
+| Variable | Para qué |
+|---|---|
+| `WHATSAPP_API_TOKEN` | Tu backend **envía** mensajes a Meta |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Meta confirma **una vez** que eres el dueño de la URL (handshake GET) |
+| `WHATSAPP_APP_SECRET` | Verifica la firma de **cada** mensaje que Meta te manda |
+
+**Falla cerrado:** si `WHATSAPP_APP_SECRET` no está configurada, el webhook
+rechaza todo POST. Mejor un bot callado que un bot abierto a cualquiera.
+
+---
+
+## 16. Monorepo y Root Directory
+
+**Monorepo:** un solo repositorio de git que contiene varios proyectos. El
+tuyo tiene `backend/` y `frontend/`. (Decisión en `PROGRESS.md`, ADR-008:
+mantenerlo así porque ambos cambian juntos y el proyecto lo mantiene una
+persona.)
+
+**Root Directory:** una opción de Railway y Vercel que dice "de este repo,
+ocúpate solo de esta carpeta". Railway usa `backend`, Vercel usa `frontend`.
+Así, ambas plataformas leen el mismo repo pero cada una construye únicamente
+su parte.
+
+**Watch Paths:** un filtro adicional: "redespliega solo si cambiaron
+archivos de esta ruta". Evita que un cambio en el dashboard reinicie el
+backend (y con él, el bot de Victoria).

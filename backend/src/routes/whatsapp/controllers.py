@@ -5,12 +5,18 @@ siempre 200 lo más rápido posible, nunca propagar excepciones, idempotencia
 por un identificador propio del proveedor (acá wamid, allá
 order_id+status_id+event_date).
 
+Autenticación: cada POST debe traer la firma `X-Hub-Signature-256` de Meta
+(HMAC-SHA256 del cuerpo con el App Secret); si no coincide, 401 y no se
+procesa nada. Es el único caso en que este webhook responde distinto de
+200, y es a propósito: Meta no puede estar enviando una firma mala.
+
 Diferencia con Rocketfy: acá la respuesta 200 se manda ANTES de cualquier
 procesamiento -- Meta cancela y reintenta si no llega en ~5 segundos, y
 generar+enviar la respuesta del bot puede tardar más que eso (ver
 worker.py). El parseo del payload y la llamada a WebhookService ocurren en
 un thread aparte, disparado después de responder.
 """
+import hashlib
 import hmac
 import logging
 import threading
@@ -42,8 +48,31 @@ def verificar_webhook():
     return jsonify(error="forbidden"), 403
 
 
+def _firma_valida(cuerpo: bytes, cabecera: str, app_secret: str) -> bool:
+    """Meta firma cada POST con HMAC-SHA256 del cuerpo crudo usando el App
+    Secret, y manda el resultado en `X-Hub-Signature-256: sha256=<hex>`.
+    Se compara en tiempo constante. El cuerpo debe ser el crudo, byte a
+    byte, sin pasar por json."""
+    if not cabecera.startswith("sha256="):
+        return False
+    esperada = hmac.new(app_secret.encode("utf-8"), cuerpo, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(cabecera.removeprefix("sha256="), esperada)
+
+
 @whatsapp_bp.post("/whatsapp")
 def recibir_evento():
+    settings = load_settings()
+    if not settings.whatsapp_skip_signature:
+        if not settings.whatsapp_app_secret:
+            # Falla cerrado: sin App Secret no hay forma de saber si el
+            # POST viene de Meta, así que no se procesa nada.
+            logger.error("WHATSAPP_APP_SECRET no está configurado -- se rechaza el POST al webhook de WhatsApp")
+            return jsonify(error="webhook sin configurar"), 401
+        cabecera = request.headers.get("X-Hub-Signature-256", "")
+        if not _firma_valida(request.get_data(), cabecera, settings.whatsapp_app_secret):
+            logger.warning("POST al webhook de WhatsApp con firma inválida o ausente -- se rechaza")
+            return jsonify(error="firma inválida"), 401
+
     mensajes = _extraer_mensajes(request.get_json(silent=True) or {})
 
     if mensajes:
