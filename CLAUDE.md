@@ -92,26 +92,65 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
 
 ## 6. Control de producción: qué puedo hacer hoy y qué falta
 La meta de Freddy es trabajar desde cualquier lugar y que Claude opere el
-ciclo completo (código, GitHub, Railway, Vercel, base de datos). Estado real:
+ciclo completo (código, GitHub, Railway, Vercel, base de datos). Estado real
+(verificado el 2026-10-29):
 
 | Área | Hoy | Para ampliarlo |
 |---|---|---|
 | **Código y git** | Sí: editar, probar, commit, push a la rama de la sesión | — |
 | **GitHub** (ramas, PR, issues, CI) | Sí, con las herramientas de GitHub, solo en este repo y con la app de Claude instalada en la cuenta | Crear PR solo si se pide |
-| **Railway** | No hay conector. Puedo preparar la configuración y guiar | Guardar un token de API de Railway **de alcance limitado** como secreto del entorno de la sesión (variable `RAILWAY_API_TOKEN`) y permitir el acceso de red a Railway; así podría usar su CLI/API (ver logs, variables, redespliegues) |
-| **Vercel** | No hay conector. Igual que Railway | Token `VERCEL_TOKEN` como secreto del entorno + acceso de red a Vercel |
-| **Base de datos (Supabase)** | Puedo escribir migraciones y aplicarlas si hay `SUPABASE_DB_URL` en el entorno | Guardar `SUPABASE_DB_URL` como secreto del entorno. Ideal: un rol de solo lectura para consultar y la cadena con permisos de escritura solo para migraciones |
-| **Meta / Rocketfy** (paneles web) | No: se configuran a mano por Freddy con mi guía | — |
+| **Railway** | **No conectado.** Existe un conector oficial en el directorio de claude.ai (crear proyectos y despliegues, ver estado, leer logs, entre otras). No está instalado en la cuenta de Freddy | Conectar el conector de Railway (ver abajo) |
+| **Vercel** | **No conectado.** Existe un conector oficial (listar proyectos y despliegues, ver detalles y eventos/logs de un despliegue, buscar en su documentación). Por la lista de herramientas parece más de diagnóstico que de administración; **no verificado** si puede editar variables de entorno | Conectar el conector de Vercel (ver abajo) |
+| **Base de datos (Supabase)** | **No conectado.** Existe un conector oficial (~32 herramientas para gestionar proyectos; no se vio el detalle completo). Mientras tanto puedo escribir migraciones y aplicarlas solo si hay `SUPABASE_DB_URL` en el entorno | Conectar el conector de Supabase, de preferencia con acceso de **solo lectura** al principio |
+| **Meta / Rocketfy** (paneles web) | No hay conector. Se configuran a mano por Freddy con mi guía | — |
 
-Cómo dar acceso: en la sesión, menú del entorno en la nube → *Edit* →
-secretos de red / variables de entorno, y red permitida para los dominios
-necesarios. Un token nuevo se ve en sesiones **nuevas**. **Nunca pegar
-tokens en el chat.** Usar tokens con el mínimo alcance posible y rotarlos.
+El alcance exacto de cada conector (sobre todo si editan variables de
+entorno o ejecutan SQL) **debe verificarse al conectarlo**, mirando las
+herramientas que realmente expone. No asumir. Tras conectarlos, actualizar
+esta tabla con lo comprobado.
+
+**Cómo conectar (preferido):**
+1. claude.ai → Personalizar → Conectores (https://claude.ai/customize/connectors).
+2. Agregar Railway, Vercel y Supabase y autorizar cada uno con la cuenta de
+   Freddy (normalmente OAuth). Empezar por Railway y Vercel.
+3. **Iniciar una sesión nueva**: los conectores se leen al arrancar la sesión.
+
+**Alternativa: token de API como secreto del entorno.** En la sesión, menú
+del entorno en la nube → *Edit* → secretos de red / variables de entorno
+(nombres previstos: `RAILWAY_API_TOKEN`, `VERCEL_TOKEN`, `SUPABASE_DB_URL`) y
+red permitida para los dominios necesarios. Un token nuevo se ve en sesiones
+**nuevas**. Menos cómodo que el conector y deja un secreto guardado en el
+contenedor.
+
+**Sobre los secretos y el `.env` real:** Claude **no necesita leer** los
+valores para gestionarlos.
+- Conocer los **nombres** de las variables (`backend/.env.example`) basta
+  para programar; los tests usan valores falsos y una base local.
+- Con un conector o token de plataforma, Claude puede **actuar** sobre las
+  variables guardadas en Railway/Vercel sin ver ni pegar sus valores en el chat.
+- **No guardar el `.env` de producción en el contenedor.** Si algún día se
+  necesitan datos reales para reproducir un bug: base de **staging** o rol
+  de Supabase de solo lectura, nunca el `.env` completo.
+
+**Quién actualiza qué cuando algo cambia:**
+
+| Qué cambia | Quién | Cómo |
+|---|---|---|
+| Nombres de variables nuevas, rutas del código | Claude, siempre | Editar código y `.env.example`, y documentarlo |
+| Valores en Railway/Vercel (rotar un token, cambiar una URL) | Claude, **si hay conector o token de plataforma** y la herramienta lo permite | Cambiar la variable en la plataforma, **pidiendo confirmación antes** (suele implicar redespliegue) |
+| Tokens que nacen en paneles de terceros (Meta, Rocketfy, Anthropic, Telegram) | Freddy, a mano | Freddy genera el valor y lo pone **en Railway/Vercel, nunca en el chat**; Claude verifica después que la variable exista y que `/health` responda |
+
+Los valores que solo Freddy puede crear (p. ej. el App Secret de Meta) no
+los puede inventar ni descubrir Claude; sí puede avisar cuando falten.
+
+**Nunca pegar tokens en el chat.** Usar tokens con el mínimo alcance
+posible y rotarlos.
 
 **Reglas de operación en producción** (cuando exista el acceso):
-- Antes de acciones difíciles de revertir (borrar datos, cambiar variables
-  de producción, redesplegar en horario de ventas, registrar/cambiar URLs de
-  webhooks, correr migraciones destructivas) **pedir confirmación**.
+- "Control total" no significa actuar sin preguntar. Antes de acciones
+  difíciles de revertir (borrar datos, cambiar variables de producción,
+  redesplegar en horario de ventas, registrar/cambiar URLs de webhooks,
+  correr migraciones destructivas) **pedir confirmación**.
 - Preferir cambios por git + despliegue automático antes que ediciones
   directas en la plataforma, para que todo quede en el historial.
 - Registrar cada cambio de infraestructura en `PROGRESS.md`.
