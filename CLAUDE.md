@@ -156,8 +156,16 @@ posible y rotarlos.
 - Registrar cada cambio de infraestructura en `PROGRESS.md`.
 
 ## 7. Estado de producción (actualizar al avanzar)
+- Hecho (2026-10-29): código fusionado en `main` (PR #1); proyecto de Vercel
+  `proyectecom-dashboard` creado y enlazado (sin desplegar); reactivación de
+  Supabase solicitada (el proyecto estaba pausado).
+- Los conectores de Railway, Vercel y Supabase están conectados. Vercel pide
+  autorizar el equipo la primera vez (herramienta `authorize_team_access`).
+- Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
+  unknown") **no se reintenta a ciegas**: se verifica el estado real primero.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
-- **Pendiente:** desplegar en Railway y Vercel, registrar webhooks definitivos
-  en Meta y Rocketfy, rotar credenciales, plan de Supabase que no se pause,
-  prueba de punta a punta con un número real. Ver `docs/DESPLIEGUE.md`.
+- **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
+  frontend con sus variables, registrar webhooks definitivos en Meta y
+  Rocketfy, rotar credenciales, plan de Supabase que no se pause, prueba de
+  punta a punta con un número real. Ver `docs/DESPLIEGUE.md`.
