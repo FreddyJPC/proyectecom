@@ -4,8 +4,7 @@ import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { AvatarInitials } from "@/components/app/avatar-initials";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,19 +38,19 @@ export function UserMenu() {
 
   if (!email) return null;
 
-  const inicial = email.charAt(0).toUpperCase();
-
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <Avatar className="size-8">
-            <AvatarFallback>{inicial}</AvatarFallback>
-          </Avatar>
-        </Button>
+      <DropdownMenuTrigger
+        aria-label="Menú de la cuenta"
+        className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <AvatarInitials nombre={email} className="size-9" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">{email}</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="min-w-56">
+        <DropdownMenuLabel className="font-normal">
+          <p className="text-xs text-muted-foreground">Sesión iniciada como</p>
+          <p className="truncate text-sm font-medium">{email}</p>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} variant="destructive">
           <LogOut />
