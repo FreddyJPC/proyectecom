@@ -1,129 +1,72 @@
 "use client";
 
-import {
-  AlertTriangle,
-  Banknote,
-  CheckCircle2,
-  CircleDollarSign,
-  Package,
-  PackageCheck,
-  Truck,
-  Wallet,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { Banknote, CheckCircle2, CircleDollarSign, Package, PackageCheck, TriangleAlert, Truck, Wallet } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { apiFetch, ApiError } from "@/lib/api";
+import { PageHeader } from "@/components/app/page-header";
+import { StatCard } from "@/components/app/stat-card";
+import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/use-api";
+import { formatMoney } from "@/lib/format";
 import type { MetricasGenerales } from "@/types/metricas";
 
-import { MetricCard } from "./metric-card";
+function Grupo({ titulo, descripcion, children, columnas = "lg:grid-cols-4" }: { titulo: string; descripcion?: string; children: React.ReactNode; columnas?: string }) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold">{titulo}</h2>
+        {descripcion && <p className="text-xs text-muted-foreground">{descripcion}</p>}
+      </div>
+      <div className={`grid grid-cols-2 gap-3 lg:gap-4 ${columnas}`}>{children}</div>
+    </section>
+  );
+}
 
 export default function MetricasPage() {
-  const [datos, setDatos] = useState<MetricasGenerales | null>(null);
-  const [cargando, setCargando] = useState(true);
-
-  useEffect(() => {
-    let cancelado = false;
-    apiFetch<MetricasGenerales>("/metricas/generales")
-      .then((data) => {
-        if (!cancelado) setDatos(data);
-      })
-      .catch((err: unknown) => {
-        if (cancelado) return;
-        toast.error(err instanceof ApiError ? err.message : "No se pudo cargar las métricas.");
-      })
-      .finally(() => {
-        if (!cancelado) setCargando(false);
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, []);
+  const { data: m, error, cargando, recargar } = useApi<MetricasGenerales>("/metricas/generales");
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Métricas</h2>
-        <p className="text-sm text-muted-foreground">Agregados operativos del negocio en Rocketfy.</p>
-      </div>
+    <>
+      <PageHeader title="Métricas" description="Cómo va tu negocio hoy y en total, según los pedidos de Rocketfy." />
 
-      <Alert>
-        <Wallet />
-        <AlertTitle>Esto no es tu saldo de billetera</AlertTitle>
-        <AlertDescription>
-          {cargando
-            ? "Cargando aviso…"
-            : (datos?.avisoImportante ??
-              "El detalle de liquidaciones y el saldo disponible para retiro no los expone Rocketfy todavía — revísalos en su propio panel.")}
-        </AlertDescription>
-      </Alert>
-
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-muted-foreground">Hoy</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {cargando ? (
-            <>
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-            </>
-          ) : (
-            <>
-              <MetricCard icon={Package} label="Pedidos hoy" value={datos?.pedidosHoy ?? null} />
-              <MetricCard icon={PackageCheck} label="Confirmados hoy" value={datos?.confirmadosHoy ?? null} />
-              <MetricCard
-                icon={CircleDollarSign}
-                label="Monto total de pedidos hoy"
-                value={datos?.montoTotalPedidosHoy ?? null}
-                money
-              />
-              <MetricCard icon={Banknote} label="Ingreso hoy" value={datos?.ingresoHoy ?? null} money />
-            </>
-          )}
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-card">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-info-soft text-status-info-ink">
+          <Wallet className="size-[1.1rem]" aria-hidden />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">Esto no es el saldo de tu billetera</p>
+          <p className="text-sm text-muted-foreground">
+            {m?.avisoImportante ?? "El detalle de liquidaciones y el saldo disponible para retiro no los expone Rocketfy todavía: revísalos en su propio panel."}
+          </p>
         </div>
       </div>
 
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-muted-foreground">General</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {cargando ? (
-            <>
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-            </>
-          ) : (
-            <>
-              <MetricCard icon={CheckCircle2} label="Ingreso confirmado" value={datos?.ingresoConfirmado ?? null} money />
-              <MetricCard icon={Wallet} label="Ingreso total" value={datos?.ingresoTotal ?? null} money />
-              <MetricCard icon={Truck} label="Ingreso en tránsito" value={datos?.ingresoEnTransito ?? null} money />
-              <MetricCard
-                icon={AlertTriangle}
-                label="Ingreso retenido por novedad"
-                value={datos?.ingresoRetenidoPorNovedad ?? null}
-                money
-              />
-            </>
-          )}
+      {error && !m && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-status-danger/30 bg-status-danger-soft p-4 text-status-danger-ink">
+          <TriangleAlert className="size-5 shrink-0" aria-hidden />
+          <p className="flex-1 text-sm">No se pudieron cargar las métricas. {error}</p>
+          <Button variant="outline" size="sm" onClick={recargar} className="bg-card text-foreground">
+            Reintentar
+          </Button>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cargando ? (
-          <Skeleton className="h-24" />
-        ) : (
-          <MetricCard
-            icon={Truck}
-            label="Costo de productos en tránsito"
-            value={datos?.costoProductosEnTransito ?? null}
-            money
-          />
-        )}
-      </div>
-    </div>
+      <Grupo titulo="Hoy" descripcion="Lo que ha entrado desde las 00:00.">
+        <StatCard label="Pedidos" value={m?.pedidosHoy ?? "—"} icon={Package} tono="primary" href="/pedidos" cargando={cargando} />
+        <StatCard label="Confirmados" value={m?.confirmadosHoy ?? "—"} icon={PackageCheck} tono="success" hint="Ya enviados a Rocketfy" cargando={cargando} />
+        <StatCard label="Monto de pedidos" value={formatMoney(m?.montoTotalPedidosHoy)} icon={CircleDollarSign} tono="info" hint="Suma de lo vendido hoy" cargando={cargando} />
+        <StatCard label="Ingreso de hoy" value={formatMoney(m?.ingresoHoy)} icon={Banknote} tono="success" hint="Cobros entregados hoy" cargando={cargando} />
+      </Grupo>
+
+      <Grupo titulo="Ingresos" descripcion="Acumulado de todos tus pedidos." columnas="lg:grid-cols-2">
+        <StatCard label="Ingreso total" value={formatMoney(m?.ingresoTotal)} icon={Wallet} tono="primary" cargando={cargando} />
+        <StatCard label="Ingreso confirmado" value={formatMoney(m?.ingresoConfirmado)} icon={CheckCircle2} tono="success" cargando={cargando} />
+      </Grupo>
+
+      <Grupo titulo="En camino" descripcion="Pedidos que ya salieron y todavía no se cobran." columnas="lg:grid-cols-3">
+        <StatCard label="Ingreso en tránsito" value={formatMoney(m?.ingresoEnTransito)} icon={Truck} tono="warning" hint="Se cobra al entregar" cargando={cargando} />
+        <StatCard label="Costo de productos en tránsito" value={formatMoney(m?.costoProductosEnTransito)} icon={Truck} tono="neutral" hint="Lo que cuestan los productos en camino" cargando={cargando} />
+        <StatCard label="Retenido por novedad" value={formatMoney(m?.ingresoRetenidoPorNovedad)} icon={TriangleAlert} tono="danger" hint="Detenido por un problema en la entrega" href="/incidencias" cargando={cargando} />
+      </Grupo>
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 
@@ -49,9 +50,9 @@ export function UbicacionSelector({
   }, [provincia]);
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5">
-        <label className="text-sm font-medium">Provincia</label>
+        <Label htmlFor="provincia">Provincia</Label>
         <Select
           value={provincia}
           onValueChange={(v) => {
@@ -61,7 +62,7 @@ export function UbicacionSelector({
             onCantonChange("");
           }}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="provincia" className="w-full">
             <SelectValue placeholder="Selecciona…" />
           </SelectTrigger>
           <SelectContent>
@@ -75,9 +76,9 @@ export function UbicacionSelector({
       </div>
 
       <div className="grid gap-1.5">
-        <label className="text-sm font-medium">Cantón</label>
+        <Label htmlFor="canton">Cantón</Label>
         <Select value={canton} onValueChange={onCantonChange} disabled={!provincia || cargandoCantones}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="canton" className="w-full">
             <SelectValue placeholder={provincia ? "Selecciona…" : "Elige provincia primero"} />
           </SelectTrigger>
           <SelectContent>

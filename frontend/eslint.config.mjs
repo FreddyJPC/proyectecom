@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Herramientas de prueba visual (scripts de Node, no son parte de la app).
+    "tools/**",
   ]),
 ]);
 
