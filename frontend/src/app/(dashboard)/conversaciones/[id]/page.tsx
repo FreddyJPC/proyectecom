@@ -58,7 +58,7 @@ function Burbuja({ m, mostrarAutor }: { m: MensajeConversacion; mostrarAutor: bo
         <span
           className={cn(
             "tabular mt-0.5 block text-right text-[0.65rem] leading-none",
-            esCliente ? "text-muted-foreground" : esBot ? "text-accent-foreground/60" : "text-primary-foreground/70",
+            esCliente ? "text-muted-foreground" : esBot ? "text-accent-foreground/80" : "text-primary-foreground/85",
           )}
         >
           {formatHora(m.creadoEn)}
@@ -102,9 +102,9 @@ function PanelDatos({
   return (
     <div className="flex flex-col gap-6 p-4">
       <section aria-labelledby="t-cliente" className="space-y-3">
-        <h3 id="t-cliente" className="flex items-center gap-2 text-sm font-semibold">
+        <h2 id="t-cliente" className="flex items-center gap-2 text-sm font-semibold">
           <UserRound className="size-4 text-muted-foreground" aria-hidden /> Cliente
-        </h3>
+        </h2>
         <dl className="space-y-3">
           <Dato label="Nombre">{lead?.nombreCliente}</Dato>
           <Dato label="Teléfono">
@@ -118,9 +118,9 @@ function PanelDatos({
       </section>
 
       <section aria-labelledby="t-pedido" className="space-y-3 border-t pt-5">
-        <h3 id="t-pedido" className="flex items-center gap-2 text-sm font-semibold">
+        <h2 id="t-pedido" className="flex items-center gap-2 text-sm font-semibold">
           <Package className="size-4 text-muted-foreground" aria-hidden /> Compra
-        </h3>
+        </h2>
         <dl className="space-y-3">
           <Dato label="Producto">{lead?.productoNombre}</Dato>
           {lead?.productoVariante && <Dato label="Variante">{lead.productoVariante}</Dato>}
@@ -143,9 +143,9 @@ function PanelDatos({
       </section>
 
       <section aria-labelledby="t-notas" className="space-y-3 border-t pt-5">
-        <h3 id="t-notas" className="flex items-center gap-2 text-sm font-semibold">
+        <h2 id="t-notas" className="flex items-center gap-2 text-sm font-semibold">
           <NotebookPen className="size-4 text-muted-foreground" aria-hidden /> Notas internas
-        </h3>
+        </h2>
         <p className="text-xs text-muted-foreground">Privadas: nunca se le muestran al cliente ni a Victoria.</p>
         <Textarea value={nota} onChange={(e) => onNota(e.target.value)} rows={4} aria-label="Notas internas" placeholder="Escribe aquí lo que debas recordar de este cliente…" />
         <Button size="sm" variant={notaCambiada ? "default" : "outline"} onClick={onGuardarNota} disabled={guardandoNota || !notaCambiada}>
@@ -319,6 +319,8 @@ export default function ConversacionDetallePage() {
         <div className="flex items-center gap-3 border-b bg-card px-4 py-3">
           <AvatarInitials nombre={lead?.nombreCliente ?? conversacion.telefono} semilla={conversacion.telefono} className="size-11" />
           <div className="min-w-0 flex-1">
+            <h1 className="sr-only lg:hidden">Conversación con {nombre}</h1>
+            <h2 className="sr-only hidden lg:block">Conversación con {nombre}</h2>
             <p className="truncate font-semibold">{nombre}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <StatusBadge label={info.label} variant={info.variant} className="h-5 px-2 text-[0.7rem]" />
@@ -344,14 +346,19 @@ export default function ConversacionDetallePage() {
         {/* Aviso de escalada: la acción principal es responder; devolverle el
             control a Victoria es la salida cuando ya no hace falta una persona. */}
         {conversacion.estado === "escalada" && (
-          <div className="flex flex-col gap-2 border-b bg-status-danger-soft px-4 py-3 text-status-danger-ink sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3 border-b bg-status-danger-soft px-4 py-2.5 text-status-danger-ink">
             <p className="text-sm">
-              <strong className="font-semibold">Victoria pasó este chat a una persona.</strong>{" "}
-              <span className="opacity-85">Respóndele al cliente o devuélvele el control.</span>
+              <strong className="font-semibold">Victoria pasó este chat a una persona.</strong>
+              <span className="hidden opacity-85 md:inline"> Respóndele al cliente o devuélvele el control.</span>
             </p>
             <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
               {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
-              {reactivando ? "Devolviendo…" : "Devolver a Victoria"}
+              {reactivando ? "Devolviendo…" : (
+                <>
+                  <span className="hidden sm:inline">Devolver a Victoria</span>
+                  <span className="sm:hidden">Devolver</span>
+                </>
+              )}
             </Button>
           </div>
         )}
@@ -379,7 +386,14 @@ export default function ConversacionDetallePage() {
         )}
 
         {/* Mensajes */}
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-muted/40 px-4 py-4" aria-live="polite">
+        <div
+          ref={scrollRef}
+          role="log"
+          tabIndex={0}
+          aria-label="Mensajes de la conversación"
+          aria-live="polite"
+          className="min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-muted/40 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
           {mensajes.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">Sin mensajes todavía.</p>}
           {mensajes.map((m, i) => {
             const anterior = mensajes[i - 1];

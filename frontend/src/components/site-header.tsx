@@ -6,19 +6,19 @@ import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 
 import { BackendStatus } from "@/components/backend-status";
+import { BrandMark } from "@/components/brand-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/user-menu";
-import { migasDe } from "@/config/site";
+import { SITE, migasDe } from "@/config/site";
 
 /** Cabecera fija. En escritorio: botón del menú + migas de pan. En móvil: el
- * título de la página y, en subpáginas, una flecha para volver a la lista
- * (el menú ya está en la barra inferior). */
+ * marca y, en subpáginas, "‹ Sección" para volver a la lista (el menú ya
+ * está en la barra inferior). */
 export function SiteHeader() {
   const pathname = usePathname();
   const migas = migasDe(pathname);
-  const actual = migas[migas.length - 1];
   const padre = migas.length > 1 ? migas[migas.length - 2] : null;
 
   return (
@@ -26,18 +26,24 @@ export function SiteHeader() {
       <SidebarTrigger className="-ml-1 hidden md:inline-flex" aria-label="Mostrar u ocultar el menú" />
       <Separator orientation="vertical" className="mr-1 hidden h-4 md:block" />
 
-      {/* Móvil */}
-      <div className="flex min-w-0 flex-1 items-center gap-1 md:hidden">
-        {padre?.href && (
+      {/* Móvil: en subpáginas "‹ Sección" (volver); en las principales, la
+          marca. El título grande lo pone la propia página: así no se repite. */}
+      <div className="flex min-w-0 flex-1 items-center md:hidden">
+        {padre?.href ? (
           <Link
             href={padre.href}
             aria-label={`Volver a ${padre.label}`}
-            className="-ml-1 flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
+            className="-ml-2 flex min-h-10 items-center gap-0.5 rounded-full pr-3 pl-1 text-base font-medium text-primary active:bg-muted"
           >
-            <ChevronLeft className="size-5" />
+            <ChevronLeft className="size-6" aria-hidden />
+            {padre.label}
+          </Link>
+        ) : (
+          <Link href="/" className="flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <BrandMark className="size-8" />
+            <span className="text-base font-semibold tracking-tight">{SITE.name}</span>
           </Link>
         )}
-        <p className="truncate text-base font-semibold tracking-tight">{actual.label}</p>
       </div>
 
       {/* Escritorio: migas de pan */}

@@ -2,10 +2,11 @@
  * montos siguen viajando y calculándose como string (nunca float). */
 
 /** "2154.80" -> "$2,154.80". Entrada inválida -> "—". No convierte a número:
- * trabaja sobre el texto para no introducir errores de redondeo. */
-export function formatMoney(valor: string | null | undefined): string {
+ * trabaja sobre el texto para no introducir errores de redondeo. Acepta un
+ * número solo porque Rocketfy a veces manda `0` en vez de "0.00". */
+export function formatMoney(valor: string | number | null | undefined): string {
   if (valor == null || valor === "") return "—";
-  const limpio = valor.trim();
+  const limpio = String(valor).trim();
   if (!/^-?\d+(\.\d+)?$/.test(limpio)) return "—";
 
   const negativo = limpio.startsWith("-");

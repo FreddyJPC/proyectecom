@@ -29,6 +29,9 @@
 14. [Job — cada tarea automática concreta](#14-job)
 15. [Firma del webhook (HMAC) y App Secret](#15-firma-del-webhook-hmac-y-app-secret)
 16. [Monorepo y Root Directory](#16-monorepo-y-root-directory)
+17. [Diseño responsivo y "mobile-first"](#17-diseño-responsivo-y-mobile-first)
+18. [Tokens de diseño y modo oscuro](#18-tokens-de-diseño-y-modo-oscuro)
+19. [Accesibilidad (WCAG) y cómo se mide](#19-accesibilidad-wcag-y-cómo-se-mide)
 
 ---
 
@@ -499,3 +502,77 @@ su parte.
 **Watch Paths:** un filtro adicional: "redespliega solo si cambiaron
 archivos de esta ruta". Evita que un cambio en el dashboard reinicie el
 backend (y con él, el bot de Victoria).
+
+
+---
+
+## 17. Diseño responsivo y "mobile-first"
+
+**Responsivo:** una misma página que se reacomoda según el ancho de la pantalla
+(celular, tablet, computador), en vez de tener tres versiones.
+
+**Mobile-first** ("primero el celular"): se diseña pensando en el celular y
+después se agregan mejoras para pantallas grandes. Para ti es lo más
+importante, porque probablemente revisarás pedidos y chats desde el teléfono.
+
+Ejemplos de cómo se aplicó en tu panel:
+- **Tabla en computador, tarjetas en celular.** Una tabla de 5 columnas no cabe
+  en 390 px: se cortaba y el estado y el total quedaban fuera de la pantalla.
+  Ahora, en celular cada pedido es una tarjeta con lo esencial a la vista.
+- **Barra inferior** con las 4 secciones de uso diario, al alcance del pulgar.
+- **Botones de al menos 40 px**: un dedo no es un cursor; los botones diminutos
+  se pulsan mal.
+- **Bandeja de chats:** en computador ves la lista y el chat a la vez (como
+  WhatsApp Web); en celular, una pantalla a la vez.
+
+En el código se ve en clases como `md:hidden` (se oculta desde pantallas
+medianas) o `lg:grid-cols-4` (4 columnas solo en pantallas grandes). Los puntos
+de corte usados son: `sm` 640 px, `md` 768 px, `lg` 1024 px, `xl` 1280 px.
+
+---
+
+## 18. Tokens de diseño y modo oscuro
+
+**Token de diseño:** un nombre para un valor de diseño, definido una sola vez.
+En vez de escribir "este azul exacto" en cien lugares, se define `--primary` y
+todo lo demás lo usa. Viven en `frontend/src/app/globals.css`.
+
+**Por qué importa:**
+- **Cambiar la marca es tocar un lugar.** Si mañana quieres otro color
+  principal, se cambia `--primary` y toda la app cambia coherentemente.
+- **Modo oscuro gratis y consistente.** Cada token tiene su valor claro y su
+  valor oscuro; la app elige según el tema (botón sol/luna de la cabecera:
+  claro, oscuro o el de tu sistema).
+- **Estados con significado fijo.** Verde = éxito, ámbar = atención, rojo =
+  problema, celeste = información. El color de marca (índigo) es otro a
+  propósito, para que nunca confundas "botón principal" con "todo bien".
+
+Cada estado tiene 4 tonos: el **sólido** (puntos, barras), el **texto sobre
+sólido**, el **fondo suave** (etiquetas) y el **texto oscuro sobre fondo
+suave** (para que se lea bien).
+
+---
+
+## 19. Accesibilidad (WCAG) y cómo se mide
+
+**Accesibilidad:** que la app pueda usarla cualquiera, incluso con baja visión,
+con lector de pantalla (que lee la página en voz alta) o solo con teclado, y
+también cuando hay mucho sol y la pantalla se ve mal.
+
+**WCAG 2.1 nivel AA:** el estándar internacional de referencia. Lo más
+cotidiano que exige:
+- **Contraste:** el texto debe distinguirse del fondo (mínimo 4.5 a 1). Antes,
+  varias etiquetas de estado verdes y amarillas no lo cumplían.
+- **Nombres para todo:** un botón solo con un ícono necesita una etiqueta
+  invisible que el lector de pantalla pueda leer (`aria-label`).
+- **Teclado:** todo se puede alcanzar y usar con Tab y Enter; hay un enlace
+  "Saltar al contenido".
+- **Estructura:** un solo `<main>`, encabezados en orden (h1, h2…).
+
+**Cómo se midió:** con **axe-core**, una herramienta automática que revisa cada
+pantalla y lista los incumplimientos. Se corrió en las 9 pantallas, en claro y
+oscuro, en escritorio y móvil. Encontró problemas reales (por ejemplo, los
+selectores de provincia y cantón no tenían nombre para lectores de pantalla) y
+quedó en **cero violaciones**. Está en `frontend/tools/ui-preview/` para
+repetirla cuando se cambie la interfaz. Una herramienta automática no
+detecta todo, pero cubre mucho de lo más común.

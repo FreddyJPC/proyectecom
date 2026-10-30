@@ -7,7 +7,6 @@ import {
   CloudOff,
   CreditCard,
   Inbox,
-  MessageCircle,
   Package,
   PackageOpen,
   Plus,
@@ -276,7 +275,7 @@ export default function Home() {
                       <p className="truncate text-sm text-muted-foreground">
                         {a.tipo === "stock_bajo"
                           ? `Quedan ${a.detalle.stock} (mínimo ${a.detalle.umbral})`
-                          : `De ${formatMoney(String(a.detalle.precioAnterior))} a ${formatMoney(String(a.detalle.precioNuevo))}`}
+                          : `De ${formatMoney(String(a.detalle.precioAnterior))} a ${formatMoney(String(a.detalle.precioActual))}`}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
@@ -290,13 +289,13 @@ export default function Home() {
           )}
         </SectionCard>
 
-        <SectionCard titulo="Novedades de envío" enlace={{ href: "/incidencias" }}>
+        <SectionCard titulo="Envíos que necesitan atención" enlace={{ href: "/incidencias" }}>
           {novedades.cargando && !novedades.data ? (
             <FilasCargando n={3} />
           ) : novedades.error && !novedades.data ? (
             <SeccionError onReintentar={novedades.recargar} />
           ) : novedades.data && novedades.data.items.length === 0 ? (
-            <EmptyState icon={MessageCircle} title="Sin novedades" description="Aquí verás los cambios de estado que reporta Rocketfy." className="py-10" />
+            <EmptyState icon={CheckCircle2} title="Sin novedades pendientes" description="Aquí verás los envíos que reportan un problema o necesitan tu atención." className="py-10" />
           ) : (
             <ul className="divide-y">
               {novedades.data?.items.map((e) => {

@@ -31,7 +31,7 @@ export function AppSidebar() {
   const alNavegar = () => setOpenMobile(false);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" role="navigation" aria-label="Menú principal">
       <SidebarHeader className="gap-3 p-3">
         <Link href="/" onClick={alNavegar} className="flex items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
           <BrandMark className="size-8" />

@@ -32,8 +32,8 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
   {
     label: "Control",
     items: [
-      { title: "Incidencias y Alertas", short: "Alertas", url: "/incidencias", icon: AlertTriangle },
-      { title: "Catálogo y Stock", short: "Catálogo", url: "/catalogo", icon: Boxes },
+      { title: "Incidencias y alertas", short: "Alertas", url: "/incidencias", icon: AlertTriangle },
+      { title: "Catálogo y stock", short: "Catálogo", url: "/catalogo", icon: Boxes },
       { title: "Métricas", short: "Métricas", url: "/metricas", icon: BarChart3 },
     ],
   },

@@ -1,36 +1,48 @@
 "use client";
 
-import { useState } from "react";
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/app/page-header";
+import { useApi } from "@/hooks/use-api";
+import type { SkuMonitoreado } from "@/types/producto";
 
 import { CatalogoTab } from "./catalogo-tab";
 import { MonitoreadosTab } from "./monitoreados-tab";
 
 export default function CatalogoPage() {
-  const [refrescarKey, setRefrescarKey] = useState(0);
+  // La lista de SKUs vigilados se pide una sola vez aquí y se comparte con las
+  // dos pestañas: el catálogo marca cuáles ya están vigilados y la pestaña de
+  // vigilados la muestra; al cambiar algo, ambas se actualizan juntas.
+  const monitoreados = useApi<SkuMonitoreado[]>("/productos/monitoreados?soloActivos=false");
+  const activos = monitoreados.data?.filter((m) => m.activo).length;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Catálogo y Stock</h2>
-        <p className="text-sm text-muted-foreground">
-          Explora el catálogo de Rocketfy y elige qué SKUs vigilar para proteger tu inversión publicitaria.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title="Catálogo y stock"
+        description="Explora el catálogo de Rocketfy y elige qué productos vigilar para no pagar publicidad de algo agotado."
+      />
 
-      <Tabs defaultValue="catalogo">
-        <TabsList>
-          <TabsTrigger value="catalogo">Catálogo</TabsTrigger>
-          <TabsTrigger value="monitoreados">SKUs monitoreados</TabsTrigger>
+      <Tabs defaultValue="catalogo" className="gap-5">
+        <TabsList className="w-full sm:w-fit">
+          <TabsTrigger value="catalogo" className="px-4">
+            Catálogo
+          </TabsTrigger>
+          <TabsTrigger value="monitoreados" className="px-4">
+            Vigilados{activos ? ` (${activos})` : ""}
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="catalogo" className="pt-4">
-          <CatalogoTab onCambio={() => setRefrescarKey((k) => k + 1)} />
+        <TabsContent value="catalogo" className="flex flex-col gap-4">
+          <CatalogoTab monitoreados={monitoreados.data ?? []} onCambio={monitoreados.recargar} />
         </TabsContent>
-        <TabsContent value="monitoreados" className="pt-4">
-          <MonitoreadosTab refrescarKey={refrescarKey} />
+        <TabsContent value="monitoreados" className="flex flex-col gap-4">
+          <MonitoreadosTab
+            items={monitoreados.data}
+            cargando={monitoreados.cargando}
+            error={monitoreados.error}
+            recargar={monitoreados.recargar}
+          />
         </TabsContent>
       </Tabs>
-    </div>
+    </>
   );
 }

@@ -90,6 +90,27 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
    desde `backend/`. Estado actual: **221 tests pasando**.
 
+**Interfaz (frontend)** — sistema de diseño definido en ADR-009
+- Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
+  `bg-status-*-soft` + `text-status-*-ink`…). Nunca colores a mano. Los estados
+  de pedidos/conversaciones salen de `src/lib/estados.ts` y se muestran con
+  `StatusBadge`.
+- Reutilizar `src/components/app/*` (PageHeader, StatCard, SectionCard,
+  EmptyState, FilterChips, PaginationBar, AvatarInitials, ListSkeleton) y el
+  hook `useApi` para cargar datos (maneja carga, error, reintento y refresco).
+  Formato de dinero, teléfono y fechas: `src/lib/format.ts`.
+- **Mobile-first siempre:** toda pantalla nueva debe verse y usarse bien a
+  390 px. Listas = tarjetas en móvil y tabla desde `md`; objetivos táctiles
+  ≥ 40 px; nada puede quedar fuera de pantalla; respetar la barra inferior
+  (`pb-28`) y el área segura.
+- Todo texto visible en **español**; dinero siempre como string (nunca `float`).
+- Cada pantalla necesita estados de carga, vacío y error (con "Reintentar").
+- Antes de entregar cambios de UI: `npm run lint`, `npx next build` y la
+  auditoría de accesibilidad de `frontend/tools/ui-preview/` (`node axe.mjs`)
+  debe dar **SIN VIOLACIONES**; revisar capturas en escritorio y móvil, claro y
+  oscuro (ver el README de esa carpeta). Antes de tocar Next.js, leer
+  `frontend/AGENTS.md`.
+
 ## 6. Control de producción: qué puedo hacer hoy y qué falta
 La meta de Freddy es trabajar desde cualquier lugar y que Claude opere el
 ciclo completo (código, GitHub, Railway, Vercel, base de datos). Estado real

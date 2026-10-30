@@ -1,0 +1,10 @@
+{
+  "name": "ui-preview",
+  "private": true,
+  "type": "module",
+  "description": "Herramientas para ver y auditar la UI del dashboard sin backend real (no se despliega).",
+  "dependencies": {
+    "axe-core": "^4.10.0",
+    "playwright-core": "^1.50.0"
+  }
+}

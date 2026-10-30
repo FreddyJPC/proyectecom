@@ -1,12 +1,15 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { PackageSearch, Search } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
+import { formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { CatalogoRocketfy, Producto } from "@/types/producto";
 
 export function AgregarProductoDialog({
@@ -54,51 +57,76 @@ export function AgregarProductoDialog({
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[92dvh] gap-3">
         <DialogHeader>
           <DialogTitle>Agregar producto</DialogTitle>
+          <DialogDescription>Busca en el catálogo de Rocketfy por nombre o SKU.</DialogDescription>
         </DialogHeader>
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             autoFocus
+            type="search"
             placeholder="Buscar por SKU o nombre…"
+            aria-label="Buscar producto"
             value={q}
             onChange={(e) => {
               setCargando(true);
               setQ(e.target.value);
             }}
-            className="pl-8"
+            className="pl-9"
           />
         </div>
-        <div className="max-h-80 overflow-y-auto rounded-md border">
-          {cargando &&
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="m-2 h-10" />)}
+        <div className="max-h-[55dvh] overflow-y-auto rounded-lg border">
+          {cargando && (
+            <div className="space-y-2 p-3" aria-busy="true">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12" />
+              ))}
+            </div>
+          )}
 
           {!cargando && resultados.length === 0 && (
-            <p className="p-4 text-center text-sm text-muted-foreground">Sin resultados.</p>
+            <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-muted-foreground">
+              <PackageSearch className="size-6" aria-hidden />
+              Sin resultados para «{q}».
+            </div>
           )}
 
           {!cargando &&
-            resultados.map((producto) => (
-              <button
-                key={producto.sku}
-                type="button"
-                onClick={() => {
-                  onSeleccionar(producto);
-                  setAbierto(false);
-                }}
-                className="flex w-full items-center justify-between gap-2 border-b px-3 py-2 text-left text-sm last:border-0 hover:bg-accent"
-              >
-                <span className="flex flex-col">
-                  <span className="font-medium">{producto.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{producto.sku}</span>
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  ${producto.price} · stock {producto.stock}
-                </span>
-              </button>
-            ))}
+            resultados.map((producto) => {
+              const agotado = producto.stock <= 0;
+              return (
+                <button
+                  key={producto.sku}
+                  type="button"
+                  disabled={agotado}
+                  onClick={() => {
+                    onSeleccionar(producto);
+                    setAbierto(false);
+                  }}
+                  className={cn(
+                    "flex min-h-14 w-full items-center justify-between gap-3 border-b px-3.5 py-2.5 text-left text-sm outline-none transition-colors last:border-0",
+                    agotado ? "cursor-not-allowed opacity-55" : "hover:bg-accent focus-visible:bg-accent",
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{producto.name}</span>
+                    <span className="tabular block text-xs text-muted-foreground">{producto.sku}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="tabular font-semibold">{formatMoney(producto.price)}</span>
+                    {agotado ? (
+                      <Badge variant="outline" className="border-transparent bg-status-danger-soft text-status-danger-ink">
+                        Agotado
+                      </Badge>
+                    ) : (
+                      <span className="tabular text-xs text-muted-foreground">{producto.stock} en stock</span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
         </div>
       </DialogContent>
     </Dialog>
