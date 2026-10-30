@@ -99,15 +99,14 @@ ciclo completo (código, GitHub, Railway, Vercel, base de datos). Estado real
 |---|---|---|
 | **Código y git** | Sí: editar, probar, commit, push a la rama de la sesión | — |
 | **GitHub** (ramas, PR, issues, CI) | Sí, con las herramientas de GitHub, solo en este repo y con la app de Claude instalada en la cuenta | Crear PR solo si se pide |
-| **Railway** | **No conectado.** Existe un conector oficial en el directorio de claude.ai (crear proyectos y despliegues, ver estado, leer logs, entre otras). No está instalado en la cuenta de Freddy | Conectar el conector de Railway (ver abajo) |
-| **Vercel** | **No conectado.** Existe un conector oficial (listar proyectos y despliegues, ver detalles y eventos/logs de un despliegue, buscar en su documentación). Por la lista de herramientas parece más de diagnóstico que de administración; **no verificado** si puede editar variables de entorno | Conectar el conector de Vercel (ver abajo) |
-| **Base de datos (Supabase)** | **No conectado.** Existe un conector oficial (~32 herramientas para gestionar proyectos; no se vio el detalle completo). Mientras tanto puedo escribir migraciones y aplicarlas solo si hay `SUPABASE_DB_URL` en el entorno | Conectar el conector de Supabase, de preferencia con acceso de **solo lectura** al principio |
+| **Railway** | **Conectado y verificado (2026-10-30).** Puedo crear proyectos y servicios, cambiar su configuración (carpeta raíz, comando de arranque, healthcheck, región), fijar variables, generar dominios, leer logs y estado, y desplegar (`accept-deploy`, `redeploy`). Requiere un plan de pago activo. Los valores de las variables no los puedo leer (el conector entrega solo nombres) | — |
+| **Vercel** | **Conectado y verificado (2026-10-29).** Más de 200 herramientas: crear proyectos, variables de entorno, despliegues, logs y errores en producción, dominios, etc. La primera vez pide autorizar el equipo (`authorize_team_access`: genera un enlace que Freddy abre y aprueba). Ojo: `create_git_project` puede devolver una respuesta ambigua aunque haya creado el proyecto: verificar antes de reintentar | — |
+| **Base de datos (Supabase)** | **Conectado y verificado (2026-10-29).** Puedo listar proyectos y tablas, ejecutar SQL (`execute_sql`, solo lectura salvo que se pida otra cosa), aplicar migraciones, ver logs y advisors, y pausar/reactivar proyectos. La lista de migraciones del conector no refleja las de `tools/apply_migrations.py` (esas están en `public.schema_migrations`) | Para cambios de esquema: archivo nuevo en `backend/migrations/` y confirmación antes de aplicar |
 | **Meta / Rocketfy** (paneles web) | No hay conector. Se configuran a mano por Freddy con mi guía | — |
 
-El alcance exacto de cada conector (sobre todo si editan variables de
-entorno o ejecutan SQL) **debe verificarse al conectarlo**, mirando las
-herramientas que realmente expone. No asumir. Tras conectarlos, actualizar
-esta tabla con lo comprobado.
+Los tres conectores ya están conectados y la tabla refleja lo comprobado.
+Un conector nuevo debe verificarse al conectarlo, mirando las herramientas
+que realmente expone. No asumir.
 
 **Cómo conectar (preferido):**
 1. claude.ai → Personalizar → Conectores (https://claude.ai/customize/connectors).
@@ -161,6 +160,11 @@ posible y rotarlos.
   Supabase solicitada (el proyecto estaba pausado).
 - Los conectores de Railway, Vercel y Supabase están conectados. Vercel pide
   autorizar el equipo la primera vez (herramienta `authorize_team_access`).
+- Railway: proyecto `proyectecom` (id `da0b3ffa-fc68-4859-b2e9-0506333e08cb`),
+  servicio `backend` (carpeta `/backend`, healthcheck `/health`, región
+  `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
+  conectado en modo *staged*: **aún no hay despliegue**; se hace con
+  `accept-deploy` cuando Freddy haya cargado los secretos.
 - Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
   unknown") **no se reintenta a ciegas**: se verifica el estado real primero.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
