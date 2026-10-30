@@ -191,6 +191,8 @@ posible y rotarlos.
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel
   Authentication* **desactivada** (2026-10-30, a pedido de Freddy): el dashboard
   se protege con su propio login de Supabase.
+  Rediseño de UI (PR #2) **en producción** desde 2026-10-30; despliegue anterior
+  `dpl_CnBrKTfkEWvBhHVukppr2T11cxnz` disponible para volver atrás.
 - El proxy de la sesión de Claude **bloquea `*.up.railway.app`**: desde aquí no
   se puede hacer `curl` al backend; verificar con los logs/estado de Railway.
 - Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
