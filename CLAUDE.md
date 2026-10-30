@@ -163,8 +163,11 @@ posible y rotarlos.
 - Railway: proyecto `proyectecom` (id `da0b3ffa-fc68-4859-b2e9-0506333e08cb`),
   servicio `backend` (carpeta `/backend`, healthcheck `/health`, región
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
-  conectado en modo *staged*: **aún no hay despliegue**; se hace con
-  `accept-deploy` cuando Freddy haya cargado los secretos.
+  conectado, **backend desplegado y sano** (2026-10-30; `/health` →
+  `scheduler: true`). Los despliegues nuevos salen solos al hacer push a
+  `main` si cambia algo en `backend/`.
+- El proxy de la sesión de Claude **bloquea `*.up.railway.app`**: desde aquí no
+  se puede hacer `curl` al backend; verificar con los logs/estado de Railway.
 - Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
   unknown") **no se reintenta a ciegas**: se verifica el estado real primero.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
