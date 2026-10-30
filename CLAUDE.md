@@ -193,6 +193,13 @@ posible y rotarlos.
   se protege con su propio login de Supabase.
   Rediseño de UI (PR #2) **en producción** desde 2026-10-30; despliegue anterior
   `dpl_CnBrKTfkEWvBhHVukppr2T11cxnz` disponible para volver atrás.
+- Dominio `azoshopec.com` (Spaceship, DNS básico): `www` y `@` son la tienda
+  pública (Vercel, otro proyecto) y el correo se reenvía por Spaceship: **no
+  tocar esos registros**. Para el panel: `app.azoshopec.com` → Vercel y
+  `api.azoshopec.com` → Railway (en configuración, ver `PROGRESS.md` 0.0.50).
+  **Vence el 2026-11-27 sin renovación automática** (pendiente #26).
+- Spaceship: herramientas `dns_records_get/save/delete` y `domains_list`.
+  Antes de escribir DNS, leer la zona; solo *agregar*, nunca borrar sin pedirlo.
 - El proxy de la sesión de Claude **bloquea `*.up.railway.app`**: desde aquí no
   se puede hacer `curl` al backend; verificar con los logs/estado de Railway.
 - Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
