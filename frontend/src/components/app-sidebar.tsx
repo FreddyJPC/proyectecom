@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ import { BrandMark } from "@/components/brand-mark";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -24,7 +25,8 @@ import { NAV_GRUPOS, NAV_NUEVO_PEDIDO, SITE, esRutaActiva } from "@/config/site"
 export function AppSidebar() {
   const pathname = usePathname();
   const escaladasSinRevisar = useEscaladasSinRevisar();
-  const { setOpenMobile } = useSidebar();
+  const { setOpenMobile, state, toggleSidebar } = useSidebar();
+  const contraido = state === "collapsed";
 
   // En móvil el menú es un panel que se abre encima: hay que cerrarlo al
   // navegar, si no tapa la pantalla a la que se acaba de ir.
@@ -32,8 +34,16 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" role="navigation" aria-label="Menú principal">
-      <SidebarHeader className="gap-3 p-3">
-        <Link href="/" onClick={alNavegar} className="flex items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+      {/* Contraído, la barra mide 3 rem (48 px): con p-2 quedan 32 px de ancho
+          útil, justo lo que mide un botón de ícono. Con p-3 (24 px) la marca y
+          el botón se desbordaban y quedaban pegados al borde. */}
+      <SidebarHeader className="gap-3 p-3 group-data-[collapsible=icon]:p-2">
+        <Link
+          href="/"
+          onClick={alNavegar}
+          aria-label={`${SITE.name}: ir al resumen`}
+          className="flex items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+        >
           <BrandMark className="size-8" />
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold tracking-tight">{SITE.name}</p>
@@ -51,7 +61,7 @@ export function AppSidebar() {
             >
               <Link href={NAV_NUEVO_PEDIDO.url} onClick={alNavegar}>
                 <Plus className="size-4" />
-                <span>{NAV_NUEVO_PEDIDO.title}</span>
+                <span className="group-data-[collapsible=icon]:hidden">{NAV_NUEVO_PEDIDO.title}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -90,6 +100,25 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+
+      {/* Contraer / expandir el menú: vive en la propia barra, abajo, donde se
+          espera un control de la navegación (antes estaba en la cabecera). */}
+      <SidebarFooter className="border-t border-sidebar-border group-data-[collapsible=icon]:p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip={contraido ? "Expandir menú" : "Contraer menú"}
+              onClick={toggleSidebar}
+              aria-expanded={!contraido}
+              aria-label={contraido ? "Expandir menú" : "Contraer menú"}
+              className="text-muted-foreground"
+            >
+              {contraido ? <PanelLeftOpen /> : <PanelLeftClose />}
+              <span className="group-data-[collapsible=icon]:hidden">Contraer menú</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
