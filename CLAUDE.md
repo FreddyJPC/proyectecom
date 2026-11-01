@@ -34,6 +34,10 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   cambios. Sin jerga sin explicar.
 - Ir **paso a paso**, una cosa a la vez, y dar una recomendación clara en
   vez de listas de opciones.
+- **Siempre una sección "Hacemos esto para…"** (pedido por Freddy el
+  2026-11-01): cada vez que se haga o proponga algo, incluir en la respuesta
+  una parte corta que diga **para qué sirve** y qué problema resuelve, antes
+  de entrar en los pasos.
 - Los conceptos nuevos se anotan en `docs/CONCEPTOS_TECNICOS.md`.
 - Las decisiones se anotan en `PROGRESS.md` (ADR en la sección 2, fila nueva
   en el historial de la sección 4, pendientes en la sección 5).
