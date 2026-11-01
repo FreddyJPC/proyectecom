@@ -24,6 +24,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
+import { useMontado } from "@/hooks/use-montado";
 import { estadoConversacionInfo, estadoLocalInfo, rocketfyStatusInfo, tipoAlertaStockInfo } from "@/lib/estados";
 import { formatFecha, formatMoney, formatPhone, tiempoRelativo } from "@/lib/format";
 import type { ConversacionesListado } from "@/types/conversacion";
@@ -31,15 +32,20 @@ import type { AlertaStock, EventoWebhook, Paginado } from "@/types/incidencia";
 import type { MetricasGenerales } from "@/types/metricas";
 import type { PedidosListado } from "@/types/pedido";
 
+// El negocio opera en Ecuador: el saludo y "hoy" se calculan con su hora
+// (UTC-5, sin horario de verano) y no con la del servidor que compiló la página
+// ni con la del dispositivo.
+const ZONA = "America/Guayaquil";
+
 function saludo(): string {
-  const h = new Date().getHours();
+  const h = Number(new Intl.DateTimeFormat("es-EC", { hour: "numeric", hourCycle: "h23", timeZone: ZONA }).format(new Date()));
   if (h < 12) return "Buenos días";
   if (h < 19) return "Buenas tardes";
   return "Buenas noches";
 }
 
 function fechaLarga(): string {
-  const f = new Intl.DateTimeFormat("es-EC", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const f = new Intl.DateTimeFormat("es-EC", { weekday: "long", day: "numeric", month: "long", timeZone: ZONA }).format(new Date());
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
 
@@ -86,16 +92,15 @@ export default function Home() {
 
   const totales = escaladas.data?.totalesPorFiltroRapido;
   const m = metricas.data;
+  // Hora y fecha solo en el navegador (ver useMontado): antes salían congeladas
+  // con la del momento de la compilación.
+  const montado = useMontado();
 
   return (
     <>
       <PageHeader
-        title={
-          <>
-            <span suppressHydrationWarning>{saludo()}</span> 👋
-          </>
-        }
-        description={<span suppressHydrationWarning>{fechaLarga()} · Esto es lo que pasa hoy en tu negocio.</span>}
+        title={montado ? saludo() : "Hola"}
+        description={montado ? `${fechaLarga()} · Esto es lo que pasa hoy en tu negocio.` : "Esto es lo que pasa hoy en tu negocio."}
         actions={
           <Button asChild>
             <Link href="/pedidos/nuevo">

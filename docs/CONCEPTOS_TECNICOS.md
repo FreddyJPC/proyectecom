@@ -33,6 +33,7 @@
 18. [Tokens de diseño y modo oscuro](#18-tokens-de-diseño-y-modo-oscuro)
 19. [Accesibilidad (WCAG) y cómo se mide](#19-accesibilidad-wcag-y-cómo-se-mide)
 20. [Dominio propio, DNS y certificado HTTPS](#20-dominio-propio-dns-y-certificado-https)
+21. [Prerenderizado: por qué la hora no se calcula al compilar](#21-prerenderizado-por-qué-la-hora-no-se-calcula-al-compilar)
 
 ---
 
@@ -629,3 +630,29 @@ los registros `app` y `api` de Spaceship.
 registrador (Spaceship) y **vence el 2026-11-27 sin renovación automática**
 (pendiente #26). Si caduca, dejan de funcionar la tienda, el correo, el panel
 y el backend a la vez.
+
+---
+
+## 21. Prerenderizado: por qué la hora no se calcula al compilar
+
+**Prerenderizar:** Next.js genera el HTML de muchas pantallas **una sola vez, al
+compilar** (el `○` que aparece junto a la ruta al hacer `next build`), no cada
+vez que alguien entra. Es lo que hace que la página cargue rápido.
+
+**El problema:** si en ese HTML se calcula algo que depende de "ahora" (saludo,
+fecha, un ID basado en la hora), queda **congelado con el momento del build**, y
+en el idioma horario del servidor (UTC), no el de Ecuador. Ejemplo real: la
+pantalla de inicio decía "Buenos días · domingo 1 de noviembre" cuando en
+Ecuador eran las 22:30 del 31 de octubre, porque se compiló a las 03:30 UTC del
+1 de noviembre. Además, la marca `suppressHydrationWarning` le dice a React "no
+te quejes si el navegador calcula otra cosa", pero **tampoco lo corrige**: se
+queda el valor viejo.
+
+**La solución usada:** el hook `useMontado()` (`frontend/src/hooks/use-montado.ts`)
+vale `false` al generar el HTML y `true` en el navegador. Lo que depende de la
+hora se muestra solo cuando es `true`, y se calcula con la zona horaria
+`America/Guayaquil` (UTC-5, sin horario de verano), así el saludo no depende de
+dónde esté el servidor ni de cómo tenga puesta la hora el dispositivo.
+
+**Cómo comprobarlo:** después de `next build`, buscar el saludo en
+`.next/server/app/index.html`: no debe aparecer.

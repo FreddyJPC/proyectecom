@@ -8,12 +8,11 @@ import { Fragment } from "react";
 import { BackendStatus } from "@/components/backend-status";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/user-menu";
 import { SITE, migasDe } from "@/config/site";
 
-/** Cabecera fija. En escritorio: botón del menú + migas de pan. En móvil: el
+/** Cabecera fija. En escritorio: migas de pan (el botón de contraer el menú
+ * está al pie de la barra lateral). En móvil: la
  * marca y, en subpáginas, "‹ Sección" para volver a la lista (el menú ya
  * está en la barra inferior). */
 export function SiteHeader() {
@@ -23,9 +22,6 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/70 md:px-5">
-      <SidebarTrigger className="-ml-1 hidden md:inline-flex" aria-label="Mostrar u ocultar el menú" />
-      <Separator orientation="vertical" className="mr-1 hidden h-4 md:block" />
-
       {/* Móvil: en subpáginas "‹ Sección" (volver); en las principales, la
           marca. El título grande lo pone la propia página: así no se repite. */}
       <div className="flex min-w-0 flex-1 items-center md:hidden">
