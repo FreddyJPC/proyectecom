@@ -545,8 +545,9 @@ todo lo demás lo usa. Viven en `frontend/src/app/globals.css`.
   valor oscuro; la app elige según el tema (botón sol/luna de la cabecera:
   claro, oscuro o el de tu sistema).
 - **Estados con significado fijo.** Verde = éxito, ámbar = atención, rojo =
-  problema, celeste = información. El color de marca (índigo) es otro a
-  propósito, para que nunca confundas "botón principal" con "todo bien".
+  problema, celeste = información. La base de la app es negro, blanco y
+  grises (sin color de marca) a propósito, para que el único color que veas
+  sea de estado y nunca confundas "botón principal" con "todo bien".
 
 Cada estado tiene 4 tonos: el **sólido** (puntos, barras), el **texto sobre
 sólido**, el **fondo suave** (etiquetas) y el **texto oscuro sobre fondo

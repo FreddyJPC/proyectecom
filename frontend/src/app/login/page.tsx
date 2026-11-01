@@ -52,14 +52,14 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       {/* Panel de marca: solo en pantallas anchas. */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[oklch(0.42_0.2_275)] via-[oklch(0.36_0.18_278)] to-[oklch(0.25_0.12_280)] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[oklch(0.3_0_0)] via-[oklch(0.21_0_0)] to-[oklch(0.13_0_0)] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-32 -right-24 size-96 rounded-full bg-[oklch(0.7_0.17_280)]/25 blur-3xl"
+          className="pointer-events-none absolute -top-32 -right-24 size-96 rounded-full bg-white/10 blur-3xl"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-40 -left-24 size-[28rem] rounded-full bg-[oklch(0.65_0.18_250)]/20 blur-3xl"
+          className="pointer-events-none absolute -bottom-40 -left-24 size-[28rem] rounded-full bg-white/5 blur-3xl"
         />
 
         <div className="relative flex items-center gap-3">

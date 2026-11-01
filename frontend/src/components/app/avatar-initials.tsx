@@ -3,15 +3,16 @@ import { UserRound } from "lucide-react";
 import { iniciales } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// Paleta fija de tonos suaves: el mismo nombre siempre da el mismo color, así
-// cada cliente se reconoce de un vistazo en la lista sin elegir colores a mano.
+// Paleta fija de grises: el mismo nombre siempre da el mismo tono, así cada
+// cliente se reconoce de un vistazo en la lista sin elegir colores a mano. Son
+// neutros a propósito: el color queda reservado para los estados.
 const TONOS = [
-  "bg-[oklch(0.93_0.05_275)] text-[oklch(0.38_0.14_275)] dark:bg-[oklch(0.33_0.07_275)] dark:text-[oklch(0.9_0.05_275)]",
-  "bg-[oklch(0.93_0.05_190)] text-[oklch(0.38_0.09_190)] dark:bg-[oklch(0.33_0.05_190)] dark:text-[oklch(0.9_0.06_190)]",
-  "bg-[oklch(0.94_0.06_80)] text-[oklch(0.42_0.1_70)] dark:bg-[oklch(0.35_0.06_80)] dark:text-[oklch(0.9_0.08_85)]",
-  "bg-[oklch(0.94_0.04_20)] text-[oklch(0.42_0.14_20)] dark:bg-[oklch(0.34_0.07_20)] dark:text-[oklch(0.9_0.07_20)]",
-  "bg-[oklch(0.94_0.05_150)] text-[oklch(0.4_0.1_150)] dark:bg-[oklch(0.33_0.06_150)] dark:text-[oklch(0.9_0.08_150)]",
-  "bg-[oklch(0.94_0.04_330)] text-[oklch(0.42_0.13_330)] dark:bg-[oklch(0.34_0.07_330)] dark:text-[oklch(0.9_0.06_330)]",
+  "bg-[oklch(0.93_0_0)] text-[oklch(0.3_0_0)] dark:bg-[oklch(0.32_0_0)] dark:text-[oklch(0.92_0_0)]",
+  "bg-[oklch(0.89_0_0)] text-[oklch(0.28_0_0)] dark:bg-[oklch(0.37_0_0)] dark:text-[oklch(0.94_0_0)]",
+  "bg-[oklch(0.84_0_0)] text-[oklch(0.25_0_0)] dark:bg-[oklch(0.42_0_0)] dark:text-[oklch(0.96_0_0)]",
+  "bg-[oklch(0.3_0_0)] text-[oklch(0.96_0_0)] dark:bg-[oklch(0.82_0_0)] dark:text-[oklch(0.2_0_0)]",
+  "bg-[oklch(0.4_0_0)] text-[oklch(0.97_0_0)] dark:bg-[oklch(0.74_0_0)] dark:text-[oklch(0.18_0_0)]",
+  "bg-[oklch(0.96_0_0)] text-[oklch(0.35_0_0)] ring-1 ring-inset ring-border dark:bg-[oklch(0.25_0_0)] dark:text-[oklch(0.88_0_0)]",
 ];
 
 function tono(semilla: string): string {
