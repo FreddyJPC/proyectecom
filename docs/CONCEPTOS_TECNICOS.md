@@ -32,6 +32,7 @@
 17. [Diseño responsivo y "mobile-first"](#17-diseño-responsivo-y-mobile-first)
 18. [Tokens de diseño y modo oscuro](#18-tokens-de-diseño-y-modo-oscuro)
 19. [Accesibilidad (WCAG) y cómo se mide](#19-accesibilidad-wcag-y-cómo-se-mide)
+20. [Dominio propio, DNS y certificado HTTPS](#20-dominio-propio-dns-y-certificado-https)
 
 ---
 
@@ -544,8 +545,9 @@ todo lo demás lo usa. Viven en `frontend/src/app/globals.css`.
   valor oscuro; la app elige según el tema (botón sol/luna de la cabecera:
   claro, oscuro o el de tu sistema).
 - **Estados con significado fijo.** Verde = éxito, ámbar = atención, rojo =
-  problema, celeste = información. El color de marca (índigo) es otro a
-  propósito, para que nunca confundas "botón principal" con "todo bien".
+  problema, celeste = información. La base de la app es negro, blanco y
+  grises (sin color de marca) a propósito, para que el único color que veas
+  sea de estado y nunca confundas "botón principal" con "todo bien".
 
 Cada estado tiene 4 tonos: el **sólido** (puntos, barras), el **texto sobre
 sólido**, el **fondo suave** (etiquetas) y el **texto oscuro sobre fondo
@@ -576,3 +578,54 @@ selectores de provincia y cantón no tenían nombre para lectores de pantalla) y
 quedó en **cero violaciones**. Está en `frontend/tools/ui-preview/` para
 repetirla cuando se cambie la interfaz. Una herramienta automática no
 detecta todo, pero cubre mucho de lo más común.
+
+---
+
+## 20. Dominio propio, DNS y certificado HTTPS
+
+**DNS:** la "agenda de contactos" de internet. Traduce un nombre
+(`api.azoshopec.com`) a la dirección del servidor que lo atiende. Se configura
+con **registros** en el proveedor del dominio (aquí, Spaceship). Los que usa
+este proyecto:
+- **`app` → CNAME hacia Vercel:** el panel. Un CNAME dice "este nombre es un
+  alias de aquel otro".
+- **`api` → CNAME hacia Railway:** el backend.
+- **`_railway-verify.api` → TXT:** una nota que demuestra a Railway que el
+  dominio es tuyo (verificación de propiedad).
+- **`www`, `@` y los de correo:** son de la tienda pública y del reenvío de
+  correo. **No se tocan.**
+
+**Certificado (TLS/SSL) y HTTPS:** un archivo digital que una entidad de
+confianza (aquí Let's Encrypt, a través de Railway y Vercel) emite para un
+dominio concreto. Hace dos cosas:
+1. **Cifra** lo que viaja entre el navegador y el servidor, así nadie puede
+   leerlo por el camino (por ejemplo, en un wifi público).
+2. **Demuestra identidad:** asegura que hablas con el servidor real y no con
+   uno falso. El candado del navegador significa que esto se cumple.
+
+**Ejemplos concretos:**
+- Tu correo y contraseña al entrar a `app.azoshopec.com` viajan cifrados.
+- Meta (WhatsApp) y Rocketfy **exigen HTTPS** para enviar webhooks con datos de
+  clientes; sin certificado válido en `api.azoshopec.com` no se podrían
+  registrar.
+- Un navegador bloquea las llamadas de una página HTTPS hacia un servidor sin
+  certificado válido: si el panel apunta a `api.azoshopec.com` antes de que el
+  certificado esté listo, se queda sin datos.
+
+**Por qué hubo que esperarlo:** las direcciones de la plataforma
+(`*.up.railway.app`, `*.vercel.app`) ya traen certificado. Un dominio propio
+necesita uno nuevo: la plataforma lo pide a la entidad emisora, que antes
+comprueba que el dominio apunta de verdad a esa plataforma (por eso existen los
+registros DNS). En Railway ese trámite se quedó en `ISSUING` más de 3 horas y
+luego pasó a `ISSUE_FAILED` (error interno); `retry-domain-certificate` lo
+resolvió. Por eso las variables se cambiaron **después** de que el certificado
+estuviera `VALID`.
+
+**Renovación:** los certificados caducan (normalmente a los ~90 días) y la
+plataforma los renueva sola **mientras el DNS siga apuntando bien**. No borrar
+los registros `app` y `api` de Spaceship.
+
+**Otro punto, el dominio mismo:** el dominio `azoshopec.com` se paga al
+registrador (Spaceship) y **vence el 2026-11-27 sin renovación automática**
+(pendiente #26). Si caduca, dejan de funcionar la tienda, el correo, el panel
+y el backend a la vez.
