@@ -627,7 +627,7 @@ plataforma los renueva sola **mientras el DNS siga apuntando bien**. No borrar
 los registros `app` y `api` de Spaceship.
 
 **Otro punto, el dominio mismo:** el dominio `azoshopec.com` se paga al
-registrador (Spaceship) y **vence el 2026-11-27 sin renovación automática**
+registrador (Spaceship) y **vence el 2027-11-27 sin renovación automática**
 (pendiente #26). Si caduca, dejan de funcionar la tienda, el correo, el panel
 y el backend a la vez.
 

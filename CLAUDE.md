@@ -201,7 +201,7 @@ posible y rotarlos.
   pública (Vercel, otro proyecto) y el correo se reenvía por Spaceship: **no
   tocar esos registros**. Para el panel: `app.azoshopec.com` → Vercel y
   `api.azoshopec.com` → Railway (en configuración, ver `PROGRESS.md` 0.0.50).
-  **Vence el 2026-11-27 sin renovación automática** (pendiente #26).
+  **Vence el 2027-11-27** (registrado por 2 años) **sin renovación automática** (pendiente #26; verificado con Spaceship el 2026-11-02: antes figuraba por error 2026-11-27).
 - Spaceship: herramientas `dns_records_get/save/delete` y `domains_list`.
   Antes de escribir DNS, leer la zona; solo *agregar*, nunca borrar sin pedirlo.
 - El proxy de la sesión de Claude **bloquea `*.up.railway.app`**: desde aquí no
