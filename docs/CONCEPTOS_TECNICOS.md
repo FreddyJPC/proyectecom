@@ -34,6 +34,7 @@
 19. [Accesibilidad (WCAG) y cómo se mide](#19-accesibilidad-wcag-y-cómo-se-mide)
 20. [Dominio propio, DNS y certificado HTTPS](#20-dominio-propio-dns-y-certificado-https)
 21. [Prerenderizado: por qué la hora no se calcula al compilar](#21-prerenderizado-por-qué-la-hora-no-se-calcula-al-compilar)
+22. [Las tres claves de WhatsApp (App Secret, clave de verificación y token de acceso)](#22-las-tres-claves-de-whatsapp)
 
 ---
 
@@ -656,3 +657,43 @@ dónde esté el servidor ni de cómo tenga puesta la hora el dispositivo.
 
 **Cómo comprobarlo:** después de `next build`, buscar el saludo en
 `.next/server/app/index.html`: no debe aparecer.
+
+---
+
+## 22. Las tres claves de WhatsApp
+
+La comunicación con WhatsApp va en **dos direcciones**, y cada una tiene su
+propia clave. Confundirlas es muy común.
+
+| Dirección | Qué pasa | Clave | Variable en Railway |
+|---|---|---|---|
+| **Meta → nosotros** (recibir) | Meta avisa a nuestro backend de cada mensaje | **App Secret**: con ella Meta *firma* cada aviso y nuestro backend comprueba la firma, así sabe que es de Meta y no de un impostor | `WHATSAPP_APP_SECRET` |
+| **Meta → nosotros** (una sola vez) | Al registrar la URL del webhook, Meta pregunta "¿esta dirección es tuya?" | **Clave de verificación**: una contraseña que inventamos y que el backend repite al verificar | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` |
+| **Nosotros → Meta** (enviar) | Nuestro backend le pide a Meta que mande un mensaje | **Token de acceso**: la llave que demuestra *quién* pide el envío y a qué cuentas tiene derecho | `WHATSAPP_API_TOKEN` |
+
+**Ejemplo:** el cliente escribe → Meta nos avisa (firmado con el App Secret) →
+Victoria piensa la respuesta → nuestro backend se la pide a Meta
+**presentando el token de acceso**. Sin token, Meta rechaza el envío: el bot
+oye, pero no puede hablar.
+
+**Por qué el token sale de "Usuarios del sistema":** hay tokens de varios
+tipos.
+- **Temporal** (el que sale en la página *API Setup* de la app): pertenece a tu
+  usuario personal y **caduca en horas**. Sirve solo para probar. Si el bot lo
+  usara, un día dejaría de responder sin avisar.
+- **De usuario del sistema**: un *usuario del sistema* es como una **cuenta de
+  empleado-robot** del negocio, que no es ninguna persona. Su token **no
+  depende de tu contraseña ni de tu sesión**, no se rompe si cambias de
+  contraseña y puede **no caducar**. Es el tipo que Meta recomienda para
+  servidores. Se crea en *Configuración del negocio → Usuarios del sistema*,
+  porque ahí vive todo lo que pertenece al negocio (cuentas, números, usuarios
+  del sistema), no a una persona.
+
+**Asignar activos:** un token solo funciona con lo que se le asignó. Por eso
+hay que darle al usuario del sistema la app y la cuenta de WhatsApp que va a
+usar; si se crea una cuenta nueva (como la de la SIM del bot), hay que
+asignársela también.
+
+**Cuidado:** el token permite **enviar mensajes en nombre de tu negocio**. Es
+un secreto: vive solo en Railway, nunca en el chat ni en el repositorio, y se
+rota si se filtra.
