@@ -1,10 +1,10 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: PROPUESTA (2026-11-05), pendiente de tu aprobación.** Nada de esto
-> está construido. Cuando lo apruebes se registra como ADR en `PROGRESS.md`
-> (sección 2) y se empieza por la Fase A. Escrito por Claude a partir de
-> `PROGRESS.md`, `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*`
-> y el dashboard (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fase A implementada en
+> la rama, pendiente de aplicar la migración 013 y desplegar; las demás fases,
+> sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
+> (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
 ## 1. Hacemos esto para…
 
@@ -113,9 +113,10 @@ no hay, ni vender lo que pausaste. Se puede hacer antes de cualquier pantalla.
   `productos_bot.max_unidades_por_pedido`, por defecto 1). `leads.cantidad`
   nuevo; `cerrar_venta` lo usa en la línea del pedido.
 - **H3 — stock:** antes de registrar y justo antes de cerrar, se consulta el
-  stock del SKU exacto en Rocketfy (caché de ~5 minutos). Si no alcanza,
-  Victoria se lo dice al cliente (ofrece menos unidades o avisa) y queda
-  alerta. Si Rocketfy no responde **no se bloquea la venta** (Rocketfy igual la
+  stock del SKU exacto en Rocketfy (caché de ~5 minutos; sin caché al cerrar).
+  Si quedan menos de las pedidas, Victoria ofrece lo que queda; si no queda
+  nada, se pasa a una persona con aviso por Telegram (la tabla de alertas de
+  stock solo admite SKUs vigilados, por eso no se usa). Si Rocketfy no responde **no se bloquea la venta** (Rocketfy igual la
   rechazaría al confirmar y se escala), pero queda en el log.
 - **H6 — pausar de verdad:** `registrar_producto`, `cerrar_venta` y el contexto
   por anuncio verifican que el producto siga `activo`. Si se pausó a mitad de

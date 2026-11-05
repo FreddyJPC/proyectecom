@@ -23,6 +23,7 @@ from src.config.settings import load_settings
 from src.integrations.llm.contratos import LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
 
+from .ficha import formatear_ficha_producto
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
 from .tools import HERRAMIENTAS_VICTORIA, HerramientasVictoria
 
@@ -79,8 +80,10 @@ class VictoriaConversationService:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(conversacion_id, telefono=conversacion["telefono"])
 
+        producto_contexto = self._resolver_producto_contexto(lead, conversacion)
         system_prompt = _plantilla_system_prompt().format(
-            contexto_producto=self._formatear_contexto_producto(self._resolver_producto_contexto(lead, conversacion)),
+            contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
+            + self._formatear_contexto_producto(producto_contexto),
             contexto_lead_actual=self._formatear_contexto_lead(lead),
             fecha_actual=_fecha_legible_ecuador(),
         )
@@ -163,30 +166,39 @@ class VictoriaConversationService:
         ]
 
     def _resolver_producto_contexto(self, lead: dict, conversacion: dict) -> Optional[dict]:
+        """Producto cuya ficha completa se le muestra a Victoria. Solo cuenta
+        si está ACTIVO: pausar un producto debe sacarlo de las conversaciones
+        en curso y de los anuncios vinculados, no solo del listado (hueco H6
+        del plan de gestión de productos)."""
         if lead.get("producto_sku"):
-            return self._productos.obtener_por_sku(lead["producto_sku"])
+            producto = self._productos.obtener_por_sku(lead["producto_sku"])
+            return producto if self._esta_activo(producto) else None
         if conversacion.get("id_anuncio"):
             producto = self._productos.obtener_por_id_anuncio(conversacion["id_anuncio"])
-            if producto:
+            if self._esta_activo(producto):
                 return producto
         return None
 
+    @staticmethod
+    def _esta_activo(producto: Optional[dict]) -> bool:
+        return producto is not None and bool(producto.get("activo", True))
+
+    @staticmethod
+    def _aviso_producto_no_disponible(lead: dict, producto_contexto: Optional[dict]) -> str:
+        """Si el cliente ya había elegido un producto que ahora está pausado,
+        Victoria debe saberlo en vez de seguir como si nada."""
+        if lead.get("producto_sku") and producto_contexto is None:
+            nombre = lead.get("producto_nombre") or lead["producto_sku"]
+            return (
+                f"AVISO: el producto que el cliente había elegido ({nombre}) ya no está disponible. "
+                "Explícaselo con naturalidad y ofrécele los productos disponibles de la lista; "
+                "si no hay alternativa, usa escalar_a_humano.\n\n"
+            )
+        return ""
+
     def _formatear_contexto_producto(self, producto: Optional[dict]) -> str:
         if producto:
-            partes = [
-                f"Nombre: {producto['nombre']}",
-                f"Descripción: {producto['descripcion']}",
-                f"Precio: ${producto['precio']}",
-                f"Tiempo de entrega: {producto['tiempo_entrega']}",
-                f"Métodos de pago aceptados: {producto['metodos_pago_aceptados']}",
-            ]
-            if producto.get("variantes"):
-                partes.append(f"Variantes: {producto['variantes']}")
-            if producto.get("preguntas_frecuentes"):
-                partes.append(f"Preguntas frecuentes: {producto['preguntas_frecuentes']}")
-            if producto.get("temas_no_responder"):
-                partes.append(f"Temas que NO debes responder: {producto['temas_no_responder']}")
-            return "\n".join(partes)
+            return formatear_ficha_producto(producto)
 
         activos = self._productos.listar_activos()
         if not activos:
@@ -195,7 +207,8 @@ class VictoriaConversationService:
         return (
             "Todavía no se identificó un producto específico para esta conversación. "
             "Estos son los productos disponibles -- identifica cuál le interesa al cliente "
-            "antes de seguir:\n" + lista
+            "antes de seguir. Si el cliente pregunta por uno de ellos, usa ver_ficha_producto "
+            "para leer su información completa antes de responder:\n" + lista
         )
 
     @staticmethod

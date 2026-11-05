@@ -202,3 +202,116 @@ class TestLoopDeHerramientas:
         assert "asesor" in resultado.lower()
         assert len(llm.llamadas) == 3
         assert any(l["nombre"] == "escalar_a_humano" for l in ejecutor.llamadas)
+
+
+class CatalogoFalso:
+    """Productos de ventas con el flag `activo`, como los devuelve el repositorio real."""
+
+    def __init__(self, productos):
+        self._por_sku = {p["sku"]: p for p in productos}
+        self._por_anuncio = {}
+
+    def vincular(self, id_anuncio, sku):
+        self._por_anuncio[id_anuncio] = self._por_sku[sku]
+
+    def obtener_por_sku(self, sku):
+        return self._por_sku.get(sku)
+
+    def obtener_por_id_anuncio(self, id_anuncio):
+        return self._por_anuncio.get(id_anuncio)
+
+    def listar_activos(self):
+        return [p for p in self._por_sku.values() if p["activo"]]
+
+
+def _producto(sku, nombre, activo=True, descripcion="Descripción de venta."):
+    return {
+        "sku": sku,
+        "nombre": nombre,
+        "descripcion": descripcion,
+        "precio": "24.99",
+        "tiempo_entrega": "2 a 4 días hábiles",
+        "metodos_pago_aceptados": "contraentrega",
+        "max_unidades_por_pedido": 1,
+        "activo": activo,
+    }
+
+
+def _system_prompt_del_turno(catalogo, lead, id_anuncio=None):
+    llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
+    servicio = VictoriaConversationService(
+        llm_client=llm,
+        lead_repo=FakeLeadRepository(lead),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": id_anuncio}}),
+        mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
+        producto_repo=catalogo,
+        ejecutor_herramientas=EjecutorHerramientasFalso(),
+        max_turnos_herramientas=5,
+        max_mensajes_historial=40,
+    )
+    servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
+    return llm.llamadas[0]["system"], llm.llamadas[0]["herramientas"]
+
+
+class TestContextoDeProducto:
+    """Hueco H6 (pausar de verdad) y H7 (ficha bajo demanda) del plan de gestión de productos."""
+
+    def test_producto_activo_del_lead_muestra_la_ficha_completa_con_sku(self):
+        catalogo = CatalogoFalso([_producto("DEMO-1", "Producto Demo", descripcion="Descripción única de prueba.")])
+
+        system, _ = _system_prompt_del_turno(catalogo, {"id": 1, "producto_sku": "DEMO-1"})
+
+        assert "SKU: DEMO-1" in system
+        assert "Descripción única de prueba." in system
+        assert "AVISO" not in system
+
+    def test_producto_pausado_del_lead_no_muestra_la_ficha_y_avisa_a_victoria(self):
+        catalogo = CatalogoFalso(
+            [
+                _producto("VIEJO", "Producto Viejo", activo=False, descripcion="Texto del producto pausado."),
+                _producto("NUEVO", "Producto Nuevo"),
+            ]
+        )
+        lead = {"id": 1, "producto_sku": "VIEJO", "producto_nombre": "Producto Viejo"}
+
+        system, _ = _system_prompt_del_turno(catalogo, lead)
+
+        assert "Texto del producto pausado." not in system
+        assert "AVISO: el producto que el cliente había elegido (Producto Viejo) ya no está disponible" in system
+        assert "- Producto Nuevo (SKU NUEVO): $24.99" in system
+
+    def test_anuncio_vinculado_a_un_producto_pausado_se_ignora(self):
+        catalogo = CatalogoFalso([_producto("VIEJO", "Producto Viejo", activo=False, descripcion="Texto del pausado.")])
+        catalogo.vincular("AD-1", "VIEJO")
+
+        system, _ = _system_prompt_del_turno(catalogo, {"id": 1}, id_anuncio="AD-1")
+
+        assert "Texto del pausado." not in system
+        assert "AVISO" not in system  # el lead nunca había elegido ese producto
+
+    def test_anuncio_vinculado_a_un_producto_activo_muestra_su_ficha(self):
+        catalogo = CatalogoFalso([_producto("DEMO-1", "Producto Demo", descripcion="Ficha del anuncio.")])
+        catalogo.vincular("AD-1", "DEMO-1")
+
+        system, _ = _system_prompt_del_turno(catalogo, {"id": 1}, id_anuncio="AD-1")
+
+        assert "Ficha del anuncio." in system
+
+    def test_sin_producto_identificado_la_lista_indica_usar_ver_ficha_producto(self):
+        catalogo = CatalogoFalso([_producto("A", "Producto A"), _producto("B", "Producto B")])
+
+        system, _ = _system_prompt_del_turno(catalogo, {"id": 1})
+
+        assert "- Producto A (SKU A): $24.99" in system
+        assert "- Producto B (SKU B): $24.99" in system
+        assert "ver_ficha_producto" in system
+
+    def test_victoria_recibe_la_herramienta_nueva_y_ya_no_envia_el_total(self):
+        _, herramientas = _system_prompt_del_turno(CatalogoFalso([]), {"id": 1})
+
+        por_nombre = {h.nombre: h for h in herramientas}
+        assert "ver_ficha_producto" in por_nombre
+        registrar = por_nombre["registrar_producto"].parametros
+        assert "total" not in registrar["properties"]
+        assert "cantidad" in registrar["properties"]
+        assert registrar["required"] == ["producto_sku", "producto_nombre"]

@@ -10,6 +10,7 @@ estas herramientas no deben depender de una Supabase real para probarse).
 Ninguno de estos tests importa nada de `anthropic` -- solo trabajan con
 ResultadoHerramienta, el tipo neutral de contratos.py.
 """
+import json
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -52,11 +53,12 @@ class FakeLeadRepository:
             if valor is not None:
                 lead[campo] = valor
 
-    def actualizar_producto(self, lead_id, producto_sku, producto_nombre, total, variante=None):
+    def actualizar_producto(self, lead_id, producto_sku, producto_nombre, total, variante=None, cantidad=1):
         lead = self.leads.setdefault(lead_id, {})
         lead["producto_sku"] = producto_sku
         lead["producto_nombre"] = producto_nombre
         lead["total"] = total
+        lead["cantidad"] = cantidad
         if variante is not None:
             lead["producto_variante"] = variante
 
@@ -94,10 +96,52 @@ class FakeProductoBotRepository:
         self.productos = productos or {}
 
     def obtener_por_sku(self, sku):
+        # Igual que el repositorio real: devuelve también los pausados.
         return self.productos.get(sku)
 
     def listar_activos(self):
-        return list(self.productos.values())
+        return [p for p in self.productos.values() if p.get("activo", True)]
+
+
+class FakeStockChecker:
+    """`stock=None` significa "no se pudo saber" (Rocketfy no respondió)."""
+
+    def __init__(self, stock=None):
+        self.stock = stock
+        self.consultas = []
+
+    def stock_de(self, sku, fresco=False):
+        self.consultas.append((sku, fresco))
+        return self.stock
+
+
+class FakeMinimoRepository:
+    def __init__(self, falla=False):
+        self.falla = falla
+        self.guardados = []
+
+    def guardar(self, sku, canton, provincia, cantidad, minimo, mensaje):
+        if self.falla:
+            raise RuntimeError("base caída")
+        self.guardados.append(
+            {"sku": sku, "canton": canton, "provincia": provincia, "cantidad": cantidad, "minimo": minimo, "mensaje": mensaje}
+        )
+
+
+def _producto(**cambios):
+    """Producto de ventas completo, como lo devuelve el repositorio real."""
+    producto = {
+        "sku": "DEMO-1",
+        "nombre": "Producto Demo",
+        "descripcion": "Un producto de prueba.",
+        "precio": Decimal("24.99"),
+        "tiempo_entrega": "2 a 4 días hábiles",
+        "metodos_pago_aceptados": "contraentrega, transferencia",
+        "max_unidades_por_pedido": 1,
+        "activo": True,
+    }
+    producto.update(cambios)
+    return producto
 
 
 class FakePedidoRepository:
@@ -135,7 +179,9 @@ class FakePedidoRepository:
         self.tabla[id_local]["mensaje_error"] = mensaje
 
 
-def _herramientas(lead_repo=None, conv_repo=None, producto_repo=None, pedido_service=None, telegram=None):
+def _herramientas(
+    lead_repo=None, conv_repo=None, producto_repo=None, pedido_service=None, telegram=None, stock=None, minimos=None
+):
     return HerramientasVictoria(
         lead_repo=lead_repo or FakeLeadRepository(),
         conversacion_repo=conv_repo or FakeConversacionRepository(),
@@ -146,6 +192,9 @@ def _herramientas(lead_repo=None, conv_repo=None, producto_repo=None, pedido_ser
             repo=FakePedidoRepository(),
         ),
         telegram_notifier=telegram or MagicMock(),
+        # Por defecto "stock desconocido": nunca toca la red en estos tests.
+        stock_checker=stock or FakeStockChecker(),
+        minimo_repo=minimos or FakeMinimoRepository(),
     )
 
 
@@ -168,22 +217,187 @@ class TestGuardarDatosCliente:
         assert leads.leads[1]["canton"] == "Quito"
 
 
+class TestVerFichaProducto:
+    def test_devuelve_la_ficha_completa_con_sku_y_maximo_de_unidades(self):
+        productos = FakeProductoBotRepository(
+            {"DEMO-1": _producto(variantes="negro, blanco", max_unidades_por_pedido=2)}
+        )
+        herramientas = _herramientas(producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "ver_ficha_producto", lead_id=1, conversacion_id=1, entrada={"producto_sku": "DEMO-1"}, id_llamada="toolu_f1"
+        )
+
+        assert resultado.id_llamada == "toolu_f1"
+        for esperado in ("SKU: DEMO-1", "Producto Demo", "$24.99", "2 a 4 días hábiles", "negro, blanco", "máximas por pedido: 2"):
+            assert esperado in resultado.contenido
+
+    def test_acepta_el_nombre_si_el_llm_no_copia_el_sku(self):
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "ver_ficha_producto", lead_id=1, conversacion_id=1, entrada={"producto_sku": "producto demo"}, id_llamada="toolu_f2"
+        )
+
+        assert "SKU: DEMO-1" in resultado.contenido
+
+    def test_producto_inexistente_devuelve_el_catalogo_disponible(self):
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "ver_ficha_producto", lead_id=1, conversacion_id=1, entrada={"producto_sku": "NO-EXISTE"}, id_llamada="toolu_f3"
+        )
+
+        assert "no encontré ese producto" in resultado.contenido.lower()
+        assert "Producto Demo (DEMO-1)" in resultado.contenido
+
+    def test_un_producto_pausado_no_se_muestra(self):
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(activo=False)})
+        herramientas = _herramientas(producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "ver_ficha_producto", lead_id=1, conversacion_id=1, entrada={"producto_sku": "DEMO-1"}, id_llamada="toolu_f4"
+        )
+
+        assert "SKU: DEMO-1" not in resultado.contenido
+        assert "no encontré ese producto" in resultado.contenido.lower()
+        assert "no hay productos disponibles" in resultado.contenido.lower()
+
+
 class TestRegistrarProducto:
-    def test_registra_producto_y_convierte_total_a_decimal(self):
+    def test_el_total_lo_calcula_el_sistema_con_el_precio_del_catalogo(self):
         leads = FakeLeadRepository()
-        productos = FakeProductoBotRepository({"DEMO-1": {"sku": "DEMO-1", "nombre": "Producto Demo"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
-        herramientas.ejecutar(
+        resultado = herramientas.ejecutar(
             "registrar_producto",
             lead_id=1,
             conversacion_id=1,
-            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "total": 24.99},
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo"},
             id_llamada="toolu_2",
         )
 
         assert leads.leads[1]["total"] == Decimal("24.99")
         assert isinstance(leads.leads[1]["total"], Decimal)
+        assert leads.leads[1]["cantidad"] == 1
+        # Victoria recibe el monto exacto que debe comunicar.
+        assert "$24.99" in resultado.contenido
+
+    def test_ignora_el_total_que_envie_el_llm_y_lo_avisa_en_el_log(self, caplog):
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        with caplog.at_level("WARNING"):
+            herramientas.ejecutar(
+                "registrar_producto",
+                lead_id=1,
+                conversacion_id=1,
+                entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "total": 1.00},
+                id_llamada="toolu_2a",
+            )
+
+        assert leads.leads[1]["total"] == Decimal("24.99")
+        assert any("el sistema calculó 24.99" in r.getMessage() for r in caplog.records)
+
+    def test_con_el_mismo_total_del_sistema_no_hay_aviso(self, caplog):
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(producto_repo=productos)
+
+        with caplog.at_level("WARNING"):
+            herramientas.ejecutar(
+                "registrar_producto",
+                lead_id=1,
+                conversacion_id=1,
+                entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "total": 24.99},
+                id_llamada="toolu_2h",
+            )
+
+        assert not any("el sistema calculó" in r.getMessage() for r in caplog.records)
+
+    def test_varias_unidades_multiplican_el_precio(self):
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=3)})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": 2},
+            id_llamada="toolu_2i",
+        )
+
+        assert leads.leads[1]["cantidad"] == 2
+        assert leads.leads[1]["total"] == Decimal("49.98")
+        assert "2 x Producto Demo" in resultado.contenido
+        assert "$49.98" in resultado.contenido
+
+    def test_acepta_la_cantidad_como_texto_o_con_decimales_enteros(self):
+        for cantidad in ("2", 2.0, " 2 "):
+            leads = FakeLeadRepository()
+            productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=3)})
+            herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+            herramientas.ejecutar(
+                "registrar_producto",
+                lead_id=1,
+                conversacion_id=1,
+                entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": cantidad},
+                id_llamada="toolu_2j",
+            )
+
+            assert leads.leads[1]["cantidad"] == 2, cantidad
+
+    def test_mas_unidades_que_el_maximo_no_registra_nada(self):
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=1)})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": 2},
+            id_llamada="toolu_2k",
+        )
+
+        assert "producto_sku" not in leads.leads.get(1, {})
+        assert "hasta 1 unidad por pedido" in resultado.contenido
+
+    def test_el_maximo_por_defecto_es_una_unidad_aunque_el_producto_no_lo_traiga(self):
+        productos = FakeProductoBotRepository({"DEMO-1": {k: v for k, v in _producto().items() if k != "max_unidades_por_pedido"}})
+        herramientas = _herramientas(producto_repo=productos)
+
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": 2},
+            id_llamada="toolu_2l",
+        )
+
+        assert "hasta 1 unidad por pedido" in resultado.contenido
+
+    def test_cantidades_invalidas_no_registran_nada(self):
+        for invalida in (0, -1, 1.5, "dos", True):
+            leads = FakeLeadRepository()
+            productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=3)})
+            herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+            resultado = herramientas.ejecutar(
+                "registrar_producto",
+                lead_id=1,
+                conversacion_id=1,
+                entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": invalida},
+                id_llamada="toolu_2m",
+            )
+
+            assert "producto_sku" not in leads.leads.get(1, {}), invalida
+            assert "número entero" in resultado.contenido, invalida
 
     def test_corrige_sku_inventado_buscando_por_nombre_en_el_catalogo_real(self):
         """Probado contra la API real: el LLM no siempre copia el SKU tal
@@ -193,30 +407,37 @@ class TestRegistrarProducto:
         distinguir tildes/mayúsculas) antes de guardar."""
         leads = FakeLeadRepository()
         productos = FakeProductoBotRepository(
-            {"10-AUDIFONO-INALAM-TIPRO": {"sku": "10-AUDIFONO-INALAM-TIPRO", "nombre": "Audifonos Bluetooth inalambricos"}}
+            {
+                "10-AUDIFONO-INALAM-TIPRO": _producto(
+                    sku="10-AUDIFONO-INALAM-TIPRO", nombre="Audifonos Bluetooth inalambricos"
+                )
+            }
         )
-        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+        stock = FakeStockChecker(stock=10)
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos, stock=stock)
 
         herramientas.ejecutar(
             "registrar_producto",
             lead_id=1,
             conversacion_id=1,
-            entrada={"producto_sku": "N/A", "producto_nombre": "Audífonos Bluetooth Inalámbricos", "total": 24.99},
+            entrada={"producto_sku": "N/A", "producto_nombre": "Audífonos Bluetooth Inalámbricos"},
             id_llamada="toolu_2b",
         )
 
         assert leads.leads[1]["producto_sku"] == "10-AUDIFONO-INALAM-TIPRO"
+        # El stock se consulta con el SKU REAL (el corregido), no con el que inventó el LLM.
+        assert stock.consultas == [("10-AUDIFONO-INALAM-TIPRO", False)]
 
     def test_variante_incluida_se_guarda(self):
         leads = FakeLeadRepository()
-        productos = FakeProductoBotRepository({"DEMO-1": {"sku": "DEMO-1", "nombre": "Producto Demo"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         herramientas.ejecutar(
             "registrar_producto",
             lead_id=1,
             conversacion_id=1,
-            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "variante": "negro", "total": 24.99},
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "variante": "negro"},
             id_llamada="toolu_2d",
         )
 
@@ -224,14 +445,14 @@ class TestRegistrarProducto:
 
     def test_sin_variante_la_columna_queda_sin_tocar(self):
         leads = FakeLeadRepository()
-        productos = FakeProductoBotRepository({"DEMO-1": {"sku": "DEMO-1", "nombre": "Producto Demo"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         herramientas.ejecutar(
             "registrar_producto",
             lead_id=1,
             conversacion_id=1,
-            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "total": 24.99},
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo"},
             id_llamada="toolu_2e",
         )
 
@@ -239,16 +460,14 @@ class TestRegistrarProducto:
 
     def test_sin_match_de_ningun_producto_real_no_guarda_nada_y_devuelve_catalogo(self):
         leads = FakeLeadRepository()
-        productos = FakeProductoBotRepository(
-            {"DEMO-1": {"sku": "DEMO-1", "nombre": "Producto Demo", "precio": Decimal("24.99")}}
-        )
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         resultado = herramientas.ejecutar(
             "registrar_producto",
             lead_id=1,
             conversacion_id=1,
-            entrada={"producto_sku": "N/A", "producto_nombre": "Algo que no existe", "total": 5},
+            entrada={"producto_sku": "N/A", "producto_nombre": "Algo que no existe"},
             id_llamada="toolu_2c",
         )
 
@@ -256,6 +475,86 @@ class TestRegistrarProducto:
         assert "no encontré ese producto" in resultado.contenido.lower()
         assert "Producto Demo" in resultado.contenido
         assert "DEMO-1" in resultado.contenido
+
+    def test_un_producto_pausado_no_se_registra(self):
+        """Hueco H6: pausar un producto debe detener las ventas nuevas de verdad."""
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository(
+            {
+                "VIEJO": _producto(sku="VIEJO", nombre="Producto Viejo", activo=False),
+                "NUEVO": _producto(sku="NUEVO", nombre="Producto Nuevo"),
+            }
+        )
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        # El SKU exacto es el del pausado; el nombre es el de OTRO producto activo:
+        # no se debe "corregir" hacia ese otro producto.
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "VIEJO", "producto_nombre": "Producto Nuevo"},
+            id_llamada="toolu_2n",
+        )
+
+        assert "producto_sku" not in leads.leads.get(1, {})
+        assert "ya no está disponible" in resultado.contenido
+        assert "Producto Nuevo (NUEVO)" in resultado.contenido
+
+    def test_stock_parcial_no_registra_y_ofrece_lo_que_queda(self):
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=3)})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos, stock=FakeStockChecker(stock=1))
+
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo", "cantidad": 2},
+            id_llamada="toolu_2o",
+        )
+
+        assert "producto_sku" not in leads.leads.get(1, {})
+        assert "solo quedan 1 unidad" in resultado.contenido.lower()
+
+    def test_producto_agotado_frena_la_venta_y_avisa_a_una_persona(self):
+        leads = FakeLeadRepository(leads={1: {"telefono": "593987654321"}})
+        conversaciones = FakeConversacionRepository()
+        telegram = MagicMock()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(
+            lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, telegram=telegram, stock=FakeStockChecker(stock=0)
+        )
+
+        resultado = herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=5,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo"},
+            id_llamada="toolu_2p",
+        )
+
+        assert "producto_sku" not in leads.leads[1]
+        assert conversaciones.estados[5] == "escalada"
+        telegram.notificar_escalado.assert_called_once()
+        assert "Producto sin stock" in telegram.notificar_escalado.call_args.args[2]
+        assert "agotado" in resultado.contenido.lower()
+
+    def test_si_no_se_pudo_consultar_el_stock_la_venta_sigue(self):
+        """Falla abierto: Rocketfy rechazaría el pedido al confirmar si de verdad no hay."""
+        leads = FakeLeadRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos, stock=FakeStockChecker(stock=None))
+
+        herramientas.ejecutar(
+            "registrar_producto",
+            lead_id=1,
+            conversacion_id=1,
+            entrada={"producto_sku": "DEMO-1", "producto_nombre": "Producto Demo"},
+            id_llamada="toolu_2q",
+        )
+
+        assert leads.leads[1]["producto_sku"] == "DEMO-1"
 
 
 class TestRegistrarMetodoPago:
@@ -330,7 +629,7 @@ class TestCerrarVenta:
             status=200,
         )
         leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
-        productos = FakeProductoBotRepository({"DEMO-1": {"tiempo_entrega": "2 a 4 días hábiles"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         resultado = herramientas.ejecutar(
@@ -358,7 +657,7 @@ class TestCerrarVenta:
         )
         lead = dict(LEAD_COMPLETO_CONTRAENTREGA, producto_variante="negro")
         leads = FakeLeadRepository(leads={1: lead})
-        productos = FakeProductoBotRepository({"DEMO-1": {"tiempo_entrega": "2 a 4 días hábiles"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_6c")
@@ -384,7 +683,7 @@ class TestCerrarVenta:
             status=200,
         )
         leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
-        productos = FakeProductoBotRepository({"DEMO-1": {"tiempo_entrega": "2 a 4 días hábiles"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_6d")
@@ -413,7 +712,7 @@ class TestCerrarVenta:
             status=200,
         )
         leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA, telefono="593987654321")})
-        productos = FakeProductoBotRepository({"DEMO-1": {"tiempo_entrega": "2 a 4 días hábiles"}})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
         herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
 
         herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_6b")
@@ -440,7 +739,8 @@ class TestCerrarVenta:
         leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
         conversaciones = FakeConversacionRepository()
         telegram = MagicMock()
-        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, telegram=telegram)
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, telegram=telegram)
 
         resultado = herramientas.ejecutar(
             "cerrar_venta", lead_id=1, conversacion_id=7, entrada={}, id_llamada="toolu_7"
@@ -456,13 +756,239 @@ class TestCerrarVenta:
         leads = FakeLeadRepository(leads={1: lead})
         conversaciones = FakeConversacionRepository()
         telegram = MagicMock()
-        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, telegram=telegram)
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, telegram=telegram)
 
         resultado = herramientas.ejecutar(
             "cerrar_venta", lead_id=1, conversacion_id=9, entrada={}, id_llamada="toolu_9"
         )
 
         assert conversaciones.estados[9] == "escalada"
+        assert "problema técnico" in resultado.contenido.lower()
+
+
+class TestCerrarVentaProtecciones:
+    """Fase A del plan de gestión de productos: última revisión antes de crear
+    un pedido REAL. Ninguno de estos casos debe llegar a Rocketfy."""
+
+    def _mock_rocketfy_ok(self, id_rocketfy=6001):
+        responses.add(
+            responses.POST,
+            f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": id_rocketfy, "products_stock": [{"id": 1, "stock": 10}]},
+            status=200,
+        )
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 1, "code": 200, "message": "ok"}, status=200
+        )
+
+    @responses.activate
+    def test_varias_unidades_viajan_en_la_linea_y_el_total_es_precio_por_cantidad(self):
+        self._mock_rocketfy_ok()
+        lead = dict(LEAD_COMPLETO_CONTRAENTREGA, cantidad=2, total=Decimal("49.98"))
+        leads = FakeLeadRepository(leads={1: lead})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=3)})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_c1")
+
+        payload_enviado = json.loads(responses.calls[0].request.body)
+        assert json.loads(payload_enviado["order_details"])[0]["quantity"] == 2
+        assert payload_enviado["total"] == "49.98"
+        assert "pedido confirmado" in resultado.contenido.lower()
+
+    @responses.activate
+    def test_sin_cantidad_en_el_lead_se_envia_una_unidad(self):
+        self._mock_rocketfy_ok()
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})  # sin la clave "cantidad"
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos)
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_c2")
+
+        payload_enviado = json.loads(responses.calls[0].request.body)
+        assert json.loads(payload_enviado["order_details"])[0]["quantity"] == 1
+
+    @responses.activate
+    def test_producto_pausado_frena_el_cierre_sin_llamar_a_rocketfy(self):
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        conversaciones = FakeConversacionRepository()
+        telegram = MagicMock()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(activo=False)})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, telegram=telegram)
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=4, entrada={}, id_llamada="toolu_c3")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[4] == "escalada"
+        assert "ya no está disponible" in telegram.notificar_escalado.call_args.args[2]
+        assert "no se pudo cerrar la venta" in resultado.contenido.lower()
+        assert leads.leads[1].get("estado") != "despachado"
+
+    @responses.activate
+    def test_producto_borrado_frena_el_cierre_sin_llamar_a_rocketfy(self):
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        conversaciones = FakeConversacionRepository()
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=FakeProductoBotRepository())
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=4, entrada={}, id_llamada="toolu_c3b")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[4] == "escalada"
+
+    @responses.activate
+    def test_precio_que_cambio_despues_de_cotizar_frena_el_cierre(self):
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})  # cotizado a 24.99
+        conversaciones = FakeConversacionRepository()
+        telegram = MagicMock()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(precio=Decimal("29.99"))})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, telegram=telegram)
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=4, entrada={}, id_llamada="toolu_c4")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[4] == "escalada"
+        motivo = telegram.notificar_escalado.call_args.args[2]
+        assert "cotizado $24.99" in motivo and "actual $29.99" in motivo
+        assert "el precio" in resultado.contenido.lower()
+
+    @responses.activate
+    def test_cantidad_mayor_al_maximo_actual_frena_el_cierre(self):
+        lead = dict(LEAD_COMPLETO_CONTRAENTREGA, cantidad=3, total=Decimal("74.97"))
+        leads = FakeLeadRepository(leads={1: lead})
+        conversaciones = FakeConversacionRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(max_unidades_por_pedido=2)})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos)
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=4, entrada={}, id_llamada="toolu_c5")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[4] == "escalada"
+
+    @responses.activate
+    def test_sin_stock_suficiente_al_cerrar_frena_el_cierre_con_dato_fresco(self):
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        conversaciones = FakeConversacionRepository()
+        stock = FakeStockChecker(stock=0)
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, stock=stock)
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=4, entrada={}, id_llamada="toolu_c6")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[4] == "escalada"
+        # Justo antes de crear un pedido real se pide el stock SIN caché.
+        assert stock.consultas == [("DEMO-1", True)]
+        assert "el stock" in resultado.contenido.lower()
+
+    @responses.activate
+    def test_si_no_se_pudo_consultar_el_stock_al_cerrar_el_pedido_sigue(self):
+        self._mock_rocketfy_ok()
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos, stock=FakeStockChecker(stock=None))
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_c7")
+
+        assert leads.leads[1]["estado"] == "despachado"
+
+
+class TestMinimosObservadosDeRocketfy:
+    MENSAJE_REAL = "El importe mínimo del pedido debe ser el del valor de los productos + el costo del envío ($18.47)"
+
+    @responses.activate
+    def test_guarda_el_minimo_que_exigio_rocketfy_y_aun_asi_escala(self):
+        responses.add(
+            responses.POST,
+            f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": 7001, "products_stock": [{"id": 1, "stock": 10}]},
+            status=200,
+        )
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 0, "code": 422, "message": self.MENSAJE_REAL}, status=200
+        )
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        conversaciones = FakeConversacionRepository()
+        minimos = FakeMinimoRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, minimos=minimos)
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=8, entrada={}, id_llamada="toolu_m1")
+
+        assert conversaciones.estados[8] == "escalada"
+        assert "problema técnico" in resultado.contenido.lower()
+        assert len(minimos.guardados) == 1
+        guardado = minimos.guardados[0]
+        assert guardado["minimo"] == Decimal("18.47")
+        assert (guardado["sku"], guardado["canton"], guardado["provincia"], guardado["cantidad"]) == (
+            "DEMO-1", "QUITO", "Pichincha", 1,
+        )
+        assert "importe mínimo" in guardado["mensaje"]
+
+    @responses.activate
+    def test_otro_error_de_rocketfy_no_guarda_nada(self):
+        responses.add(
+            responses.POST,
+            f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": 7002, "products_stock": [{"id": 1, "stock": 10}]},
+            status=200,
+        )
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 0, "code": 422, "message": "Sin cobertura para esta zona"}, status=200
+        )
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        minimos = FakeMinimoRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=productos, minimos=minimos)
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=8, entrada={}, id_llamada="toolu_m2")
+
+        assert minimos.guardados == []
+
+    @responses.activate
+    def test_el_error_local_del_recaudo_minimo_no_se_confunde_con_una_observacion_de_rocketfy(self):
+        """El mensaje local ("... recaudo mínimo que exige Rocketfy ... ($10.00)") también
+        menciona un mínimo y un monto: solo cuentan los errores que vienen de Rocketfy."""
+        lead = dict(LEAD_COMPLETO_CONTRAENTREGA, total=Decimal("5.00"))
+        leads = FakeLeadRepository(leads={1: lead})
+        conversaciones = FakeConversacionRepository()
+        minimos = FakeMinimoRepository()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto(precio=Decimal("5.00"))})
+        herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, producto_repo=productos, minimos=minimos)
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=8, entrada={}, id_llamada="toolu_m3")
+
+        assert len(responses.calls) == 0
+        assert conversaciones.estados[8] == "escalada"
+        assert minimos.guardados == []
+
+    @responses.activate
+    def test_si_falla_guardar_el_minimo_el_escalado_sigue_funcionando(self):
+        responses.add(
+            responses.POST,
+            f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": 7003, "products_stock": [{"id": 1, "stock": 10}]},
+            status=200,
+        )
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 0, "code": 422, "message": self.MENSAJE_REAL}, status=200
+        )
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        conversaciones = FakeConversacionRepository()
+        telegram = MagicMock()
+        productos = FakeProductoBotRepository({"DEMO-1": _producto()})
+        herramientas = _herramientas(
+            lead_repo=leads,
+            conv_repo=conversaciones,
+            producto_repo=productos,
+            telegram=telegram,
+            minimos=FakeMinimoRepository(falla=True),
+        )
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=8, entrada={}, id_llamada="toolu_m4")
+
+        assert conversaciones.estados[8] == "escalada"
+        telegram.notificar_escalado.assert_called_once()
         assert "problema técnico" in resultado.contenido.lower()
 
 

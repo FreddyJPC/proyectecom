@@ -24,8 +24,8 @@ PROGRESS.md, Fase 3.2, para el detalle completo de esta decisión).
 import logging
 import time
 import unicodedata
-from decimal import Decimal
-from typing import Optional
+from decimal import Decimal, InvalidOperation
+from typing import Optional, Tuple
 
 from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
@@ -39,7 +39,10 @@ from src.routes.pedidos.exceptions import (
 )
 from src.routes.pedidos.services import PedidoService
 
-from .repository import ConversacionRepository, LeadRepository, ProductoBotRepository
+from .ficha import formatear_ficha_producto
+from .minimos import extraer_minimo_rocketfy
+from .repository import ConversacionRepository, LeadRepository, MinimoObservadoRepository, ProductoBotRepository
+from .stock import StockChecker
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,22 @@ _ERRORES_ROCKETFY_QUE_ESCALAN = (
 def _normalizar_texto(texto: str) -> str:
     sin_acentos = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
     return sin_acentos.strip().lower()
+
+
+def _leer_cantidad(valor) -> Optional[int]:
+    """Cantidad pedida por el LLM -> entero >= 1, o None si no es válida.
+    Acepta 2, 2.0 y "2"; rechaza 0, negativos, fracciones y texto."""
+    if valor is None:
+        return 1
+    if isinstance(valor, bool):
+        return None
+    try:
+        numero = Decimal(str(valor).strip())
+    except InvalidOperation:
+        return None
+    if numero != numero.to_integral_value() or numero < 1:
+        return None
+    return int(numero)
 
 
 def _telefono_formato_rocketfy(telefono_whatsapp: str) -> str:
@@ -101,9 +120,9 @@ HERRAMIENTAS_VICTORIA = [
     HerramientaLLM(
         nombre="registrar_producto",
         descripcion=(
-            "Registra qué producto quiere comprar el cliente, el total a "
-            "cobrar, y la variante si el producto tiene (color, talla, etc. "
-            "— revisa la sección de variantes en tu información del "
+            "Registra qué producto quiere comprar el cliente, cuántas "
+            "unidades, y la variante si el producto tiene (color, talla, "
+            "etc. — revisa la sección de variantes en tu información del "
             "producto). Llámala en cuanto el cliente confirme el producto. "
             "Si el producto tiene variantes y el cliente aún no eligió, "
             "pregúntale UNA vez cuál prefiere — pero si no logras que lo "
@@ -112,13 +131,23 @@ HERRAMIENTAS_VICTORIA = [
             "para detener el cierre de la venta. IMPORTANTE: producto_sku "
             "debe ser copiado EXACTO, carácter por carácter, del SKU que "
             "aparece en la información del producto de tu system prompt — "
-            "nunca lo inventes, abrevies, ni le des un formato distinto."
+            "nunca lo inventes, abrevies, ni le des un formato distinto. "
+            "El TOTAL a cobrar lo calcula el sistema (precio del catálogo x "
+            "cantidad) y te lo devuelve: no lo envíes ni lo calcules tú."
         ),
         parametros={
             "type": "object",
             "properties": {
                 "producto_sku": {"type": "string"},
                 "producto_nombre": {"type": "string"},
+                "cantidad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "Unidades que quiere el cliente. Omitir si es una sola. "
+                        "El sistema valida el máximo permitido por pedido."
+                    ),
+                },
                 "variante": {
                     "type": "string",
                     "description": (
@@ -126,12 +155,29 @@ HERRAMIENTAS_VICTORIA = [
                         "Omitir si no aplica o el cliente no especificó."
                     ),
                 },
-                "total": {
-                    "type": "number",
-                    "description": "Precio total en dólares, hasta 2 decimales",
+            },
+            "required": ["producto_sku", "producto_nombre"],
+        },
+    ),
+    HerramientaLLM(
+        nombre="ver_ficha_producto",
+        descripcion=(
+            "Devuelve la información completa de un producto del catálogo "
+            "(descripción, precio, variantes, entrega, métodos de pago, "
+            "preguntas frecuentes, unidades máximas por pedido). Úsala "
+            "cuando el cliente pregunte por un producto de la lista del que "
+            "todavía no ves los detalles, ANTES de responderle: nunca "
+            "inventes datos que no estén en la ficha."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "producto_sku": {
+                    "type": "string",
+                    "description": "SKU exacto del producto, tal como aparece en la lista.",
                 },
             },
-            "required": ["producto_sku", "producto_nombre", "total"],
+            "required": ["producto_sku"],
         },
     ),
     HerramientaLLM(
@@ -192,14 +238,19 @@ class HerramientasVictoria:
         producto_repo: Optional[ProductoBotRepository] = None,
         pedido_service: Optional[PedidoService] = None,
         telegram_notifier: Optional[TelegramNotifier] = None,
+        stock_checker: Optional[StockChecker] = None,
+        minimo_repo: Optional[MinimoObservadoRepository] = None,
     ):
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._productos = producto_repo or ProductoBotRepository()
         self._pedidos = pedido_service or PedidoService(client=get_rocketfy_client())
         self._telegram = telegram_notifier or get_telegram_notifier()
+        self._stock = stock_checker or StockChecker()
+        self._minimos = minimo_repo or MinimoObservadoRepository()
         self._manejadores = {
             "guardar_datos_cliente": self._handle_guardar_datos_cliente,
+            "ver_ficha_producto": self._handle_ver_ficha_producto,
             "registrar_producto": self._handle_registrar_producto,
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
             "cerrar_venta": self._handle_cerrar_venta,
@@ -224,6 +275,18 @@ class HerramientasVictoria:
         )
         return "Datos guardados correctamente."
 
+    def _handle_ver_ficha_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        """Ficha completa de un producto, en el mismo turno (hueco H7 del plan
+        de gestión de productos): con varios productos, el contexto del system
+        prompt solo trae nombre, SKU y precio hasta que se registra uno."""
+        consulta = (entrada.get("producto_sku") or "").strip()
+        producto = self._productos.obtener_por_sku(consulta) if consulta else None
+        if producto is None and consulta:
+            producto = self._buscar_producto_activo_por_nombre(consulta)
+        if not self._esta_activo(producto):
+            return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
+        return formatear_ficha_producto(producto)
+
     def _handle_registrar_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         # El LLM no siempre copia el SKU exacto tal como aparece en el
         # catálogo (probado en la práctica: a veces lo inventa, a veces
@@ -233,17 +296,33 @@ class HerramientasVictoria:
         # contra productos_bot antes de guardar nada. Nunca debe llegar un
         # SKU inventado hasta cerrar_venta, que se lo pasa tal cual a
         # Rocketfy.
+        #
+        # Fase A del plan de gestión de productos: además (1) un producto
+        # PAUSADO no se registra (H6), (2) la cantidad no puede pasar del
+        # máximo del producto (H2), (3) no se vende más de lo que hay en
+        # Rocketfy (H3) y (4) el TOTAL lo calcula el sistema con el precio del
+        # catálogo, nunca el LLM (H1).
         sku = entrada["producto_sku"]
         nombre = entrada["producto_nombre"]
+        contexto = {"lead_id": lead_id, "conversacion_id": conversacion_id}
 
         producto_real = self._productos.obtener_por_sku(sku)
+        if producto_real is not None and not self._esta_activo(producto_real):
+            logger.warning(
+                "registrar_producto: el producto '%s' está pausado -- no se registra", producto_real["sku"], extra=contexto
+            )
+            return (
+                f"Ese producto ya no está disponible. {self._texto_catalogo_disponible()} "
+                "Pregúntale al cliente si le interesa alguno de estos, o usa escalar_a_humano."
+            )
+
         if producto_real is None:
             producto_real = self._buscar_producto_activo_por_nombre(nombre)
             if producto_real is not None:
                 logger.warning(
                     "producto_sku del LLM ('%s') no coincide con ningún producto real -- corregido a '%s' por nombre",
                     sku, producto_real["sku"],
-                    extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+                    extra=contexto,
                 )
 
         if producto_real is None:
@@ -254,23 +333,113 @@ class HerramientasVictoria:
             logger.warning(
                 "registrar_producto no encontró ningún producto real para sku=%r nombre=%r -- no se guarda nada",
                 sku, nombre,
-                extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+                extra=contexto,
             )
-            activos = self._productos.listar_activos()
-            lista = ", ".join(f"{p['nombre']} ({p['sku']}): ${p['precio']}" for p in activos)
             return (
-                "No encontré ese producto en el catálogo. Los productos disponibles ahora son: "
-                f"{lista}. Pregúntale al cliente cuál de estos quiere antes de registrar de nuevo."
+                f"No encontré ese producto en el catálogo. {self._texto_catalogo_disponible()} "
+                "Pregúntale al cliente cuál de estos quiere antes de registrar de nuevo."
             )
+
+        cantidad = _leer_cantidad(entrada.get("cantidad"))
+        if cantidad is None:
+            return (
+                "La cantidad debe ser un número entero de 1 en adelante. "
+                "Confírmala con el cliente y vuelve a registrar el producto."
+            )
+        maximo = int(producto_real.get("max_unidades_por_pedido") or 1)
+        if cantidad > maximo:
+            return self._mensaje_maximo_unidades(maximo)
+
+        stock = self._stock.stock_de(producto_real["sku"])
+        if stock is not None and stock < cantidad:
+            return self._respuesta_sin_stock(lead_id, conversacion_id, producto_real, cantidad, stock)
+
+        total = self._calcular_total(producto_real, cantidad)
+        self._avisar_si_el_llm_envio_otro_total(entrada, total, contexto)
 
         self._leads.actualizar_producto(
             lead_id,
             producto_sku=producto_real["sku"],
             producto_nombre=producto_real["nombre"],
-            total=Decimal(str(entrada["total"])),
+            total=total,
             variante=entrada.get("variante"),
+            cantidad=cantidad,
         )
-        return "Producto registrado."
+        return (
+            f"Producto registrado: {cantidad} x {producto_real['nombre']}. "
+            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
+        )
+
+    @staticmethod
+    def _esta_activo(producto: Optional[dict]) -> bool:
+        return producto is not None and bool(producto.get("activo", True))
+
+    @staticmethod
+    def _calcular_total(producto: dict, cantidad: int) -> Decimal:
+        """Precio del catálogo x cantidad, siempre Decimal con 2 cifras (el
+        dinero nunca es float)."""
+        return (Decimal(str(producto["precio"])) * cantidad).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _avisar_si_el_llm_envio_otro_total(entrada: dict, total_calculado: Decimal, contexto: dict) -> None:
+        if "total" not in entrada:
+            return
+        try:
+            enviado = Decimal(str(entrada["total"])).quantize(Decimal("0.01"))
+        except InvalidOperation:
+            enviado = None
+        if enviado != total_calculado:
+            logger.warning(
+                "El LLM envió total=%r pero el sistema calculó %s -- se usa el del sistema",
+                entrada["total"], total_calculado,
+                extra=contexto,
+            )
+
+    def _texto_catalogo_disponible(self) -> str:
+        activos = self._productos.listar_activos()
+        if not activos:
+            return "Por ahora no hay productos disponibles en el catálogo; usa escalar_a_humano."
+        lista = ", ".join(f"{p['nombre']} ({p['sku']}): ${p['precio']}" for p in activos)
+        return f"Los productos disponibles ahora son: {lista}."
+
+    @staticmethod
+    def _mensaje_maximo_unidades(maximo: int) -> str:
+        unidades = "unidad" if maximo == 1 else "unidades"
+        return (
+            f"De este producto solo se puede pedir hasta {maximo} {unidades} por pedido. "
+            f"Explícaselo al cliente con naturalidad y ofrécele registrar {maximo}; "
+            "si necesita más, usa escalar_a_humano."
+        )
+
+    def _respuesta_sin_stock(self, lead_id: int, conversacion_id: int, producto: dict, cantidad: int, stock: int) -> str:
+        logger.warning(
+            "Venta frenada por falta de stock: sku=%s pedido=%s disponible=%s",
+            producto["sku"], cantidad, stock,
+            extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+        )
+        if stock <= 0:
+            # Producto activo pero agotado: además de frenar la venta, una
+            # persona debe enterarse (aviso por Telegram) para ofrecer
+            # alternativas y pausar el producto.
+            self._handle_escalar_a_humano(
+                lead_id,
+                conversacion_id,
+                {
+                    "motivo": (
+                        f"Producto sin stock en Rocketfy: {producto['nombre']} ({producto['sku']}). "
+                        f"El cliente quería {cantidad}. Conviene pausar el producto."
+                    )
+                },
+            )
+            return (
+                "Ese producto está agotado por el momento. Ya se avisó a un asesor humano que va a "
+                "contactar al cliente; despídete cordialmente sin prometer fechas de reposición."
+            )
+        unidades = "unidad" if stock == 1 else "unidades"
+        return (
+            f"Solo quedan {stock} {unidades} de ese producto. Díselo al cliente y ofrécele registrar "
+            f"hasta {stock}; no prometas reposición ni fechas."
+        )
 
     def _buscar_producto_activo_por_nombre(self, nombre: str) -> Optional[dict]:
         nombre_normalizado = _normalizar_texto(nombre)
@@ -301,7 +470,22 @@ class HerramientasVictoria:
             )
 
         producto = self._productos.obtener_por_sku(lead["producto_sku"])
-        tiempo_entrega = producto["tiempo_entrega"] if producto else "los próximos días"
+        cantidad = int(lead.get("cantidad") or 1)
+
+        # Última revisión ANTES de crear un pedido real en Rocketfy: el
+        # producto sigue activo, la cantidad sigue permitida, el precio no
+        # cambió desde que se cotizó y hay stock fresco. Cualquier falla
+        # frena el cierre y pasa la conversación a una persona.
+        problema = self._revisar_antes_de_cerrar(lead, producto, cantidad)
+        if problema is not None:
+            motivo, mensaje = problema
+            logger.warning(
+                "cerrar_venta frenado: %s", motivo, extra={"lead_id": lead_id, "conversacion_id": conversacion_id}
+            )
+            self._handle_escalar_a_humano(lead_id, conversacion_id, {"motivo": motivo})
+            return mensaje
+
+        tiempo_entrega = producto["tiempo_entrega"]
 
         # CrearPedidoInputDTO.lineas no tiene campo propio para variante
         # (solo sku/nombre/cantidad) -- para que la variante llegue de
@@ -320,7 +504,7 @@ class HerramientasVictoria:
             canton=lead["canton"],
             provincia=lead["provincia"],
             total=lead["total"],
-            lineas=[LineaPedidoDTO(sku=lead["producto_sku"], nombre=nombre_linea, cantidad=1)],
+            lineas=[LineaPedidoDTO(sku=lead["producto_sku"], nombre=nombre_linea, cantidad=cantidad)],
             no_contra_entrega=False,
         )
 
@@ -334,6 +518,7 @@ class HerramientasVictoria:
                 "Fallo confirmando pedido en Rocketfy, se escala a humano: %s", exc,
                 extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
             )
+            self._guardar_minimo_observado(exc, lead, cantidad)
             self._handle_escalar_a_humano(
                 lead_id, conversacion_id, {"motivo": f"Rocketfy no pudo confirmar el pedido: {exc}"}
             )
@@ -346,6 +531,74 @@ class HerramientasVictoria:
             lead_id, id_pedido_local=resultado.id_local, id_pedido_rocketfy=resultado.id_rocketfy
         )
         return f"¡Pedido confirmado! Llega en {tiempo_entrega}. Comunícaselo al cliente y agradécele."
+
+    def _revisar_antes_de_cerrar(
+        self, lead: dict, producto: Optional[dict], cantidad: int
+    ) -> Optional[Tuple[str, str]]:
+        """Devuelve None si todo está bien, o (motivo para la persona,
+        mensaje para Victoria) si el cierre debe frenarse."""
+        sku = lead["producto_sku"]
+        aviso_a_victoria = (
+            "No se pudo cerrar la venta por un inconveniente con {que}. Ya se avisó a un asesor "
+            "humano que va a contactar al cliente; despídete cordialmente."
+        )
+
+        if not self._esta_activo(producto):
+            return (
+                f"El producto {lead['producto_nombre']} ({sku}) ya no está disponible (pausado o eliminado) "
+                "y el cliente quería cerrar la compra.",
+                aviso_a_victoria.format(que="la disponibilidad del producto"),
+            )
+
+        maximo = int(producto.get("max_unidades_por_pedido") or 1)
+        if cantidad > maximo:
+            return (
+                f"El cliente pidió {cantidad} unidades de {sku} pero el máximo por pedido es {maximo}.",
+                aviso_a_victoria.format(que="las unidades del pedido"),
+            )
+
+        precio_actual = producto.get("precio")
+        cotizado = Decimal(str(lead["total"])).quantize(Decimal("0.01"))
+        if precio_actual is None or self._calcular_total(producto, cantidad) != cotizado:
+            actual = self._calcular_total(producto, cantidad) if precio_actual is not None else "desconocido"
+            return (
+                f"El precio de {sku} no coincide con lo cotizado al cliente (cotizado ${cotizado}, "
+                f"actual ${actual} por {cantidad} unidad(es)). Pudo cambiar durante la conversación.",
+                aviso_a_victoria.format(que="el precio"),
+            )
+
+        stock = self._stock.stock_de(sku, fresco=True)
+        if stock is not None and stock < cantidad:
+            return (
+                f"Sin stock suficiente en Rocketfy al cerrar: {sku}, pedido {cantidad}, disponible {stock}.",
+                aviso_a_victoria.format(que="el stock"),
+            )
+
+        return None
+
+    def _guardar_minimo_observado(self, exc: Exception, lead: dict, cantidad: int) -> None:
+        """Si Rocketfy rechazó la confirmación por importe insuficiente, guarda
+        el monto que exigió (valor de productos + envío de ese destino): es la
+        única pista del costo real de envío. Solo con errores que vienen de
+        Rocketfy -- el error LOCAL del recaudo de $10 también menciona un
+        "mínimo" y un monto, y no es una observación de Rocketfy. Nunca debe
+        romper el camino de escalado."""
+        if not isinstance(exc, RocketfyBusinessError):
+            return
+        minimo = extraer_minimo_rocketfy(exc.message)
+        if minimo is None:
+            return
+        try:
+            self._minimos.guardar(
+                sku=lead.get("producto_sku"),
+                canton=lead.get("canton"),
+                provincia=lead.get("provincia"),
+                cantidad=cantidad,
+                minimo=minimo,
+                mensaje=exc.message[:500],
+            )
+        except Exception:
+            logger.exception("No se pudo guardar el mínimo observado de Rocketfy (no afecta el escalado)")
 
     def _handle_escalar_a_humano(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         self._conversaciones.marcar_escalada(conversacion_id)

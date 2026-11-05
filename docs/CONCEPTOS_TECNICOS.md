@@ -762,3 +762,27 @@ conversación solo en memoria, así no deja rastro en la base. Así puedes ver c
 se comporta antes de que hable con un cliente real. El simulador de terminal que
 existe hoy (`tools/chat_con_victoria.py`) **no** es un modo ensayo: usa las
 herramientas reales.
+
+---
+
+## 26. Fallar abierto o fallar cerrado
+
+Cuando una comprobación **no puede hacerse** (la red falló, el proveedor no
+contesta), hay dos políticas:
+
+- **Fallar cerrado:** ante la duda, *no* seguir. Es lo correcto cuando seguir
+  sería peligroso. Ejemplo: el webhook de WhatsApp sin la clave de firma no
+  procesa nada, porque cualquiera podría estar mandando mensajes falsos.
+- **Fallar abierto:** ante la duda, *seguir* y dejar constancia. Es lo correcto
+  cuando bloquear cuesta más que el riesgo. Ejemplo: la consulta de stock de
+  Victoria. Si Rocketfy no responde, la venta sigue, porque Rocketfy igual
+  rechazaría el pedido al confirmarlo si de verdad no hubiera stock, y eso ya
+  pasa a una persona.
+
+Regla práctica del proyecto: una falla de *información* (stock) falla abierto; una
+falla de *seguridad o de dinero* (firma, precio que no coincide, producto
+pausado) falla cerrado.
+
+**Caché:** guardar un dato unos minutos en memoria para no pedirlo de nuevo cada
+vez. El stock se guarda 5 minutos; pero justo antes de crear un pedido real se
+pide el dato fresco, porque ahí un dato viejo sí cuesta dinero.
