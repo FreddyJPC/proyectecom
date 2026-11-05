@@ -1,8 +1,7 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A y B desplegadas
-> (2026-11-05); Fase C implementada en la rama, pendiente de aplicar la migración
-> 015 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B y C desplegadas
+> (2026-11-05); las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -182,10 +181,9 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 - El LLM, si quieres, solo **explica** el resultado en lenguaje llano.
 - No se puede publicar por debajo del piso (ver 7).
 
-> **Estado de la Fase C (2026-11-05):** implementada y probada con tests (526 en
-> total) y contra un servidor falso (entrada 0.0.90 de `PROGRESS.md`); **falta
-> aplicar la migración 015, desplegar, y que Freddy cargue sus números reales
-> (pendiente #52).** Cambios respecto a lo escrito arriba: (1) los ajustes son un
+> **Estado de la Fase C (2026-11-05):** desplegada (entradas 0.0.90 y 0.0.91 de
+> `PROGRESS.md`; 526 tests); **falta que Freddy cargue sus números reales
+> (pendiente #52) y probarla con un producto real.** Cambios respecto a lo escrito arriba: (1) los ajustes son un
 > **cuadro** (desde la ficha y desde *Mis productos*), no una pantalla aparte;
 > (2) la calculadora es `GET /productos-bot/<sku>/precio` (solo lee), no `POST`;
 > (3) `ajustes_negocio` solo trae lo de precios: los topes de IA y la auto-pausa
