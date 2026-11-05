@@ -50,12 +50,17 @@ class EditarProductoBotInputSchema(Schema):
         data_key="maxUnidadesPorPedido", validate=validate.Range(min=1, max=MAX_UNIDADES_POR_PEDIDO)
     )
     notas_internas = fields.Str(data_key="notasInternas", allow_none=True, validate=validate.Length(max=MAX_NOTAS))
+    # Precio de la competencia que el dueño anota a mano (opcional; null lo borra).
+    precio_competencia = fields.Decimal(data_key="precioCompetencia", places=2, as_string=False, allow_none=True)
 
     @validates_schema
     def _precio_positivo(self, data, **kwargs):
         precio = data.get("precio")
         if precio is not None and precio <= 0:
             raise ValidationError("El precio debe ser mayor que cero.", "precio")
+        competencia = data.get("precio_competencia")
+        if competencia is not None and competencia <= 0:
+            raise ValidationError("El precio de la competencia debe ser mayor que cero.", "precioCompetencia")
 
     @post_load
     def _normalizar(self, data, **kwargs):
@@ -124,10 +129,44 @@ class ProductoBotDetalleSchema(Schema):
     creado_en = fields.Str(data_key="creadoEn", allow_none=True)
     actualizado_en = fields.Str(data_key="actualizadoEn", allow_none=True)
     verificacion = fields.Nested(VerificacionSchema)
+    precio_competencia = fields.Str(data_key="precioCompetencia", allow_none=True)
     historial = fields.List(fields.Nested(HistorialSchema))
+
+
+class NivelPrecioSchema(Schema):
+    clave = fields.Str()
+    nombre = fields.Str()
+    precio = fields.Str()
+    ganancia = fields.Str()
+    margen_pct = fields.Str(data_key="margenPct")
+
+
+class EvaluacionPrecioSchema(Schema):
+    precio = fields.Str()
+    ganancia = fields.Str()
+    margen_pct = fields.Str(data_key="margenPct")
+    bajo_piso = fields.Bool(data_key="bajoPiso")
+    bajo_margen_minimo = fields.Bool(data_key="bajoMargenMinimo")
+
+
+class RecomendacionPrecioSchema(Schema):
+    ajustes_confirmados = fields.Bool(data_key="ajustesConfirmados")
+    costo = fields.Str(allow_none=True)
+    piso = fields.Str()
+    envio_estimado = fields.Str(data_key="envioEstimado")
+    otros_costos_fijos = fields.Str(data_key="otrosCostosFijos")
+    otros_costos_pct = fields.Str(data_key="otrosCostosPct")
+    margen_minimo_pct = fields.Str(data_key="margenMinimoPct")
+    margen_objetivo_pct = fields.Str(data_key="margenObjetivoPct")
+    precio_sugerido = fields.Str(data_key="precioSugerido", allow_none=True)
+    precio_competencia = fields.Str(data_key="precioCompetencia", allow_none=True)
+    niveles = fields.List(fields.Nested(NivelPrecioSchema))
+    evaluacion = fields.Nested(EvaluacionPrecioSchema, allow_none=True)
+    avisos = fields.List(fields.Str())
 
 
 crear_input_schema = CrearProductoBotInputSchema()
 editar_input_schema = EditarProductoBotInputSchema()
 resumen_lista_schema = ProductoBotResumenSchema(many=True)
 detalle_schema = ProductoBotDetalleSchema()
+recomendacion_precio_schema = RecomendacionPrecioSchema()

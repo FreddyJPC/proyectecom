@@ -11,6 +11,7 @@ from src.integrations.rocketfy import get_rocketfy_client
 from src.jobs.latido import LatidoService, estado_latido
 from src.jobs.reconciliacion import ReconciliacionService
 from src.jobs.stock_watcher import StockWatcherService
+from src.routes.ajustes import ajustes_bp
 from src.routes.catalogos import catalogos_bp
 from src.routes.conversaciones import conversaciones_bp
 from src.routes.incidencias import incidencias_bp
@@ -59,6 +60,7 @@ def create_app() -> Flask:
         g.usuario = usuario
         return None
 
+    app.register_blueprint(ajustes_bp)
     app.register_blueprint(catalogos_bp)
     app.register_blueprint(conversaciones_bp)
     app.register_blueprint(incidencias_bp)

@@ -22,15 +22,26 @@ for (const theme of ["light", "dark"]) {
       await page.goto(BASE + r, { waitUntil: "networkidle" });
       await page.waitForTimeout(500);
       await page.evaluate(axeSrc);
-      const res = await page.evaluate(async () => await axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"], resultTypes: ["violations"] }));
-      for (const v of res.violations) {
-        // el indicador de desarrollo de Next no es parte del producto
-        const nodos = v.nodes.filter((n) => !n.target.join(" ").includes("nextjs-portal"));
-        if (!nodos.length) continue;
-        const k = `${v.id} [${v.impact}] ${v.help}`;
-        const arr = resumen.get(k) ?? [];
-        arr.push(`${theme}/${vn} ${r} (${nodos.length}) ${nodos[0].target.join(" ").slice(0, 90)}`);
-        resumen.set(k, arr);
+      const auditar = async (etiqueta) => {
+        const res = await page.evaluate(async () => await axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"], resultTypes: ["violations"] }));
+        for (const v of res.violations) {
+          // el indicador de desarrollo de Next no es parte del producto
+          const nodos = v.nodes.filter((n) => !n.target.join(" ").includes("nextjs-portal"));
+          if (!nodos.length) continue;
+          const k = `${v.id} [${v.impact}] ${v.help}`;
+          const arr = resumen.get(k) ?? [];
+          arr.push(`${theme}/${vn} ${etiqueta} (${nodos.length}) ${nodos[0].target.join(" ").slice(0, 90)}`);
+          resumen.set(k, arr);
+        }
+      };
+      await auditar(r);
+      // Cuadros que solo existen al abrirlos: también se auditan.
+      if (r === "/catalogo/producto/LMP-LED-220") {
+        await page.getByRole("button", { name: "Ajustes de precios" }).click();
+        await page.getByLabel("Costo de envío estimado (USD)").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [ajustes abierto]");
+        await page.keyboard.press("Escape");
       }
     }
     await ctx.close();

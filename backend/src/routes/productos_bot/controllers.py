@@ -1,4 +1,6 @@
+import re
 from dataclasses import asdict
+from decimal import Decimal
 
 from flask import g, jsonify, request
 from marshmallow import ValidationError
@@ -14,7 +16,13 @@ from .exceptions import (
     SkuInvalidoError,
     TransicionInvalidaError,
 )
-from .schemas import crear_input_schema, detalle_schema, editar_input_schema, resumen_lista_schema
+from .schemas import (
+    crear_input_schema,
+    detalle_schema,
+    editar_input_schema,
+    recomendacion_precio_schema,
+    resumen_lista_schema,
+)
 from .services import ProductosBotService
 
 _ERRORES_ROCKETFY = (RocketfyAuthError, RocketfyBusinessError, RocketfyRequestError)
@@ -98,6 +106,39 @@ def editar_producto_bot(sku: str):
         return _detalle(_build_service().editar(sku, cambios, _usuario()))
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
+
+
+_MONTO = re.compile(r"^\d{1,7}(\.\d{1,2})?$")
+
+
+def _monto_de_consulta(nombre: str):
+    """Lee un monto opcional de la URL. Devuelve (Decimal | None, error | None).
+    Formato estricto (hasta 7 enteros y 2 decimales): nada de notación
+    científica ni textos raros que lleguen hasta Decimal."""
+    texto = (request.args.get(nombre) or "").strip()
+    if not texto:
+        return None, None
+    if not _MONTO.match(texto) or Decimal(texto) <= 0:
+        return None, f"«{nombre}» debe ser un monto mayor que cero, por ejemplo 24.99."
+    return Decimal(texto), None
+
+
+@productos_bot_bp.get("/<sku>/precio")
+def recomendar_precio(sku: str):
+    """Calculadora de precio. Solo lee: no guarda nada. `?precio=` evalúa un
+    precio concreto y `?competencia=` prueba un precio de la competencia."""
+    precio, error = _monto_de_consulta("precio")
+    if error:
+        return jsonify(error=error), 422
+    competencia, error = _monto_de_consulta("competencia")
+    if error:
+        return jsonify(error=error), 422
+
+    try:
+        resultado = _build_service().recomendar_precio(sku, precio=precio, competencia=competencia)
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+    return jsonify(recomendacion_precio_schema.dump(asdict(resultado))), 200
 
 
 @productos_bot_bp.post("/<sku>/actualizar-rocketfy")

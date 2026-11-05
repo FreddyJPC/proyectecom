@@ -43,18 +43,25 @@ def metodos_de_pago(texto: Optional[str]) -> List[str]:
     return vistos
 
 
-def piso_de_precio(costo: Optional[Decimal]) -> Decimal:
-    """El precio más bajo razonable: no vender por debajo del costo y respetar
-    el recaudo mínimo de Rocketfy en contraentrega. Todavía NO suma el envío
-    (Rocketfy no tiene cotizador); la calculadora de la Fase C lo afinará."""
-    return max(costo or Decimal("0.00"), RECAUDO_MINIMO_CONTRAENTREGA)
+def piso_de_precio(costo: Optional[Decimal], envio: Optional[Decimal] = None) -> Decimal:
+    """El precio más bajo con el que se puede publicar: el mayor entre
+    `costo + envío estimado` y el recaudo mínimo de Rocketfy en contraentrega
+    ($10.00). Rocketfy no tiene cotizador de flete, por eso el envío es un
+    estimado del dueño (ajustes de precios, Fase C).
+
+    `envio=None` significa "no contar el envío": es lo que se hace mientras el
+    dueño no haya confirmado sus ajustes, para que un envío de PARTIDA no
+    bloquee publicaciones por un número que nadie revisó."""
+    return max((costo or Decimal("0.00")) + (envio or Decimal("0.00")), RECAUDO_MINIMO_CONTRAENTREGA)
 
 
 def _dinero(valor: Decimal) -> str:
     return f"{valor:.2f}"
 
 
-def bloqueos_de_contenido(producto: dict) -> List[str]:
+def bloqueos_de_contenido(producto: dict, envio_para_piso: Optional[Decimal] = None) -> List[str]:
+    """`envio_para_piso`: el envío estimado ya confirmado por el dueño, o None
+    si no se debe contar (ver `piso_de_precio`)."""
     bloqueos: List[str] = []
 
     if not (producto.get("nombre") or "").strip():
@@ -80,13 +87,19 @@ def bloqueos_de_contenido(producto: dict) -> List[str]:
     else:
         precio = Decimal(str(precio))
         costo = producto.get("costo_rocketfy")
-        piso = piso_de_precio(Decimal(str(costo)) if costo is not None else None)
+        piso = piso_de_precio(Decimal(str(costo)) if costo is not None else None, envio_para_piso)
         if precio < piso:
-            bloqueos.append(
-                f"El precio (${_dinero(precio)}) está por debajo del mínimo (${_dinero(piso)}): "
-                f"Rocketfy exige al menos ${_dinero(RECAUDO_MINIMO_CONTRAENTREGA)} en contraentrega "
-                "y no conviene vender por debajo del costo."
-            )
+            if envio_para_piso:
+                explicacion = (
+                    f"no cubre tu costo más el envío estimado (${_dinero(envio_para_piso)}), y Rocketfy exige al "
+                    f"menos ${_dinero(RECAUDO_MINIMO_CONTRAENTREGA)} en contraentrega."
+                )
+            else:
+                explicacion = (
+                    f"Rocketfy exige al menos ${_dinero(RECAUDO_MINIMO_CONTRAENTREGA)} en contraentrega "
+                    "y no conviene vender por debajo del costo."
+                )
+            bloqueos.append(f"El precio (${_dinero(precio)}) está por debajo del mínimo (${_dinero(piso)}): {explicacion}")
 
     return bloqueos
 
@@ -134,13 +147,17 @@ def avisos_de(producto: dict, stock: Optional[int]) -> List[str]:
 
 
 def verificar_producto(
-    producto: dict, existe_en_rocketfy: Optional[bool] = None, stock: Optional[int] = None
+    producto: dict,
+    existe_en_rocketfy: Optional[bool] = None,
+    stock: Optional[int] = None,
+    envio_para_piso: Optional[Decimal] = None,
 ) -> Verificacion:
     """`stock` en vivo (si se consultó Rocketfy ahora); si no, se usa el último
     guardado en el producto. `existe_en_rocketfy=None` significa "no se
     consultó": no bloquea."""
     stock_efectivo = stock if stock is not None else producto.get("stock_ultimo")
     return Verificacion(
-        bloqueos=bloqueos_de_contenido(producto) + bloqueos_de_disponibilidad(existe_en_rocketfy, stock_efectivo),
+        bloqueos=bloqueos_de_contenido(producto, envio_para_piso)
+        + bloqueos_de_disponibilidad(existe_en_rocketfy, stock_efectivo),
         avisos=avisos_de(producto, stock_efectivo),
     )

@@ -21,13 +21,18 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from src.integrations.rocketfy import get_rocketfy_client
+from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
 
+from .calculadora import envio_para_piso, recomendar
 from .dto import (
+    EvaluacionPrecioDTO,
     HistorialDTO,
+    NivelPrecioDTO,
     ProductoBotDetalleDTO,
     ProductoBotResumenDTO,
+    RecomendacionPrecioDTO,
     VerificacionDTO,
 )
 from .exceptions import (
@@ -104,10 +109,11 @@ def _valor_para_historial(valor):
 
 
 class ProductosBotService:
-    def __init__(self, client=None, repo=None, monitoreo_repo=None):
+    def __init__(self, client=None, repo=None, monitoreo_repo=None, ajustes_service=None):
         self._client = client
         self._repo = repo or ProductoBotGestionRepository()
         self._monitoreo = monitoreo_repo or SkuMonitoreadoRepository()
+        self._ajustes = ajustes_service or AjustesService()
 
     @property
     def _rocketfy(self):
@@ -179,8 +185,9 @@ class ProductosBotService:
             # Un producto que Victoria está vendiendo no puede quedar peor por
             # una edición. Se bloquea solo lo que la edición EMPEORA: si ya
             # tenía un problema de antes, otras ediciones no quedan bloqueadas.
-            antes = set(bloqueos_de_contenido(actual))
-            despues = bloqueos_de_contenido({**actual, **nuevos})
+            envio = self._envio_para_piso()
+            antes = set(bloqueos_de_contenido(actual, envio))
+            despues = bloqueos_de_contenido({**actual, **nuevos}, envio)
             empeora = [b for b in despues if b not in antes]
             if empeora:
                 raise PublicacionBloqueadaError(empeora)
@@ -213,6 +220,63 @@ class ProductosBotService:
         if cambios:
             self._repo.registrar_historial(actual["sku"], "actualizado_rocketfy", usuario, cambios)
         return self._a_detalle(fila)
+
+    # ------------------------------------------------------------------
+    # Precio (Fase C)
+    # ------------------------------------------------------------------
+    def recomendar_precio(
+        self, sku: str, precio: Optional[Decimal] = None, competencia: Optional[Decimal] = None
+    ) -> RecomendacionPrecioDTO:
+        """Calcula los tres niveles de precio con los ajustes del dueño y, si se
+        pasa `precio`, evalúa cuánto se gana con ese precio (sin guardar nada).
+        `competencia` sustituye al precio de la competencia guardado (para ver
+        el efecto de lo que se está tecleando antes de guardarlo)."""
+        fila = self._obtener_o_error(sku)
+        ajustes = self._ajustes.obtener_ajustes()
+        costo = _decimal(fila.get("costo_rocketfy"), "0.01")
+        sugerido = _decimal(fila.get("precio_sugerido_rocketfy"), "0.01")
+        if competencia is None:
+            competencia = _decimal(fila.get("precio_competencia"), "0.01")
+
+        resultado = recomendar(costo, sugerido, ajustes, precio_evaluado=precio, precio_competencia=competencia)
+        ev = resultado.evaluacion
+        return RecomendacionPrecioDTO(
+            ajustes_confirmados=ajustes.confirmado,
+            costo=_dinero(costo),
+            piso=_dinero(resultado.piso),
+            envio_estimado=_dinero(ajustes.envio_estimado),
+            otros_costos_fijos=_dinero(ajustes.otros_costos_fijos),
+            otros_costos_pct=f"{ajustes.otros_costos_pct:.2f}",
+            margen_minimo_pct=f"{ajustes.margen_minimo_pct:.2f}",
+            margen_objetivo_pct=f"{ajustes.margen_objetivo_pct:.2f}",
+            precio_sugerido=_dinero(sugerido),
+            precio_competencia=_dinero(competencia),
+            niveles=[
+                NivelPrecioDTO(
+                    clave=n.clave,
+                    nombre=n.nombre,
+                    precio=_dinero(n.precio),
+                    ganancia=_dinero(n.ganancia),
+                    margen_pct=str(n.margen_pct),
+                )
+                for n in resultado.niveles
+            ],
+            evaluacion=(
+                EvaluacionPrecioDTO(
+                    precio=_dinero(ev.precio),
+                    ganancia=_dinero(ev.ganancia),
+                    margen_pct=str(ev.margen_pct),
+                    bajo_piso=ev.bajo_piso,
+                    bajo_margen_minimo=ev.bajo_margen_minimo,
+                )
+                if ev is not None
+                else None
+            ),
+            avisos=resultado.avisos,
+        )
+
+    def _envio_para_piso(self) -> Optional[Decimal]:
+        return envio_para_piso(self._ajustes.obtener_ajustes())
 
     # ------------------------------------------------------------------
     # Estados
@@ -261,6 +325,7 @@ class ProductosBotService:
             actual,
             existe_en_rocketfy=en_vivo is not None,
             stock=_entero(en_vivo.get("stock")) if en_vivo is not None else None,
+            envio_para_piso=self._envio_para_piso(),
         )
         if verificacion.bloqueos:
             raise PublicacionBloqueadaError(verificacion.bloqueos)
@@ -323,7 +388,8 @@ class ProductosBotService:
         )
 
     def _a_detalle(self, fila: dict) -> ProductoBotDetalleDTO:
-        verificacion = verificar_producto(fila)  # sobre lo último guardado de Rocketfy, sin llamar a la red
+        # Sobre lo último guardado de Rocketfy, sin llamar a la red.
+        verificacion = verificar_producto(fila, envio_para_piso=self._envio_para_piso())
         peso = fila.get("peso_kg")
         return ProductoBotDetalleDTO(
             sku=fila["sku"],
@@ -350,6 +416,7 @@ class ProductosBotService:
             creado_en=_iso(fila.get("creado_en")),
             actualizado_en=_iso(fila.get("actualizado_en")),
             verificacion=VerificacionDTO(bloqueos=verificacion.bloqueos, avisos=verificacion.avisos),
+            precio_competencia=_dinero(fila.get("precio_competencia")),
             historial=[
                 HistorialDTO(
                     accion=h["accion"], usuario=h["usuario"], cambios=h["cambios"], creado_en=_iso(h["creado_en"])

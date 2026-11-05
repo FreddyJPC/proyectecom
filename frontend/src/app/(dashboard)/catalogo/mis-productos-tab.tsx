@@ -1,6 +1,6 @@
 "use client";
 
-import { FilePenLine, PackageOpen, TriangleAlert } from "lucide-react";
+import { FilePenLine, PackageOpen, Settings2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -15,6 +15,7 @@ import { formatMoney, tiempoRelativo } from "@/lib/format";
 import type { EstadoProductoBot, ProductoBotResumen } from "@/types/producto-bot";
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "./accion-estado";
+import { AjustesPreciosDialog } from "./ajustes-precios-dialog";
 import { fichaHref } from "./preparar-boton";
 
 // Igual que en el catálogo: sin un mínimo definido, "poco stock" es una referencia general.
@@ -63,9 +64,18 @@ export function MisProductosTab({
 
   return (
     <>
-      <p className="max-w-prose text-sm text-muted-foreground">
-        Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados.
+        </p>
+        <AjustesPreciosDialog
+          trigger={
+            <Button variant="outline" size="sm">
+              <Settings2 /> Ajustes de precios
+            </Button>
+          }
+        />
+      </div>
 
       <FilterChips chips={chips} value={filtro} onChange={(v) => setFiltro(v as Filtro)} label="Filtrar por estado" />
 

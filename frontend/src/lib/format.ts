@@ -23,12 +23,28 @@ export const RECAUDO_MINIMO_CENTAVOS = 1000;
 /** Texto que escribe una persona -> monto normalizado ("24,5" -> "24.50").
  * Devuelve `null` si no es un monto válido (más de 2 decimales, letras, 0…).
  * Se trabaja sobre el texto, nunca con `float`. */
-export function normalizarMonto(texto: string): string | null {
+export function normalizarMonto(texto: string, permitirCero = false): string | null {
   const limpio = texto.trim().replace(",", ".").replace(/^\$/, "");
   const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(limpio);
   if (!m) return null;
   const monto = `${Number(m[1])}.${(m[2] ?? "").padEnd(2, "0")}`;
-  return monto === "0.00" ? null : monto;
+  return monto === "0.00" && !permitirCero ? null : monto;
+}
+
+/** Porcentaje escrito por una persona -> "25.00". Entre 0 y 99.99 (un 100 %
+ * o más no tiene sentido en un margen ni en un costo). `null` si no es válido. */
+export function normalizarPorcentaje(texto: string): string | null {
+  const limpio = texto.trim().replace(",", ".").replace(/\s*%$/, "");
+  const m = /^(\d{1,2})(?:\.(\d{1,2}))?$/.exec(limpio);
+  if (!m) return null;
+  return `${Number(m[1])}.${(m[2] ?? "").padEnd(2, "0")}`;
+}
+
+/** "25.00" -> "25 %", "2.50" -> "2.5 %", "28.5" -> "28.5 %". Solo presentación. */
+export function formatPct(valor: string | null | undefined): string {
+  if (valor == null || valor === "") return "—";
+  const limpio = valor.includes(".") ? valor.replace(/\.?0+$/, "") : valor;
+  return `${limpio} %`;
 }
 
 /** "24.99" -> 2499 (centavos enteros, para comparar sin errores de redondeo). */

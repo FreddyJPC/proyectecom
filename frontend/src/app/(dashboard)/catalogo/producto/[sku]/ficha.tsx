@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Loader2, Lock, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/app/page-header";
@@ -11,16 +11,16 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiError } from "@/lib/api";
 import { estadoProductoBotInfo } from "@/lib/estados";
-import { aCentavos, deCentavos, formatFechaHora, formatMoney, normalizarMonto, RECAUDO_MINIMO_CENTAVOS } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { formatFechaHora, normalizarMonto } from "@/lib/format";
 import { METODOS_PAGO, type EditarProductoBotInput, type ProductoBotDetalle } from "@/types/producto-bot";
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "../../accion-estado";
+import { Campo, descripcionDe } from "./campo";
 import { DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
+import { SeccionPrecio } from "./seccion-precio";
 
 // Mismos límites que el backend (backend/src/routes/productos_bot/schemas.py):
 // todo lo que se escribe aquí lo lee Victoria en CADA mensaje, por eso es corto.
@@ -46,6 +46,7 @@ type Formulario = {
   temasNoResponder: string;
   maxUnidades: string;
   notasInternas: string;
+  precioCompetencia: string;
 };
 
 // Los textos se parten de su versión sin espacios sobrantes: al guardar el
@@ -63,6 +64,7 @@ function desdeDetalle(d: ProductoBotDetalle): Formulario {
     temasNoResponder: (d.temasNoResponder ?? "").trim(),
     maxUnidades: String(d.maxUnidadesPorPedido),
     notasInternas: (d.notasInternas ?? "").trim(),
+    precioCompetencia: d.precioCompetencia ?? "",
   };
 }
 
@@ -108,58 +110,16 @@ function revisar(inicial: Formulario, actual: Formulario) {
   const notas = actual.notasInternas.trim();
   if (notas !== inicial.notasInternas) cambios.notasInternas = notas || null;
 
+  // Opcional: vacío = sin precio de la competencia (se borra).
+  if (actual.precioCompetencia.trim() === "") {
+    if (inicial.precioCompetencia !== "") cambios.precioCompetencia = null;
+  } else {
+    const competencia = normalizarMonto(actual.precioCompetencia);
+    if (competencia == null) errores.precioCompetencia = "Escribe un precio válido mayor que cero, por ejemplo 22.50.";
+    else if (competencia !== inicial.precioCompetencia) cambios.precioCompetencia = competencia;
+  }
+
   return { cambios, errores };
-}
-
-function Campo({
-  id,
-  label,
-  ayuda,
-  error,
-  contador,
-  opcional,
-  children,
-}: {
-  id: string;
-  label: string;
-  ayuda?: ReactNode;
-  error?: string;
-  contador?: { actual: number; maximo: number };
-  opcional?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>
-        {label}
-        {opcional && <span className="font-normal text-muted-foreground"> (opcional)</span>}
-      </Label>
-      {children}
-      <div className="flex items-start justify-between gap-3 text-xs">
-        <div className="min-w-0 space-y-0.5">
-          {ayuda && (
-            <p id={`${id}-ayuda`} className="text-muted-foreground">
-              {ayuda}
-            </p>
-          )}
-          {error && (
-            <p id={`${id}-error`} role="alert" className="font-medium text-status-danger-ink">
-              {error}
-            </p>
-          )}
-        </div>
-        {contador && (
-          <span className={cn("tabular shrink-0 text-muted-foreground", contador.actual >= contador.maximo && "font-medium text-status-warning-ink")}>
-            {contador.actual}/{contador.maximo}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function descripcionDe(id: string, ayuda: boolean, error?: string) {
-  return [ayuda ? `${id}-ayuda` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined;
 }
 
 /** La ficha entera. Se vuelve a montar (key = fecha de actualización) cada vez
@@ -213,15 +173,6 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
       setGuardando(false);
     }
   }
-
-  // --- Ayudas del precio (todo en centavos enteros: nunca float) ---
-  const costoC = aCentavos(detalle.costoRocketfy);
-  const pisoC = Math.max(costoC ?? 0, RECAUDO_MINIMO_CENTAVOS);
-  const montoEscrito = normalizarMonto(form.precio);
-  const precioC = montoEscrito ? aCentavos(montoEscrito) : null;
-  const bajoElPiso = precioC != null && precioC < pisoC;
-  const diferencia = precioC != null && costoC != null ? precioC - costoC : null;
-  const sugeridoC = aCentavos(detalle.precioSugeridoRocketfy);
 
   return (
     <>
@@ -289,59 +240,16 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
           <fieldset disabled={soloLectura || guardando} className="contents">
             <legend className="sr-only">Datos de venta de {detalle.nombre}</legend>
 
-            <SectionCard titulo="Precio" descripcion="Lo que pagará el cliente por cada unidad.">
-              <div className="space-y-4 p-4 sm:p-5">
-                <Campo
-                  id="precio"
-                  label="Precio de venta (USD)"
-                  error={errores.precio}
-                  ayuda="El total del pedido lo calcula el sistema con este precio; Victoria nunca hace la cuenta."
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-semibold text-muted-foreground" aria-hidden>
-                      $
-                    </span>
-                    <Input
-                      id="precio"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      value={form.precio}
-                      onChange={(e) => poner("precio", e.target.value)}
-                      aria-invalid={Boolean(errores.precio)}
-                      aria-describedby={descripcionDe("precio", true, errores.precio)}
-                      className="tabular max-w-40 text-lg font-semibold"
-                    />
-                    {sugeridoC != null && montoEscrito !== detalle.precioSugeridoRocketfy && (
-                      <Button type="button" variant="outline" size="sm" onClick={() => poner("precio", detalle.precioSugeridoRocketfy ?? "")}>
-                        Usar sugerido {formatMoney(detalle.precioSugeridoRocketfy)}
-                      </Button>
-                    )}
-                  </div>
-                </Campo>
-
-                <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-muted/50 p-3 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Precio mínimo para poder vender</dt>
-                    <dd className="tabular font-semibold">{formatMoney(deCentavos(pisoC))}</dd>
-                    <dd className="text-xs text-muted-foreground">Nunca menos de tu costo, ni menos de {formatMoney(deCentavos(RECAUDO_MINIMO_CENTAVOS))}: Rocketfy no entrega contra entrega por menos.</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Diferencia con tu costo</dt>
-                    <dd className={cn("tabular font-semibold", diferencia != null && diferencia < 0 && "text-status-danger-ink")}>
-                      {diferencia == null ? "—" : formatMoney(deCentavos(diferencia))}
-                    </dd>
-                    <dd className="text-xs text-muted-foreground">Sin contar el envío ni otros gastos (la calculadora completa llega en una fase posterior).</dd>
-                  </div>
-                </dl>
-
-                {bajoElPiso && (
-                  <p role="alert" className="flex items-start gap-2 rounded-lg bg-status-danger-soft p-3 text-sm text-status-danger-ink">
-                    <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    Este precio está por debajo del mínimo ({formatMoney(deCentavos(pisoC))}). Se puede guardar como borrador, pero no se podrá publicar así.
-                  </p>
-                )}
-              </div>
-            </SectionCard>
+            <SeccionPrecio
+              sku={detalle.sku}
+              precio={form.precio}
+              onPrecio={(v) => poner("precio", v)}
+              errorPrecio={errores.precio}
+              competencia={form.precioCompetencia}
+              onCompetencia={(v) => poner("precioCompetencia", v)}
+              errorCompetencia={errores.precioCompetencia}
+              onAjustesGuardados={onCambio}
+            />
 
             <SectionCard titulo="Contenido para Victoria" descripcion="Todo lo de esta sección lo lee Victoria y se lo cuenta al cliente. Si algo no está aquí, ella no lo inventa.">
               <div className="space-y-5 p-4 sm:p-5">

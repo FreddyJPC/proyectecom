@@ -114,6 +114,7 @@ export const CAMPOS_HISTORIAL: Record<string, string> = {
   temas_no_responder: "Temas que no debe responder",
   max_unidades_por_pedido: "Unidades máximas por pedido",
   notas_internas: "Notas internas",
+  precio_competencia: "Precio de la competencia",
   costo_rocketfy: "Costo en Rocketfy",
   precio_sugerido_rocketfy: "Precio sugerido por Rocketfy",
   estado: "Estado",
