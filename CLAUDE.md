@@ -34,6 +34,10 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   cambios. Sin jerga sin explicar.
 - Ir **paso a paso**, una cosa a la vez, y dar una recomendación clara en
   vez de listas de opciones.
+- **Siempre una sección "Hacemos esto para…"** (pedido por Freddy el
+  2026-11-01): cada vez que se haga o proponga algo, incluir en la respuesta
+  una parte corta que diga **para qué sirve** y qué problema resuelve, antes
+  de entrar en los pasos.
 - Los conceptos nuevos se anotan en `docs/CONCEPTOS_TECNICOS.md`.
 - Las decisiones se anotan en `PROGRESS.md` (ADR en la sección 2, fila nueva
   en el historial de la sección 4, pendientes en la sección 5).
@@ -88,7 +92,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **221 tests pasando**.
+   desde `backend/`. Estado actual: **231 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -123,7 +127,8 @@ ciclo completo (código, GitHub, Railway, Vercel, base de datos). Estado real
 | **Railway** | **Conectado y verificado (2026-10-30).** Puedo crear proyectos y servicios, cambiar su configuración (carpeta raíz, comando de arranque, healthcheck, región), fijar variables, generar dominios, leer logs y estado, y desplegar (`accept-deploy`, `redeploy`). Requiere un plan de pago activo. Los valores de las variables no los puedo leer (el conector entrega solo nombres) | — |
 | **Vercel** | **Conectado y verificado (2026-10-29).** Más de 200 herramientas: crear proyectos, variables de entorno, despliegues, logs y errores en producción, dominios, etc. La primera vez pide autorizar el equipo (`authorize_team_access`: genera un enlace que Freddy abre y aprueba). Ojo: `create_git_project` puede devolver una respuesta ambigua aunque haya creado el proyecto: verificar antes de reintentar | — |
 | **Base de datos (Supabase)** | **Conectado y verificado (2026-10-29).** Puedo listar proyectos y tablas, ejecutar SQL (`execute_sql`, solo lectura salvo que se pida otra cosa), aplicar migraciones, ver logs y advisors, y pausar/reactivar proyectos. La lista de migraciones del conector no refleja las de `tools/apply_migrations.py` (esas están en `public.schema_migrations`) | Para cambios de esquema: archivo nuevo en `backend/migrations/` y confirmación antes de aplicar |
-| **Meta / Rocketfy** (paneles web) | No hay conector. Se configuran a mano por Freddy con mi guía | — |
+| **Meta (WhatsApp Business)** | **Conectado y verificado (2026-11-02)**: conector `WhatsApp Business Tools` (MCP oficial de Meta, beta; `https://mcp.facebook.com/whatsapp_business_tools`, OAuth con la cuenta de Freddy). Herramientas `whatsapp_biz_*`: listar negocios, cuentas y números; agregar, verificar y registrar un número; plantillas; enviar mensajes; configurar y suscribir webhooks; pagos; verificación de empresa; estado del alta. **Empezar siempre con `whatsapp_biz_businesses` y dejar que Freddy elija el negocio.** El servidor **no tiene deshacer**: pedir confirmación explícita antes de cada escritura (registrar un número, tocar el webhook, enviar mensajes a terceros). No entrega el App Secret ni el token. Negocio visible: `AzoShop` (id `1152842416600198`, sin verificación de empresa, perfil completo) | Si algo no aparece, reconectar el conector y abrir sesión nueva |
+| **Rocketfy** (panel web) | No hay conector. Se configura a mano por Freddy con mi guía | — |
 
 Los tres conectores ya están conectados y la tabla refleja lo comprobado.
 Un conector nuevo debe verificarse al conectarlo, mirando las herramientas
@@ -197,7 +202,7 @@ posible y rotarlos.
   pública (Vercel, otro proyecto) y el correo se reenvía por Spaceship: **no
   tocar esos registros**. Para el panel: `app.azoshopec.com` → Vercel y
   `api.azoshopec.com` → Railway (en configuración, ver `PROGRESS.md` 0.0.50).
-  **Vence el 2026-11-27 sin renovación automática** (pendiente #26).
+  **Vence el 2027-11-27** (registrado por 2 años) **sin renovación automática** (pendiente #26; verificado con Spaceship el 2026-11-02: antes figuraba por error 2026-11-27).
 - Spaceship: herramientas `dns_records_get/save/delete` y `domains_list`.
   Antes de escribir DNS, leer la zona; solo *agregar*, nunca borrar sin pedirlo.
 - El proxy de la sesión de Claude **bloquea `*.up.railway.app`**: desde aquí no

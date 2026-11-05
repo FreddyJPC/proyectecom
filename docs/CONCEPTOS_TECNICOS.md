@@ -34,6 +34,7 @@
 19. [Accesibilidad (WCAG) y cómo se mide](#19-accesibilidad-wcag-y-cómo-se-mide)
 20. [Dominio propio, DNS y certificado HTTPS](#20-dominio-propio-dns-y-certificado-https)
 21. [Prerenderizado: por qué la hora no se calcula al compilar](#21-prerenderizado-por-qué-la-hora-no-se-calcula-al-compilar)
+22. [Las tres claves de WhatsApp (App Secret, clave de verificación y token de acceso)](#22-las-tres-claves-de-whatsapp)
 
 ---
 
@@ -627,7 +628,7 @@ plataforma los renueva sola **mientras el DNS siga apuntando bien**. No borrar
 los registros `app` y `api` de Spaceship.
 
 **Otro punto, el dominio mismo:** el dominio `azoshopec.com` se paga al
-registrador (Spaceship) y **vence el 2026-11-27 sin renovación automática**
+registrador (Spaceship) y **vence el 2027-11-27 sin renovación automática**
 (pendiente #26). Si caduca, dejan de funcionar la tienda, el correo, el panel
 y el backend a la vez.
 
@@ -656,3 +657,71 @@ dónde esté el servidor ni de cómo tenga puesta la hora el dispositivo.
 
 **Cómo comprobarlo:** después de `next build`, buscar el saludo en
 `.next/server/app/index.html`: no debe aparecer.
+
+---
+
+## 22. Las tres claves de WhatsApp
+
+La comunicación con WhatsApp va en **dos direcciones**, y cada una tiene su
+propia clave. Confundirlas es muy común.
+
+| Dirección | Qué pasa | Clave | Variable en Railway |
+|---|---|---|---|
+| **Meta → nosotros** (recibir) | Meta avisa a nuestro backend de cada mensaje | **App Secret**: con ella Meta *firma* cada aviso y nuestro backend comprueba la firma, así sabe que es de Meta y no de un impostor | `WHATSAPP_APP_SECRET` |
+| **Meta → nosotros** (una sola vez) | Al registrar la URL del webhook, Meta pregunta "¿esta dirección es tuya?" | **Clave de verificación**: una contraseña que inventamos y que el backend repite al verificar | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` |
+| **Nosotros → Meta** (enviar) | Nuestro backend le pide a Meta que mande un mensaje | **Token de acceso**: la llave que demuestra *quién* pide el envío y a qué cuentas tiene derecho | `WHATSAPP_API_TOKEN` |
+
+**Ejemplo:** el cliente escribe → Meta nos avisa (firmado con el App Secret) →
+Victoria piensa la respuesta → nuestro backend se la pide a Meta
+**presentando el token de acceso**. Sin token, Meta rechaza el envío: el bot
+oye, pero no puede hablar.
+
+**Por qué el token sale de "Usuarios del sistema":** hay tokens de varios
+tipos.
+- **Temporal** (el que sale en la página *API Setup* de la app): pertenece a tu
+  usuario personal y **caduca en horas**. Sirve solo para probar. Si el bot lo
+  usara, un día dejaría de responder sin avisar.
+- **De usuario del sistema**: un *usuario del sistema* es como una **cuenta de
+  empleado-robot** del negocio, que no es ninguna persona. Su token **no
+  depende de tu contraseña ni de tu sesión**, no se rompe si cambias de
+  contraseña y puede **no caducar**. Es el tipo que Meta recomienda para
+  servidores. Se crea en *Configuración del negocio → Usuarios del sistema*,
+  porque ahí vive todo lo que pertenece al negocio (cuentas, números, usuarios
+  del sistema), no a una persona.
+
+**Asignar activos:** un token solo funciona con lo que se le asignó. Por eso
+hay que darle al usuario del sistema la app y la cuenta de WhatsApp que va a
+usar; si se crea una cuenta nueva (como la de la SIM del bot), hay que
+asignársela también.
+
+**Cuidado:** el token permite **enviar mensajes en nombre de tu negocio**. Es
+un secreto: vive solo en Railway, nunca en el chat ni en el repositorio, y se
+rota si se filtra.
+
+---
+
+## 23. Latido de la base de datos (heartbeat) y pausa de Supabase
+
+**Qué es la pausa:** en el plan gratuito, Supabase apaga el proyecto si en
+**7 días** recibe poca actividad de base de datos. Los datos no se borran
+(se puede restaurar hasta 1 año después), pero mientras esté pausado el
+backend y el bot no funcionan. Supabase avisa por correo ~1 semana antes.
+
+**Qué cuenta como actividad:** consultas reales a la base (desde la app o
+desde el panel). La documentación dice que "unas pocas por día" suelen bastar,
+pero **no lo garantiza**. Los planes de pago nunca se pausan.
+
+**Qué es un latido (*heartbeat*):** una señal pequeña y periódica que
+demuestra que algo sigue vivo. Aquí, un job (`latido_db`, cada 6 horas) que
+sube en 1 un contador en la tabla `latido` (una sola fila) y lee una tabla
+real. Cuesta casi nada y deja a la base con actividad aunque no escriba
+ningún cliente.
+
+**Por qué `/health` no consulta la base:** Railway usa `/health` para decidir
+si el servicio está sano. Si `/health` dependiera de la base y esta se
+pausara, Railway daría por caído al backend y lo reiniciaría en bucle. Por eso
+`/health` solo *informa* el último latido que el proceso guardó en memoria
+(`latido.ultimo_ok` y `latido.fallos_seguidos`).
+
+**Qué NO resuelve:** si el backend entero está caído, el latido tampoco corre;
+y no reemplaza las copias de seguridad (solo el plan Pro las incluye).
