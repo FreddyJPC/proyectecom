@@ -60,6 +60,14 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByLabel("Precio de venta (USD)").fill("8");
   await page.getByLabel("Tiempo de entrega").fill("");
   await shot(page, "m-ficha-editando");
+
+  // ---- Calculadora de precio (Fase C)
+  await page.goto(BASE + "/catalogo/producto/CRG-RAP-33", { waitUntil: "networkidle" });
+  await page.getByText("Precios recomendados").scrollIntoViewIfNeeded();
+  await shot(page, "m-ficha-precio");
+  await page.getByRole("button", { name: "Revisar mis ajustes" }).click();
+  await shot(page, "m-ajustes-dialog");
+  await page.keyboard.press("Escape");
   await ctx.close();
 }
 {
@@ -114,6 +122,30 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
 
   await page.goto(BASE + "/catalogo/producto/NO-EXISTE", { waitUntil: "networkidle" });
   await shot(page, "d-ficha-no-existe");
+
+  // ---- Calculadora de precio (Fase C): ajustes de partida -> confirmar -> recomendado
+  await page.goto(BASE + "/catalogo/producto/CRG-RAP-33", { waitUntil: "networkidle" });
+  await page.getByText("Precios recomendados").waitFor();
+  await shot(page, "d-precio-partida");
+  await page.getByRole("button", { name: "Revisar mis ajustes" }).click();
+  await shot(page, "d-ajustes-partida");
+  await page.getByLabel("Margen objetivo (%)").fill("20");
+  await shot(page, "d-ajustes-error");
+  await page.getByLabel("Margen objetivo (%)").fill("35");
+  await page.getByRole("button", { name: /^Usar \$8\.47/ }).click();
+  await page.getByRole("button", { name: "Guardar ajustes" }).click();
+  await page.getByText("Estos cálculos usan valores de partida").waitFor({ state: "detached" });
+  await page.getByLabel("Precio de venta (USD)").fill("10");
+  await page.getByText("pierdes").first().waitFor();
+  await shot(page, "d-precio-pierde");
+  await page.getByRole("button", { name: /Recomendado/ }).click();
+  await page.getByLabel("Precio de la competencia (USD)").fill("9");
+  await page.getByText("competencia que anotaste").waitFor();
+  await shot(page, "d-precio-recomendado-competencia");
+
+  // Mis productos: el botón de ajustes también está en la lista
+  await page.goto(BASE + "/catalogo?tab=mis-productos", { waitUntil: "networkidle" });
+  await shot(page, "d-mis-productos-ajustes");
   await ctx.close();
 }
 // ---- TABLET

@@ -1,8 +1,8 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fase A desplegada
-> (2026-11-05); Fase B implementada en la rama, pendiente de aplicar la migración
-> 014 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A y B desplegadas
+> (2026-11-05); Fase C implementada en la rama, pendiente de aplicar la migración
+> 015 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -158,9 +158,8 @@ producto activo desde el teléfono, aunque el precio y el texto los escribas tú
 *Listo cuando:* creas, publicas, pausas y reanudas un producto real desde el
 teléfono, y la siguiente conversación de Victoria lo refleja.
 
-> **Estado de la Fase B (2026-11-05):** implementada y probada con tests y contra
-> un servidor falso (entrada 0.0.88 de `PROGRESS.md`); **falta aplicar la
-> migración 014, desplegar y probar con un producto real.** Cambios respecto a lo
+> **Estado de la Fase B (2026-11-05):** desplegada (entradas 0.0.88 y 0.0.89 de
+> `PROGRESS.md`); **falta probarla con un producto real.** Cambios respecto a lo
 > escrito arriba: no se amplió `GET /productos` (el módulo nuevo busca el SKU
 > exacto con el cliente de Rocketfy que ya existía); *Archivar* solo está en la
 > ficha; de las 5 secciones de la ficha hoy están la 1 (datos de Rocketfy), la 3
@@ -182,6 +181,20 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
   "tu envío real parece rondar $X"; tú decides si lo adoptas.
 - El LLM, si quieres, solo **explica** el resultado en lenguaje llano.
 - No se puede publicar por debajo del piso (ver 7).
+
+> **Estado de la Fase C (2026-11-05):** implementada y probada con tests (526 en
+> total) y contra un servidor falso (entrada 0.0.90 de `PROGRESS.md`); **falta
+> aplicar la migración 015, desplegar, y que Freddy cargue sus números reales
+> (pendiente #52).** Cambios respecto a lo escrito arriba: (1) los ajustes son un
+> **cuadro** (desde la ficha y desde *Mis productos*), no una pantalla aparte;
+> (2) la calculadora es `GET /productos-bot/<sku>/precio` (solo lee), no `POST`;
+> (3) `ajustes_negocio` solo trae lo de precios: los topes de IA y la auto-pausa
+> irán en migraciones propias (fases D y F); (4) la fila nace con **valores de
+> partida** sin confirmar: se usan para recomendar pero **el envío no bloquea
+> publicaciones hasta que el dueño guarda sus ajustes una vez**; (5) la
+> calibración del envío aparece dentro del cuadro de ajustes (no en la sección
+> Precio) y solo cuando existan rechazos de Rocketfy por importe mínimo; (6) el
+> LLM no interviene: los textos son fijos y los números salen del código.
 
 ### Fase D — Redactar con IA
 
@@ -271,7 +284,7 @@ y la captura del `referral` de Meta ya existen.
 |---|---|
 | 013 (Fase A) | `leads.cantidad`; `productos_bot.max_unidades_por_pedido`; `rocketfy_minimos_observados` (sku, cantón, provincia, mínimo, mensaje, fecha) |
 | 014 (Fase B) | `productos_bot`: `estado`, `rocketfy_product_id`, `costo_rocketfy`, `precio_sugerido_rocketfy`, `stock_ultimo`, `stock_actualizado_en`, `peso_kg`, `imagen_url`, `notas_internas`, `resumen_corto`, `publicado_en`, `publicado_por`; tabla `productos_bot_historial` |
-| 015 (Fase C) | `ajustes_negocio` (una sola fila: margen mínimo y objetivo, envío estimado, otros costos, redondeo, topes de uso de IA, auto-pausa) |
+| 015 (Fase C) | `ajustes_negocio` (una sola fila: margen mínimo y objetivo, envío estimado, otros costos, redondeo; los topes de uso de IA y la auto-pausa se agregarán en sus fases) y `productos_bot.precio_competencia` |
 | 016 (Fase D) | `generaciones_ia` (producto, usuario, tipo, modelo, fecha) para topes y auditoría |
 
 Todas con RLS activado y sin policies, como la tabla `latido`.

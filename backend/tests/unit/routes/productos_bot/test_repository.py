@@ -132,6 +132,15 @@ class TestActualizarCampos:
         assert fila["precio"] == Decimal("27.50") and fila["tiempo_entrega"] == "3 días"
         assert fila["nombre"] == "Producto de prueba"
 
+    def test_el_precio_de_la_competencia_se_guarda_y_se_puede_borrar(self):
+        _crear()
+        assert Repo.obtener(SKU)["precio_competencia"] is None
+
+        fila = Repo.actualizar_campos(SKU, {"precio_competencia": Decimal("22.50")})
+        assert fila["precio_competencia"] == Decimal("22.50")
+        assert Repo.actualizar_campos(SKU, {"precio_competencia": None})["precio_competencia"] is None
+        assert "precio_competencia" in COLUMNAS_EDITABLES
+
     def test_rechaza_columnas_que_no_son_editables(self):
         _crear()
         for columna in ("estado", "activo", "sku", "costo_rocketfy", "publicado_por", "precio; drop table productos_bot"):

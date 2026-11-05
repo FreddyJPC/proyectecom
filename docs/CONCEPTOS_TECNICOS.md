@@ -812,3 +812,41 @@ Dos detalles:
   creados desde la app sí nacen como `borrador`.
 - Publicar o reanudar **consulta Rocketfy en vivo** antes de cambiar el estado y
   falla cerrado (ver §26): si Rocketfy no responde, el producto no se publica.
+
+---
+
+## 28. Margen, piso y cómo se calcula un precio recomendado
+
+**Margen** = ganancia ÷ precio de venta. Es lo que *te queda de cada dólar que
+cobras*. No es lo mismo que el **recargo** (cuánto le sumas al costo): con un
+costo total de $15, un recargo del 25 % da $18.75, pero un **margen** del 25 %
+exige $20.00 (de $20.00 te quedan $5.00 = 25 %). La app usa siempre margen
+porque es el que de verdad dice cuánto ganas.
+
+**Costo total por unidad** = costo de Rocketfy + envío estimado + otros costos
+fijos + otros costos que dependen del precio (comisiones, impuestos…). La
+fórmula del precio para un margen *m* es `costo total ÷ (1 − m − otros %)`.
+
+**Redondeo hacia arriba al .99:** los precios recomendados suben siempre al
+siguiente valor terminado en .99 ($20.00 → $20.99). Nunca bajan, porque
+redondear hacia abajo recortaría tu margen sin que lo notes.
+
+**Piso:** el precio más bajo con el que se puede publicar = el mayor entre
+*costo + envío estimado* y **$10.00** (el mínimo que Rocketfy exige en
+contraentrega). Es un bloqueo duro: bajo el piso no se publica.
+
+**Envío estimado:** Rocketfy no cotiza el flete antes de vender, así que el
+envío es un número que tú estimas (un promedio de lo que te cobran). Si Rocketfy
+rechaza un pedido por importe mínimo, su mensaje trae el monto, y como ese
+mínimo es *valor de los productos + envío*, la app puede **deducir el envío real**
+(`mínimo − costo × cantidad`) y sugerírtelo; tú decides si lo adoptas.
+
+**Valores de partida vs. confirmados:** la app arranca con números de ejemplo
+(envío $5, márgenes 25 % y 35 %) para que veas cómo funciona, pero **no son los
+de tu negocio**. Mientras no los guardes una vez, la ficha te lo avisa y el
+envío **no bloquea** publicaciones (un número que nadie revisó no debería
+impedir publicar). Al guardarlos, pasan a ser los tuyos y sí cuentan.
+
+**Los números los calcula el código, no la IA:** todo el cálculo usa `Decimal`
+(nunca decimales de coma flotante, que acumulan errores de redondeo) y está
+cubierto por tests que reproducen el ejemplo del plan.

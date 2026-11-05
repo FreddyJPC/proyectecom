@@ -11,7 +11,15 @@ import responses
 from src.app import create_app
 from src.integrations.rocketfy import RocketfyRequestError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
-from src.routes.productos_bot.dto import HistorialDTO, ProductoBotDetalleDTO, ProductoBotResumenDTO, VerificacionDTO
+from src.routes.productos_bot.dto import (
+    EvaluacionPrecioDTO,
+    HistorialDTO,
+    NivelPrecioDTO,
+    ProductoBotDetalleDTO,
+    ProductoBotResumenDTO,
+    RecomendacionPrecioDTO,
+    VerificacionDTO,
+)
 from src.routes.productos_bot.exceptions import (
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
@@ -188,6 +196,9 @@ class TestEditar:
             {"maxUnidadesPorPedido": 0},
             {"maxUnidadesPorPedido": 21},
             {"preguntasFrecuentes": "x" * 3001},
+            {"precioCompetencia": "0"},
+            {"precioCompetencia": "-5"},
+            {"precioCompetencia": "abc"},
         ]
         for cuerpo in invalidos:
             mock_login_ok()
@@ -195,6 +206,17 @@ class TestEditar:
                 resp = _client().patch("/productos-bot/DEMO-1", json=cuerpo, headers=AUTH_HEADER)
             assert resp.status_code == 422, cuerpo
             Servicio.return_value.editar.assert_not_called()
+
+    @responses.activate
+    def test_precio_de_la_competencia_se_guarda_y_se_puede_borrar(self):
+        for enviado, guardado in (("22.5", Decimal("22.50")), (None, None)):
+            mock_login_ok()
+            with patch(SERVICIO) as Servicio:
+                Servicio.return_value.editar.return_value = _detalle(precio_competencia="22.50")
+                resp = _client().patch("/productos-bot/DEMO-1", json={"precioCompetencia": enviado}, headers=AUTH_HEADER)
+            assert resp.status_code == 200
+            assert resp.get_json()["precioCompetencia"] == "22.50"
+            Servicio.return_value.editar.assert_called_once_with("DEMO-1", {"precio_competencia": guardado}, CORREO_DE_PRUEBA)
 
     @responses.activate
     def test_cuerpo_vacio_no_cambia_nada_pero_no_falla(self):
@@ -264,3 +286,65 @@ class TestAcciones:
             resp = _client().post("/productos-bot/DEMO-1/actualizar-rocketfy", headers=AUTH_HEADER)
         assert resp.status_code == 200
         Servicio.return_value.actualizar_desde_rocketfy.assert_called_once_with("DEMO-1", CORREO_DE_PRUEBA)
+
+
+def _recomendacion(**cambios):
+    datos = dict(
+        ajustes_confirmados=True, costo="10.00", piso="15.00", envio_estimado="5.00", otros_costos_fijos="0.00",
+        otros_costos_pct="0.00", margen_minimo_pct="25.00", margen_objetivo_pct="35.00", precio_sugerido="29.90",
+        precio_competencia=None,
+        niveles=[NivelPrecioDTO(clave="minimo", nombre="Mínimo", precio="20.99", ganancia="5.99", margen_pct="28.5")],
+        evaluacion=EvaluacionPrecioDTO(precio="24.99", ganancia="9.99", margen_pct="40.0", bajo_piso=False, bajo_margen_minimo=False),
+        avisos=["Un aviso"],
+    )
+    datos.update(cambios)
+    return RecomendacionPrecioDTO(**datos)
+
+
+class TestRecomendarPrecio:
+    @responses.activate
+    def test_sin_login_es_401(self):
+        assert _client().get("/productos-bot/DEMO-1/precio").status_code == 401
+
+    @responses.activate
+    def test_devuelve_la_recomendacion_en_camel_case(self):
+        mock_login_ok()
+        with patch(SERVICIO) as Servicio:
+            Servicio.return_value.recomendar_precio.return_value = _recomendacion()
+            resp = _client().get("/productos-bot/DEMO-1/precio", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        cuerpo = resp.get_json()
+        assert cuerpo["ajustesConfirmados"] is True
+        assert (cuerpo["costo"], cuerpo["piso"], cuerpo["envioEstimado"], cuerpo["precioSugerido"]) == ("10.00", "15.00", "5.00", "29.90")
+        assert cuerpo["niveles"] == [{"clave": "minimo", "nombre": "Mínimo", "precio": "20.99", "ganancia": "5.99", "margenPct": "28.5"}]
+        assert cuerpo["evaluacion"] == {"precio": "24.99", "ganancia": "9.99", "margenPct": "40.0", "bajoPiso": False, "bajoMargenMinimo": False}
+        assert cuerpo["avisos"] == ["Un aviso"]
+        Servicio.return_value.recomendar_precio.assert_called_once_with("DEMO-1", precio=None, competencia=None)
+
+    @responses.activate
+    def test_pasa_el_precio_y_la_competencia_como_decimal(self):
+        mock_login_ok()
+        with patch(SERVICIO) as Servicio:
+            Servicio.return_value.recomendar_precio.return_value = _recomendacion(evaluacion=None)
+            resp = _client().get("/productos-bot/DEMO-1/precio?precio=24.99&competencia=22", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200 and resp.get_json()["evaluacion"] is None
+        Servicio.return_value.recomendar_precio.assert_called_once_with("DEMO-1", precio=Decimal("24.99"), competencia=Decimal("22"))
+
+    @responses.activate
+    def test_montos_invalidos_son_422_y_no_llegan_al_servicio(self):
+        for consulta in ("precio=abc", "precio=0", "precio=-3", "precio=1e999", "precio=24.999", "competencia=x", "competencia=0"):
+            mock_login_ok()
+            with patch(SERVICIO) as Servicio:
+                resp = _client().get(f"/productos-bot/DEMO-1/precio?{consulta}", headers=AUTH_HEADER)
+            assert resp.status_code == 422, consulta
+            Servicio.return_value.recomendar_precio.assert_not_called()
+
+    @responses.activate
+    def test_producto_inexistente_es_404(self):
+        mock_login_ok()
+        with patch(SERVICIO) as Servicio:
+            Servicio.return_value.recomendar_precio.side_effect = ProductoBotNoEncontradoError("no existe")
+            resp = _client().get("/productos-bot/NO-EXISTE/precio", headers=AUTH_HEADER)
+        assert resp.status_code == 404

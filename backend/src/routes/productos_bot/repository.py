@@ -21,7 +21,7 @@ _COLUMNAS = (
     "max_unidades_por_pedido, estado, activo, rocketfy_product_id, "
     "costo_rocketfy, precio_sugerido_rocketfy, stock_ultimo, stock_actualizado_en, "
     "peso_kg, imagen_url, notas_internas, publicado_en, publicado_por, "
-    "creado_en, actualizado_en"
+    "precio_competencia, creado_en, actualizado_en"
 )
 
 # Únicas columnas que la API puede modificar. Se usa como lista blanca al
@@ -38,6 +38,7 @@ COLUMNAS_EDITABLES = frozenset(
         "temas_no_responder",
         "max_unidades_por_pedido",
         "notas_internas",
+        "precio_competencia",
     }
 )
 

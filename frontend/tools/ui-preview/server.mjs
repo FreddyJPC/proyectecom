@@ -145,7 +145,7 @@ const dinero = (c) => `${Math.floor(c / 100)}.${String(c % 100).padStart(2, "0")
 const fichaBase = (sku, nombre, estado, precio, costo, sugerido, stock, extra = {}) => ({
   sku, nombre, estado, precio, costoRocketfy: costo, precioSugeridoRocketfy: sugerido, stockUltimo: stock, stockActualizadoEn: ago(12),
   pesoKg: "0.350", imagenUrl: null, rocketfyProductId: 4800 + sku.length, descripcion: "", variantes: null, tiempoEntrega: "", metodosPago: ["contraentrega"],
-  preguntasFrecuentes: null, temasNoResponder: null, maxUnidadesPorPedido: 1, notasInternas: null, publicadoEn: null, publicadoPor: null,
+  preguntasFrecuentes: null, temasNoResponder: null, maxUnidadesPorPedido: 1, notasInternas: null, precioCompetencia: null, publicadoEn: null, publicadoPor: null,
   creadoEn: ago(9000), actualizadoEn: ago(60), historial: [], ...extra,
 });
 const productosBot = [
@@ -182,7 +182,7 @@ function verificarBot(f) {
   if (!f.descripcion.trim()) bloqueos.push("Falta la descripción: es lo que Victoria cuenta al cliente.");
   if (!f.tiempoEntrega.trim()) bloqueos.push("Falta el tiempo de entrega.");
   if (!f.metodosPago.length) bloqueos.push("Falta al menos un método de pago.");
-  const piso = Math.max(cents(f.costoRocketfy) ?? 0, PISO_MIN), precio = cents(f.precio);
+  const piso = Math.max((cents(f.costoRocketfy) ?? 0) + (ajustes.confirmado ? cents(ajustes.envioEstimado) : 0), PISO_MIN), precio = cents(f.precio);
   if (precio == null || precio <= 0) bloqueos.push("El precio debe ser mayor que cero.");
   else if (precio < piso) bloqueos.push(`El precio ($${f.precio}) está por debajo del mínimo para vender ($${dinero(piso)}).`);
   if (f.stockUltimo === 0) bloqueos.push("Rocketfy reporta 0 unidades en stock.");
@@ -194,6 +194,59 @@ function verificarBot(f) {
 }
 const detalleBot = (f) => ({ ...f, verificacion: verificarBot(f) });
 const ACCIONES_BOT = { publicar: [["borrador", "listo"], "activo", "publicado"], reanudar: [["pausado", "agotado"], "activo", "reanudado"], pausar: [["activo"], "pausado", "pausado"], archivar: [["borrador", "listo", "activo", "pausado", "agotado"], "archivado", "archivado"], restaurar: [["archivado"], "borrador", "restaurado"] };
+
+// ---------- Ajustes de precios y calculadora (Fase C) ----------
+// Espejo reducido de backend/.../calculadora.py, en centavos enteros.
+let ajustes = {
+  margenMinimoPct: "25.00", margenObjetivoPct: "35.00", envioEstimado: "5.00", otrosCostosFijos: "0.00", otrosCostosPct: "0.00",
+  redondeo: "terminado_99", confirmado: false, actualizadoPor: null, actualizadoEn: ago(600),
+  calibracionEnvio: { observaciones: 2, minimo: "7.20", mediana: "8.47", maximo: "9.10" },
+};
+function recomendacionBot(f, precioTxt, competenciaTxt) {
+  const costo = cents(f.costoRocketfy), env = cents(ajustes.envioEstimado), fijos = cents(ajustes.otrosCostosFijos);
+  const otros = Number(ajustes.otrosCostosPct) / 100, mmin = Number(ajustes.margenMinimoPct) / 100, mobj = Number(ajustes.margenObjetivoPct) / 100;
+  const piso = Math.max((costo ?? 0) + (ajustes.confirmado ? env : 0), PISO_MIN);
+  const sugerido = cents(f.precioSugeridoRocketfy);
+  const comp = competenciaTxt ? cents(competenciaTxt) : cents(f.precioCompetencia);
+  const base = { ajustesConfirmados: ajustes.confirmado, costo: costo == null ? null : dinero(costo), piso: dinero(piso), envioEstimado: ajustes.envioEstimado,
+    otrosCostosFijos: ajustes.otrosCostosFijos, otrosCostosPct: ajustes.otrosCostosPct, margenMinimoPct: ajustes.margenMinimoPct, margenObjetivoPct: ajustes.margenObjetivoPct,
+    precioSugerido: sugerido == null ? null : dinero(sugerido), precioCompetencia: comp == null ? null : dinero(comp), niveles: [], evaluacion: null, avisos: [] };
+  if (costo == null) { base.avisos.push("Todavía no hay costo de Rocketfy guardado para este producto: pulsa «Actualizar desde Rocketfy» para poder calcular el precio."); return base; }
+  const ganancia = (p) => p - costo - env - fijos - Math.round(p * otros);
+  const margen = (p, g) => (p > 0 ? (g / p * 100).toFixed(1) : "0.0");
+  const redondear = (x) => (ajustes.redondeo === "terminado_99" ? Math.max(0, Math.ceil((x - 99) / 100)) * 100 + 99 : x);
+  const precioPara = (m) => redondear(Math.max(Math.ceil((costo + env + fijos) / (1 - m - otros) - 1e-9), piso));
+  const fila = (clave, nombre, p) => { const g = ganancia(p); return { clave, nombre, precio: dinero(p), ganancia: dinero(g), margenPct: margen(p, g) }; };
+  const pMin = precioPara(mmin), pRec = precioPara(mobj);
+  base.niveles = [fila("minimo", "Mínimo", pMin), fila("recomendado", "Recomendado", pRec)];
+  if (sugerido && sugerido > pRec) base.niveles.push(fila("premium", "Premium", sugerido));
+  else if (sugerido && pMin > sugerido) base.avisos.push(`Aun con tu margen mínimo, el precio ($${dinero(pMin)}) queda por encima del sugerido por Rocketfy ($${dinero(sugerido)}): vendiendo al sugerido ganarías menos de tu margen mínimo.`);
+  else if (sugerido && pRec > sugerido) base.avisos.push(`Para tu margen objetivo el precio recomendado ($${dinero(pRec)}) queda por encima del sugerido por Rocketfy ($${dinero(sugerido)}): puede costarte competitividad.`);
+  const pe = precioTxt ? cents(precioTxt) : null;
+  if (pe) {
+    const g = ganancia(pe), bajoPiso = pe < piso, bajoMargen = g / pe * 100 < Number(ajustes.margenMinimoPct);
+    base.evaluacion = { precio: dinero(pe), ganancia: g < 0 ? "-" + dinero(-g) : dinero(g), margenPct: margen(pe, g), bajoPiso, bajoMargenMinimo: bajoMargen };
+    if (bajoPiso) base.avisos.push(`Con $${dinero(pe)} no se podrá publicar: el mínimo para publicar es $${dinero(piso)}.`);
+    if (g <= 0) base.avisos.push(`Con este precio pierdes $${dinero(-g)} por unidad (con el envío estimado).`);
+    else if (bajoMargen) base.avisos.push(`Con este precio tu margen (${margen(pe, g)} %) queda por debajo de tu mínimo (${Number(ajustes.margenMinimoPct)} %).`);
+    if (comp && pe > comp) base.avisos.push(`Tu precio ($${dinero(pe)}) es mayor que el de la competencia que anotaste ($${dinero(comp)}).`);
+  }
+  return base;
+}
+function manejarAjustes(req, res, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    if (req.method === "GET") return send(ajustes);
+    const b = raw ? JSON.parse(raw) : {};
+    const pct = (v) => /^\d{1,2}(\.\d{1,2})?$/.test(String(v));
+    if (!pct(b.margenMinimoPct) || !pct(b.margenObjetivoPct) || !pct(b.otrosCostosPct)) return send({ error: "Datos inválidos.", detalle: { margenMinimoPct: ["Porcentaje inválido."] } }, 422);
+    if (Number(b.margenObjetivoPct) < Number(b.margenMinimoPct)) return send({ error: "Datos inválidos.", detalle: { margenObjetivoPct: ["El margen objetivo no puede ser menor que el mínimo."] } }, 422);
+    ajustes = { ...ajustes, ...b, confirmado: true, actualizadoPor: "freddy@azoshop.ec", actualizadoEn: new Date().toISOString() };
+    return send(ajustes);
+  });
+}
+
 function manejarProductosBot(req, res, p, q, send) {
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -217,6 +270,7 @@ function manejarProductosBot(req, res, p, q, send) {
     if (!f) return send({ error: `No existe el producto '${decodeURIComponent(m[1])}'.` }, 404);
     const accion = m[2];
     if (!accion && req.method === "GET") return send(detalleBot(f));
+    if (accion === "precio" && req.method === "GET") return send(recomendacionBot(f, q.get("precio"), q.get("competencia")));
     if (!accion && req.method === "PATCH") {
       if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede editar: restáuralo primero." }, 409);
       const cambios = {};
@@ -255,7 +309,7 @@ const server = http.createServer((req, res) => {
   const p = url.pathname, q = url.searchParams;
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] || "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const send = (data, status = 200) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(data)); };
@@ -294,6 +348,7 @@ const server = http.createServer((req, res) => {
     if (p === "/productos/monitoreados") return send(monitoreados);
     if (p === "/catalogos/ubicaciones") return send({ provincias });
     if ((m = p.match(/^\/catalogos\/ubicaciones\/(.+)\/cantones$/))) return send({ cantones: cantones[decodeURIComponent(m[1])] || [] });
+    if (p === "/ajustes/negocio") return manejarAjustes(req, res, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     send({ error: "mock: ruta no implementada " + p }, 404);
   };

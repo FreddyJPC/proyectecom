@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from src.integrations.rocketfy import RocketfyRequestError
+from src.routes.ajustes.dto import AjustesNegocio
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos_bot.exceptions import (
     ProductoBotNoEncontradoError,
@@ -137,11 +138,24 @@ class MonitoreoFalso:
         self.vigilados[sku] = umbral
 
 
-def _servicio(filas=(), productos=None, error=None, monitoreo=None):
+class AjustesFalsos:
+    """Imita a AjustesService: devuelve los ajustes que se le den, sin base de datos."""
+
+    def __init__(self, **cambios):
+        self.ajustes = AjustesNegocio(**cambios)
+
+    def obtener_ajustes(self):
+        return self.ajustes
+
+
+def _servicio(filas=(), productos=None, error=None, monitoreo=None, ajustes=None):
     repo = RepoEnMemoria(filas)
     rocketfy = RocketfyFalso(productos, error)
     monitoreo = monitoreo or MonitoreoFalso()
-    return ProductosBotService(client=rocketfy, repo=repo, monitoreo_repo=monitoreo), repo, rocketfy, monitoreo
+    servicio = ProductosBotService(
+        client=rocketfy, repo=repo, monitoreo_repo=monitoreo, ajustes_service=ajustes or AjustesFalsos()
+    )
+    return servicio, repo, rocketfy, monitoreo
 
 
 class TestCrearBorrador:
@@ -502,3 +516,105 @@ class TestListarYDetalle:
         servicio, _, _, _ = _servicio()
         with pytest.raises(ProductoBotNoEncontradoError):
             servicio.obtener_detalle("NO-EXISTE")
+
+
+class TestPisoConElEnvioDelDueno:
+    """El envío estimado solo bloquea cuando el dueño ya confirmó sus ajustes."""
+
+    def test_con_ajustes_de_partida_no_bloquea_por_el_envio(self):
+        # costo $10 + envío de partida $5 = $15 > precio $12, pero nadie confirmó el envío.
+        servicio, repo, _, _ = _servicio(
+            [_fila(precio=Decimal("12.00"))], productos=[RocketfyFalso.producto()], ajustes=AjustesFalsos(confirmado=False)
+        )
+        assert servicio.publicar("DEMO-1", None).estado == "activo"
+
+    def test_con_ajustes_confirmados_bloquea_si_no_cubre_costo_mas_envio(self):
+        servicio, repo, _, _ = _servicio(
+            [_fila(precio=Decimal("12.00"))], productos=[RocketfyFalso.producto()], ajustes=AjustesFalsos(confirmado=True)
+        )
+        with pytest.raises(PublicacionBloqueadaError) as error:
+            servicio.publicar("DEMO-1", None)
+        assert "envío estimado ($5.00)" in error.value.bloqueos[0]
+        assert repo.filas["DEMO-1"]["estado"] == "borrador"
+
+    def test_la_ficha_muestra_el_bloqueo_con_ajustes_confirmados(self):
+        servicio, _, _, _ = _servicio([_fila(precio=Decimal("12.00"))], ajustes=AjustesFalsos(confirmado=True))
+        assert len(servicio.obtener_detalle("DEMO-1").verificacion.bloqueos) == 1
+
+    def test_editar_un_producto_activo_bloquea_si_el_nuevo_precio_no_cubre_el_envio_confirmado(self):
+        servicio, repo, _, _ = _servicio(
+            [_fila(estado="activo", activo=True)], ajustes=AjustesFalsos(confirmado=True)
+        )
+        with pytest.raises(PublicacionBloqueadaError):
+            servicio.editar("DEMO-1", {"precio": Decimal("12.00")}, None)
+        assert repo.filas["DEMO-1"]["precio"] == Decimal("24.99")
+
+    def test_un_producto_activo_que_ya_estaba_bajo_el_piso_no_bloquea_otras_ediciones(self):
+        servicio, repo, _, _ = _servicio(
+            [_fila(estado="activo", activo=True, precio=Decimal("12.00"))], ajustes=AjustesFalsos(confirmado=True)
+        )
+        servicio.editar("DEMO-1", {"nombre": "Otro nombre"}, None)
+        assert repo.filas["DEMO-1"]["nombre"] == "Otro nombre"
+
+
+class TestRecomendarPrecio:
+    def test_devuelve_los_tres_niveles_del_ejemplo_del_plan_como_texto(self):
+        servicio, _, _, _ = _servicio([_fila()], ajustes=AjustesFalsos(confirmado=True))
+
+        r = servicio.recomendar_precio("DEMO-1")
+
+        assert r.ajustes_confirmados is True
+        assert (r.costo, r.piso, r.precio_sugerido, r.envio_estimado) == ("10.00", "15.00", "29.90", "5.00")
+        assert [(n.clave, n.precio, n.ganancia, n.margen_pct) for n in r.niveles] == [
+            ("minimo", "20.99", "5.99", "28.5"),
+            ("recomendado", "23.99", "8.99", "37.5"),
+            ("premium", "29.90", "14.90", "49.8"),
+        ]
+        assert r.evaluacion is None
+
+    def test_evalua_el_precio_que_se_esta_tecleando(self):
+        servicio, _, _, _ = _servicio([_fila()], ajustes=AjustesFalsos(confirmado=True))
+
+        r = servicio.recomendar_precio("DEMO-1", precio=Decimal("12.00"))
+
+        assert (r.evaluacion.precio, r.evaluacion.ganancia, r.evaluacion.bajo_piso) == ("12.00", "-3.00", True)
+        assert any("no se podrá publicar" in a for a in r.avisos)
+
+    def test_no_guarda_nada(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+        servicio.recomendar_precio("DEMO-1", precio=Decimal("12.00"))
+        assert repo.historial == [] and repo.filas["DEMO-1"]["precio"] == Decimal("24.99")
+
+    def test_usa_la_competencia_guardada_o_la_que_se_pase(self):
+        servicio, _, _, _ = _servicio([_fila(precio_competencia=Decimal("15.00"))], ajustes=AjustesFalsos(confirmado=True))
+        assert servicio.recomendar_precio("DEMO-1").precio_competencia == "15.00"
+        assert servicio.recomendar_precio("DEMO-1", competencia=Decimal("40.00")).precio_competencia == "40.00"
+
+    def test_sin_competencia_guardada_es_none(self):
+        servicio, _, _, _ = _servicio([_fila()])
+        assert servicio.recomendar_precio("DEMO-1").precio_competencia is None
+
+    def test_sin_costo_no_hay_niveles(self):
+        servicio, _, _, _ = _servicio([_fila(costo_rocketfy=None)])
+        r = servicio.recomendar_precio("DEMO-1", precio=Decimal("24.99"))
+        assert r.niveles == [] and r.evaluacion is None and r.costo is None
+        assert any("Actualizar desde Rocketfy" in a for a in r.avisos)
+
+    def test_sku_inexistente(self):
+        servicio, _, _, _ = _servicio()
+        with pytest.raises(ProductoBotNoEncontradoError):
+            servicio.recomendar_precio("NO-EXISTE")
+
+
+class TestPrecioDeLaCompetenciaEnLaFicha:
+    def test_se_edita_y_queda_en_el_historial(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+
+        detalle = servicio.editar("DEMO-1", {"precio_competencia": Decimal("22.50")}, "ana@ejemplo.com")
+
+        assert detalle.precio_competencia == "22.50"
+        assert repo.historial[-1]["cambios"] == {"precio_competencia": [None, Decimal("22.50")]}
+
+    def test_se_puede_borrar(self):
+        servicio, _, _, _ = _servicio([_fila(precio_competencia=Decimal("22.50"))])
+        assert servicio.editar("DEMO-1", {"precio_competencia": None}, None).precio_competencia is None

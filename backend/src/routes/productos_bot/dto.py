@@ -59,4 +59,43 @@ class ProductoBotDetalleDTO:
     creado_en: Optional[str]
     actualizado_en: Optional[str]
     verificacion: VerificacionDTO
+    precio_competencia: Optional[str] = None
     historial: List[HistorialDTO] = field(default_factory=list)
+
+
+@dataclass
+class NivelPrecioDTO:
+    clave: str
+    nombre: str
+    precio: str
+    ganancia: str
+    margen_pct: str
+
+
+@dataclass
+class EvaluacionPrecioDTO:
+    precio: str
+    ganancia: str
+    margen_pct: str
+    bajo_piso: bool
+    bajo_margen_minimo: bool
+
+
+@dataclass
+class RecomendacionPrecioDTO:
+    """Respuesta de la calculadora de precio. Dinero como string con dos
+    decimales y márgenes como string con un decimal (nunca float)."""
+
+    ajustes_confirmados: bool
+    costo: Optional[str]
+    piso: str
+    envio_estimado: str
+    otros_costos_fijos: str
+    otros_costos_pct: str
+    margen_minimo_pct: str
+    margen_objetivo_pct: str
+    precio_sugerido: Optional[str]
+    precio_competencia: Optional[str]
+    niveles: List[NivelPrecioDTO]
+    evaluacion: Optional[EvaluacionPrecioDTO]
+    avisos: List[str]

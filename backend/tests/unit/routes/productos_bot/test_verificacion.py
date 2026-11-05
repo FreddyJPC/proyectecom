@@ -46,6 +46,16 @@ class TestPisoDePrecio:
     def test_si_el_costo_es_mayor_el_piso_es_el_costo(self):
         assert piso_de_precio(Decimal("18.50")) == Decimal("18.50")
 
+    def test_con_envio_confirmado_el_piso_es_costo_mas_envio(self):
+        assert piso_de_precio(Decimal("12.00"), Decimal("5.00")) == Decimal("17.00")
+
+    def test_el_envio_no_baja_el_recaudo_minimo(self):
+        assert piso_de_precio(Decimal("2.00"), Decimal("3.00")) == Decimal("10.00")
+
+    def test_sin_envio_o_con_none_el_piso_es_el_de_antes(self):
+        assert piso_de_precio(Decimal("12.00"), None) == Decimal("12.00")
+        assert piso_de_precio(Decimal("12.00")) == Decimal("12.00")
+
 
 class TestBloqueosDeContenido:
     def test_un_producto_completo_no_tiene_bloqueos(self):
@@ -78,6 +88,17 @@ class TestBloqueosDeContenido:
     def test_precio_bajo_el_costo_bloquea(self):
         bloqueos = bloqueos_de_contenido(_producto(precio=Decimal("14.00"), costo_rocketfy=Decimal("15.00")))
         assert len(bloqueos) == 1 and "$14.00" in bloqueos[0] and "$15.00" in bloqueos[0]
+
+    def test_con_envio_confirmado_un_precio_que_no_cubre_costo_mas_envio_bloquea(self):
+        producto = _producto(precio=Decimal("16.00"), costo_rocketfy=Decimal("12.00"))
+        assert bloqueos_de_contenido(producto) == []  # sin contar envío: $16 > $12
+        bloqueos = bloqueos_de_contenido(producto, envio_para_piso=Decimal("5.00"))
+        assert len(bloqueos) == 1
+        assert "$16.00" in bloqueos[0] and "$17.00" in bloqueos[0] and "envío estimado ($5.00)" in bloqueos[0]
+
+    def test_con_envio_confirmado_un_precio_igual_al_piso_no_bloquea(self):
+        producto = _producto(precio=Decimal("17.00"), costo_rocketfy=Decimal("12.00"))
+        assert bloqueos_de_contenido(producto, envio_para_piso=Decimal("5.00")) == []
 
     def test_precio_igual_al_piso_no_bloquea(self):
         assert bloqueos_de_contenido(_producto(precio=Decimal("10.00"), costo_rocketfy=Decimal("4.00"))) == []
@@ -134,6 +155,11 @@ class TestVerificarProducto:
     def test_el_stock_en_vivo_tiene_prioridad(self):
         resultado = verificar_producto(_producto(stock_ultimo=0), existe_en_rocketfy=True, stock=8)
         assert resultado.bloqueos == []
+
+    def test_el_envio_confirmado_llega_hasta_los_bloqueos(self):
+        producto = _producto(precio=Decimal("16.00"), costo_rocketfy=Decimal("12.00"))
+        assert verificar_producto(producto).bloqueos == []
+        assert len(verificar_producto(producto, envio_para_piso=Decimal("5.00")).bloqueos) == 1
 
     def test_junta_bloqueos_y_avisos(self):
         resultado = verificar_producto(
