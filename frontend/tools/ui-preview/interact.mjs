@@ -68,6 +68,15 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByRole("button", { name: "Revisar mis ajustes" }).click();
   await shot(page, "m-ajustes-dialog");
   await page.keyboard.press("Escape");
+
+  // ---- Redactar con IA (Fase D) a 390 px
+  await page.goto(BASE + "/catalogo/producto/LMP-LED-220", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Redactar con IA" }).click();
+  await page.getByLabel("¿Qué quieres destacar?").fill("batería larga");
+  await shot(page, "m-ia-notas");
+  await page.getByRole("button", { name: "Redactar borrador" }).click();
+  await page.getByRole("button", { name: "Aceptar", exact: true }).first().waitFor();
+  await shot(page, "m-ia-borrador");
   await ctx.close();
 }
 {
@@ -142,6 +151,46 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByLabel("Precio de la competencia (USD)").fill("9");
   await page.getByText("competencia que anotaste").waitFor();
   await shot(page, "d-precio-recomendado-competencia");
+
+  // ---- Redactar con IA (Fase D): notas -> borrador -> aceptar -> guardar -> historial
+  await page.goto(BASE + "/catalogo/producto/LMP-LED-220", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Redactar con IA" }).click();
+  await page.getByLabel("¿Qué quieres destacar?").fill("batería larga");
+  await shot(page, "d-ia-notas");
+  await page.getByRole("button", { name: "Redactar borrador" }).click();
+  await page.getByRole("button", { name: "Aceptar", exact: true }).first().waitFor();
+  await shot(page, "d-ia-borrador");
+  await page.getByRole("button", { name: "Aceptar", exact: true }).nth(1).click(); // la descripción
+  await page.getByText("Aplicado a la ficha").first().waitFor();
+  await shot(page, "d-ia-aplicado");
+  await page.getByRole("button", { name: "Regenerar" }).nth(1).click();
+  await page.getByRole("button", { name: "Regenerar" }).nth(1).waitFor();
+  await page.getByRole("button", { name: "Aceptar todo" }).click();
+  await page.getByRole("button", { name: "Listo" }).click();
+  await page.getByRole("button", { name: "Guardar cambios" }).waitFor();
+  await shot(page, "d-ia-ficha-con-cambios");
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await page.getByRole("button", { name: "Guardar cambios" }).waitFor({ state: "detached" });
+  await page.getByText("Borrador redactado con IA").first().scrollIntoViewIfNeeded();
+  await shot(page, "d-ia-historial");
+
+  // La IA no está disponible: el mensaje sale dentro del cuadro y no se pierde nada
+  await page.getByRole("button", { name: "Redactar con IA" }).click();
+  await page.getByLabel("Otros datos que sepas del producto").fill("SIN_IA");
+  await page.getByRole("button", { name: "Redactar borrador" }).click();
+  await page.getByText("no está configurada en el servidor").waitFor();
+  await shot(page, "d-ia-error");
+  await page.keyboard.press("Escape");
+
+  // Tope diario: se baja a 1 en Ajustes de precios y el cuadro de IA lo respeta
+  await page.getByRole("button", { name: "Ajustes de precios" }).click();
+  await page.getByLabel("Borradores de IA por día").fill("1");
+  await page.getByRole("button", { name: "Guardar ajustes" }).click();
+  await page.getByLabel("Borradores de IA por día").waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Redactar con IA" }).click();
+  await page.getByText("Llegaste al tope de hoy").waitFor();
+  await shot(page, "d-ia-tope");
+  await page.keyboard.press("Escape");
 
   // Mis productos: el botón de ajustes también está en la lista
   await page.goto(BASE + "/catalogo?tab=mis-productos", { waitUntil: "networkidle" });

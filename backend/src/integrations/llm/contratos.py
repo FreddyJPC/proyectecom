@@ -85,5 +85,11 @@ class LLMProvider(ABC):
         mensajes: List[MensajeLLM],
         herramientas: List[HerramientaLLM],
         max_tokens: int = 1024,
+        forzar_herramienta: Optional[str] = None,
     ) -> RespuestaLLM:
+        """`forzar_herramienta`: nombre de una de las `herramientas` que el
+        modelo DEBE invocar. Sirve para recibir JSON con un esquema fijo (los
+        argumentos de la herramienta) en vez de texto libre: así la salida se
+        puede validar con código. Con None (lo normal en la conversación de
+        Victoria) el modelo decide solo si usa una herramienta o responde."""
         ...

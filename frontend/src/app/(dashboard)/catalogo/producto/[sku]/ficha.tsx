@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Lock, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Sparkles, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { METODOS_PAGO, type EditarProductoBotInput, type ProductoBotDetalle } fr
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "../../accion-estado";
 import { Campo, descripcionDe } from "./campo";
+import { RedactarIADialog } from "./redactar-ia-dialog";
 import { DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
 import { SeccionPrecio } from "./seccion-precio";
 
@@ -253,6 +254,28 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
 
             <SectionCard titulo="Contenido para Victoria" descripcion="Todo lo de esta sección lo lee Victoria y se lo cuenta al cliente. Si algo no está aquí, ella no lo inventa.">
               <div className="space-y-5 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/50 p-3">
+                  <p className="min-w-0 text-sm text-muted-foreground">
+                    ¿Quieres un primer borrador? La IA lo redacta con los datos de Rocketfy y tus notas; tú revisas y aceptas cada campo.
+                  </p>
+                  <RedactarIADialog
+                    sku={detalle.sku}
+                    actuales={{
+                      nombre: form.nombre,
+                      descripcion: form.descripcion,
+                      variantes: form.variantes,
+                      preguntasFrecuentes: form.preguntasFrecuentes,
+                      temasNoResponder: form.temasNoResponder,
+                    }}
+                    onAceptar={(campo, valor) => poner(campo, valor)}
+                    trigger={
+                      <Button type="button" variant="outline" size="sm">
+                        <Sparkles /> Redactar con IA
+                      </Button>
+                    }
+                  />
+                </div>
+
                 <Campo id="nombre" label="Nombre del producto" error={errores.nombre} contador={{ actual: form.nombre.length, maximo: LIMITE.nombre }}>
                   <Input
                     id="nombre"

@@ -92,7 +92,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **526 tests pasando**.
+   desde `backend/`. Estado actual: **665 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -191,7 +191,7 @@ posible y rotarlos.
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
   conectado, **backend desplegado y sano** (2026-10-30; `/health` →
   `scheduler: true`). **Ojo:** el despliegue automático NO se ha podido comprobar (pendiente #48; no se
-  disparó en 5 fusiones seguidas el 2026-11-05). Tras fusionar a `main` algo de `backend/`, reconectar la
+  disparó en 6 fusiones seguidas el 2026-11-05). Tras fusionar a `main` algo de `backend/`, reconectar la
   fuente con `connect-service-source` y verificar el despliegue en los logs.
 - Vercel: `proyectecom-dashboard` **desplegado en producción**
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel

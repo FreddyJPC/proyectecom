@@ -15,6 +15,9 @@ Traducción de entrada (neutral -> Anthropic):
     - MensajeLLM de texto simple -> {"role", "content": texto}
     - system se pasa tal cual al parámetro `system` de la API
 
+    - forzar_herramienta=<nombre> -> tool_choice {"type": "tool", "name": <nombre>}
+      (sin forzar, NO se manda tool_choice: el modelo decide, como siempre)
+
 Traducción de salida (Anthropic -> neutral):
     - Bloques "text" concatenados -> RespuestaLLM.texto
     - Bloques "tool_use" -> LlamadaHerramienta(id, nombre, entrada)
@@ -27,7 +30,7 @@ se traducen a sus equivalentes neutrales; cualquier otro APIStatusError
 (400, 403, 404, 409, 422, 5xx...) se trata como LLMRequestError -- ver
 tools.py/services.py para dónde importa la distinción real (no acá).
 """
-from typing import List
+from typing import List, Optional
 
 import anthropic
 
@@ -60,15 +63,22 @@ class AnthropicProvider(LLMProvider):
         mensajes: List[MensajeLLM],
         herramientas: List[HerramientaLLM],
         max_tokens: int = 1024,
+        forzar_herramienta: Optional[str] = None,
     ) -> RespuestaLLM:
+        parametros = dict(
+            model=self._modelo,
+            max_tokens=max_tokens,
+            system=system,
+            messages=self._traducir_mensajes(mensajes),
+            tools=self._traducir_herramientas(herramientas),
+        )
+        if forzar_herramienta is not None:
+            if forzar_herramienta not in {h.nombre for h in herramientas}:
+                raise ValueError(f"No se puede forzar la herramienta '{forzar_herramienta}': no está en la lista.")
+            parametros["tool_choice"] = {"type": "tool", "name": forzar_herramienta}
+
         try:
-            respuesta = self._client.messages.create(
-                model=self._modelo,
-                max_tokens=max_tokens,
-                system=system,
-                messages=self._traducir_mensajes(mensajes),
-                tools=self._traducir_herramientas(herramientas),
-            )
+            respuesta = self._client.messages.create(**parametros)
         except anthropic.AuthenticationError as exc:
             raise LLMAuthError(str(exc)) from exc
         except anthropic.RateLimitError as exc:

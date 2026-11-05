@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { apiFetch, ApiError } from "@/lib/api";
-import { ACCIONES_HISTORIAL, CAMPOS_HISTORIAL, estadoProductoBotInfo } from "@/lib/estados";
+import { ACCIONES_HISTORIAL, CAMPOS_HISTORIAL, ETIQUETAS_CAMPOS_REDACTABLES, estadoProductoBotInfo } from "@/lib/estados";
 import { formatFechaHora, formatMoney, tiempoRelativo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { EntradaHistorial, ProductoBotDetalle, Verificacion } from "@/types/producto-bot";
@@ -165,7 +165,21 @@ function textoDeValor(campo: string, valor: unknown): string {
   return String(valor);
 }
 
+// Nombres de columna (como los guarda el historial) -> nombre legible.
+const CAMPOS_IA_DEL_HISTORIAL: Record<string, string> = {
+  nombre: ETIQUETAS_CAMPOS_REDACTABLES.nombre,
+  descripcion: ETIQUETAS_CAMPOS_REDACTABLES.descripcion,
+  variantes: ETIQUETAS_CAMPOS_REDACTABLES.variantes,
+  preguntas_frecuentes: ETIQUETAS_CAMPOS_REDACTABLES.preguntasFrecuentes,
+  temas_no_responder: "Temas que no debe responder",
+};
+
 function Cambios({ cambios }: { cambios: Record<string, unknown> }) {
+  // «Redactado con IA» guarda qué campos se pidieron, no pares «antes → después».
+  if (Array.isArray(cambios.campos)) {
+    const nombres = cambios.campos.filter((c): c is string => typeof c === "string").map((c) => CAMPOS_IA_DEL_HISTORIAL[c] ?? c);
+    return nombres.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">Campos: {nombres.join(", ")}. Son un borrador: lo que se aceptó y guardó figura como «Editado».</p> : null;
+  }
   // Las acciones sin pares «antes → después» (p. ej. "creado") no tienen detalle que mostrar.
   const filas = Object.entries(cambios).filter(([, v]) => Array.isArray(v) && v.length === 2);
   if (filas.length === 0) return null;

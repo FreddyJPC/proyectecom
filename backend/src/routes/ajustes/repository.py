@@ -8,7 +8,7 @@ from .exceptions import AjustesInvalidosError
 
 _COLUMNAS = (
     "margen_minimo_pct, margen_objetivo_pct, envio_estimado, otros_costos_fijos, "
-    "otros_costos_pct, redondeo, confirmado_en, actualizado_por, actualizado_en"
+    "otros_costos_pct, redondeo, tope_redacciones_dia, confirmado_en, actualizado_por, actualizado_en"
 )
 
 # Únicas columnas que se pueden guardar (lista blanca: ningún nombre de
@@ -21,6 +21,10 @@ COLUMNAS_GUARDABLES = (
     "otros_costos_pct",
     "redondeo",
 )
+
+# Ajustes que pueden venir o no en el PUT (si faltan, se conserva el valor guardado):
+# así un frontend viejo, que no los conoce, no los pisa ni falla.
+COLUMNAS_OPCIONALES = ("tope_redacciones_dia",)
 
 
 def _fila(cur) -> Optional[Dict[str, Any]]:
@@ -47,15 +51,17 @@ class AjustesNegocioRepository:
 
     @staticmethod
     def guardar(datos: Dict[str, Any], usuario: Optional[str]) -> Dict[str, Any]:
-        """Guarda los seis ajustes y marca que el dueño ya los confirmó (la
-        primera vez; después se conserva esa fecha)."""
+        """Guarda los seis ajustes de precios (más los opcionales que vengan) y
+        marca que el dueño ya los confirmó (la primera vez; después se conserva
+        esa fecha)."""
         faltan = [c for c in COLUMNAS_GUARDABLES if c not in datos]
-        sobran = [c for c in datos if c not in COLUMNAS_GUARDABLES]
+        sobran = [c for c in datos if c not in COLUMNAS_GUARDABLES and c not in COLUMNAS_OPCIONALES]
         if faltan or sobran:
             raise ValueError(f"Columnas inválidas. Faltan: {faltan}; sobran: {sobran}")
 
-        asignaciones = ", ".join(f"{c} = %s" for c in COLUMNAS_GUARDABLES)
-        valores = [datos[c] for c in COLUMNAS_GUARDABLES]
+        columnas = list(COLUMNAS_GUARDABLES) + [c for c in COLUMNAS_OPCIONALES if c in datos]
+        asignaciones = ", ".join(f"{c} = %s" for c in columnas)
+        valores = [datos[c] for c in columnas]
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:

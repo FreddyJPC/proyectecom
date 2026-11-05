@@ -15,6 +15,7 @@ def _fila(**cambios):
         "otros_costos_fijos": Decimal("0.00"),
         "otros_costos_pct": Decimal("0.00"),
         "redondeo": "terminado_99",
+        "tope_redacciones_dia": 20,
         "confirmado_en": None,
         "actualizado_por": None,
         "actualizado_en": AHORA,
@@ -45,6 +46,7 @@ def test_los_valores_de_partida_salen_sin_confirmar():
     r = AjustesService(RepoEnMemoria()).obtener()
     assert (r.margen_minimo_pct, r.margen_objetivo_pct, r.envio_estimado) == ("25.00", "35.00", "5.00")
     assert (r.otros_costos_fijos, r.otros_costos_pct, r.redondeo) == ("0.00", "0.00", "terminado_99")
+    assert r.tope_redacciones_dia == 20
     assert r.confirmado is False and r.calibracion_envio is None
 
 
@@ -60,6 +62,11 @@ def test_guardar_los_deja_confirmados_y_registra_quien():
     assert repo.guardados == [(datos, "freddy@ejemplo.com")]
     assert r.confirmado is True and r.actualizado_por == "freddy@ejemplo.com"
     assert (r.margen_minimo_pct, r.envio_estimado, r.otros_costos_pct, r.redondeo) == ("30.00", "6.50", "3.00", "ninguno")
+
+
+def test_el_tope_de_redacciones_llega_al_objeto_de_dominio_como_entero():
+    ajustes = AjustesService(RepoEnMemoria(_fila(tope_redacciones_dia=35))).obtener_ajustes()
+    assert ajustes.tope_redacciones_dia == 35 and isinstance(ajustes.tope_redacciones_dia, int)
 
 
 def test_el_objeto_de_dominio_usa_decimal_y_refleja_si_esta_confirmado():

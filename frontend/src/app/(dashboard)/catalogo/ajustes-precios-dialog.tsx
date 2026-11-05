@@ -23,6 +23,7 @@ type Formulario = {
   otrosCostosFijos: string;
   otrosCostosPct: string;
   terminado99: boolean;
+  topeRedaccionesDia: string;
 };
 
 function desdeAjustes(a: AjustesNegocio): Formulario {
@@ -33,6 +34,7 @@ function desdeAjustes(a: AjustesNegocio): Formulario {
     otrosCostosFijos: a.otrosCostosFijos,
     otrosCostosPct: a.otrosCostosPct,
     terminado99: a.redondeo === "terminado_99",
+    topeRedaccionesDia: String(a.topeRedaccionesDia),
   };
 }
 
@@ -60,7 +62,11 @@ function revisar(f: Formulario): { cuerpo: GuardarAjustesInput | null; errores: 
     errores.otrosCostosPct = "El margen objetivo más estos costos deben sumar menos de 100 %.";
   }
 
-  if (Object.keys(errores).length > 0 || envio == null || minimo == null || objetivo == null || fijos == null || otros == null) {
+  // Entero de 1 a 200 (mismo rango que el backend y la base).
+  const tope = /^\d{1,3}$/.test(f.topeRedaccionesDia.trim()) ? Number(f.topeRedaccionesDia.trim()) : null;
+  if (tope == null || tope < 1 || tope > 200) errores.topeRedaccionesDia = "Escribe un número entero entre 1 y 200.";
+
+  if (Object.keys(errores).length > 0 || envio == null || minimo == null || objetivo == null || fijos == null || otros == null || tope == null) {
     return { cuerpo: null, errores };
   }
   return {
@@ -71,6 +77,7 @@ function revisar(f: Formulario): { cuerpo: GuardarAjustesInput | null; errores: 
       otrosCostosFijos: fijos,
       otrosCostosPct: otros,
       redondeo: f.terminado99 ? "terminado_99" : "ninguno",
+      topeRedaccionesDia: tope,
     },
     errores,
   };
@@ -91,7 +98,7 @@ export function AjustesPreciosDialog({ trigger, onGuardado }: { trigger: ReactNo
         <DialogHeader>
           <DialogTitle>Ajustes de precios</DialogTitle>
           <DialogDescription>
-            Son los números con los que la app recomienda precios. Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.
+            Son los números con los que la app recomienda precios (y el tope de borradores de IA). Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.
           </DialogDescription>
         </DialogHeader>
 
@@ -280,6 +287,27 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
             <span className="block text-xs text-muted-foreground">Los precios recomendados suben siempre al siguiente .99 (nunca bajan, para no recortar tu margen).</span>
           </span>
         </label>
+
+        <div className="grid gap-2 border-t pt-5">
+          <h3 className="text-sm font-semibold">Redacción con IA</h3>
+          <Campo
+            id="topeRedaccionesDia"
+            label="Borradores de IA por día"
+            error={errores.topeRedaccionesDia}
+            ayuda="Cada borrador que pides usa la IA, y eso tiene costo. Pon el máximo que quieres pedir al día; se reinicia a medianoche (hora de Ecuador)."
+          >
+            <Input
+              id="topeRedaccionesDia"
+              inputMode="numeric"
+              autoComplete="off"
+              value={form.topeRedaccionesDia}
+              onChange={(e) => poner("topeRedaccionesDia", e.target.value)}
+              aria-invalid={Boolean(errores.topeRedaccionesDia)}
+              aria-describedby={descripcionDe("topeRedaccionesDia", true, errores.topeRedaccionesDia)}
+              className="tabular max-w-32"
+            />
+          </Campo>
+        </div>
       </div>
 
       {errorGuardar && (

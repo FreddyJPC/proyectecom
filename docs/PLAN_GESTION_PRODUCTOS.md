@@ -1,8 +1,8 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A y B desplegadas
-> (2026-11-05); Fase C implementada en la rama, pendiente de aplicar la migración
-> 015 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B y C desplegadas
+> (2026-11-05); Fase D implementada en la rama, pendiente de aplicar la migración
+> 016 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -182,10 +182,9 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 - El LLM, si quieres, solo **explica** el resultado en lenguaje llano.
 - No se puede publicar por debajo del piso (ver 7).
 
-> **Estado de la Fase C (2026-11-05):** implementada y probada con tests (526 en
-> total) y contra un servidor falso (entrada 0.0.90 de `PROGRESS.md`); **falta
-> aplicar la migración 015, desplegar, y que Freddy cargue sus números reales
-> (pendiente #52).** Cambios respecto a lo escrito arriba: (1) los ajustes son un
+> **Estado de la Fase C (2026-11-05):** desplegada (entradas 0.0.90 y 0.0.91 de
+> `PROGRESS.md`; 526 tests); **falta que Freddy cargue sus números reales
+> (pendiente #52) y probarla con un producto real.** Cambios respecto a lo escrito arriba: (1) los ajustes son un
 > **cuadro** (desde la ficha y desde *Mis productos*), no una pantalla aparte;
 > (2) la calculadora es `GET /productos-bot/<sku>/precio` (solo lee), no `POST`;
 > (3) `ajustes_negocio` solo trae lo de precios: los topes de IA y la auto-pausa
@@ -220,6 +219,23 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
   que sea corto).
 - Si vendes productos de salud o suplementos, la regla de la casa evita
   promesas médicas o de resultados; **la revisión final es tuya**.
+
+> **Estado de la Fase D (2026-11-05):** implementada y probada con tests (665 en
+> total) y contra un servidor falso (entrada 0.0.92 de `PROGRESS.md`); **falta
+> aplicar la migración 016, desplegar, y probarla con la IA real (pendiente #53):
+> nunca se llamó al modelo de verdad.** Cambios respecto a lo escrito arriba:
+> (1) **no** se generan `resumen_corto` (nada lo lee todavía) ni el *tiempo de
+> entrega propuesto* (es una promesa al cliente: solo el dueño la hace); (2) los
+> *puntos fuertes* van dentro de la descripción; (3) los borradores **no se
+> guardan** (viven en el cuadro hasta que se acepta cada campo y se guarda la
+> ficha), por eso el aviso «alertas sin resolver al publicar» de la sección 9
+> queda para la Fase E; (4) la regla de salud es una **casilla por redacción**,
+> apagada por defecto; (5) el tope diario (20 por defecto) está en
+> `ajustes_negocio` y se ajusta desde *Ajustes de precios*; el tope de pruebas
+> será de la Fase E; (6) además de lo pedido, el **código verifica el borrador**:
+> cifras o códigos que no estén en los datos, precios, promesas de resultados e
+> instrucciones colocadas en el texto; un campo con algo así pasa a *Sugerido
+> por IA* aunque el modelo haya declarado otra fuente.
 
 ### Fase E — Probar con Victoria + lista de verificación
 

@@ -86,6 +86,26 @@ class TestGuardar:
                     cur.execute("insert into ajustes_negocio (id) values (2)")
 
 
+class TestTopeDeRedacciones:
+    def test_por_defecto_es_20(self):
+        assert Repo.obtener()["tope_redacciones_dia"] == 20
+
+    def test_se_guarda_cuando_viene_y_se_conserva_cuando_no(self):
+        assert Repo.guardar({**VALIDOS, "tope_redacciones_dia": 35}, None)["tope_redacciones_dia"] == 35
+        # Un guardado sin el tope (un frontend viejo) NO lo pisa.
+        despues = Repo.guardar({**VALIDOS, "envio_estimado": Decimal("7.00")}, None)
+        assert despues["tope_redacciones_dia"] == 35 and despues["envio_estimado"] == Decimal("7.00")
+
+    @pytest.mark.parametrize("valor", [0, -5, 201])
+    def test_la_base_rechaza_un_tope_fuera_de_rango(self, valor):
+        with pytest.raises(AjustesInvalidosError):
+            Repo.guardar({**VALIDOS, "tope_redacciones_dia": valor}, None)
+
+    def test_rechaza_columnas_desconocidas_aunque_haya_opcionales(self):
+        with pytest.raises(ValueError):
+            Repo.guardar({**VALIDOS, "tope_redacciones_dia": 10, "id": 2}, None)
+
+
 class TestMinimosConCosto:
     def _sembrar(self, costo="10.00"):
         with get_connection() as conn:

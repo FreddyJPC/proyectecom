@@ -99,6 +99,29 @@ export const ACCIONES_HISTORIAL: Record<string, string> = {
   archivado: "Archivado",
   restaurado: "Restaurado como borrador",
   actualizado_rocketfy: "Datos de Rocketfy actualizados",
+  redactado_ia: "Borrador redactado con IA",
+};
+
+/** De dónde sale un texto redactado con IA. «Sugerido por IA» es la señal de
+ * alerta: lo añadió la IA por su cuenta y hay que verificarlo. */
+export const FUENTES_CONTENIDO: Record<string, EstadoInfo & { ayuda: string }> = {
+  rocketfy: { label: "De Rocketfy", variant: "info", ayuda: "Sale de lo que dice Rocketfy." },
+  notas: { label: "De tus notas", variant: "success", ayuda: "Sale de lo que escribiste tú." },
+  mixto: { label: "Rocketfy y tus notas", variant: "info", ayuda: "Combina lo que dice Rocketfy con lo que escribiste tú." },
+  ia: { label: "Sugerido por IA: verifica", variant: "warning", ayuda: "Lo añadió la IA por su cuenta o no se pudo comprobar con tus datos. Verifícalo antes de aceptarlo." },
+};
+
+export function fuenteContenidoInfo(fuente: string | undefined): EstadoInfo & { ayuda: string } {
+  return FUENTES_CONTENIDO[fuente ?? "ia"] ?? FUENTES_CONTENIDO.ia;
+}
+
+/** Nombre legible de cada campo de la ficha tal como los llama la API (camelCase). */
+export const ETIQUETAS_CAMPOS_REDACTABLES: Record<string, string> = {
+  nombre: "Nombre del producto",
+  descripcion: "Descripción",
+  variantes: "Variantes",
+  preguntasFrecuentes: "Preguntas frecuentes",
+  temasNoResponder: "Temas que Victoria NO debe responder",
 };
 
 /** Nombre legible de cada campo que aparece en `cambios` del historial (son

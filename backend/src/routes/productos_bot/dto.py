@@ -99,3 +99,40 @@ class RecomendacionPrecioDTO:
     niveles: List[NivelPrecioDTO]
     evaluacion: Optional[EvaluacionPrecioDTO]
     avisos: List[str]
+
+
+@dataclass
+class CamposContenidoDTO:
+    """Los campos de contenido que redacta la IA. Solo vienen los pedidos."""
+
+    nombre: Optional[str] = None
+    descripcion: Optional[str] = None
+    variantes: Optional[str] = None
+    preguntas_frecuentes: Optional[str] = None
+    temas_no_responder: Optional[str] = None
+
+
+@dataclass
+class AlertaContenidoDTO:
+    campo: Optional[str]  # camelCase; None = alerta general
+    texto: str
+    origen: str  # "ia" (la escribió el modelo) | "verificacion" (la detectó el código)
+
+
+@dataclass
+class UsoIADTO:
+    tope: int
+    usadas: int
+    restantes: int
+
+
+@dataclass
+class BorradorContenidoDTO:
+    """Un borrador de la IA. NO está guardado en ninguna parte: la persona lo
+    acepta, lo edita o lo descarta, y recién entonces pasa a la ficha."""
+
+    campos: CamposContenidoDTO
+    fuentes: CamposContenidoDTO
+    alertas: List[AlertaContenidoDTO]
+    uso: UsoIADTO
+

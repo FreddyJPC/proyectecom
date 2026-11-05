@@ -12,24 +12,33 @@ from src.app import create_app
 from src.integrations.rocketfy import RocketfyRequestError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos_bot.dto import (
+    AlertaContenidoDTO,
+    BorradorContenidoDTO,
+    CamposContenidoDTO,
     EvaluacionPrecioDTO,
     HistorialDTO,
     NivelPrecioDTO,
     ProductoBotDetalleDTO,
     ProductoBotResumenDTO,
     RecomendacionPrecioDTO,
+    UsoIADTO,
     VerificacionDTO,
 )
 from src.routes.productos_bot.exceptions import (
+    IAFalloError,
+    IANoDisponibleError,
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
     PublicacionBloqueadaError,
     SkuInvalidoError,
+    TopeDeIAAlcanzadoError,
     TransicionInvalidaError,
 )
+from src.routes.productos_bot.redaccion import NotasDelDueno
 from tests.conftest import AUTH_HEADER, mock_login_ok
 
 SERVICIO = "src.routes.productos_bot.controllers.ProductosBotService"
+SERVICIO_IA = "src.routes.productos_bot.controllers.ContenidoIAService"
 CORREO_DE_PRUEBA = "freddyjavier556@gmail.com"  # el que devuelve mock_login_ok
 
 
@@ -348,3 +357,145 @@ class TestRecomendarPrecio:
             Servicio.return_value.recomendar_precio.side_effect = ProductoBotNoEncontradoError("no existe")
             resp = _client().get("/productos-bot/NO-EXISTE/precio", headers=AUTH_HEADER)
         assert resp.status_code == 404
+
+
+def _borrador(**cambios):
+    datos = dict(
+        campos=CamposContenidoDTO(nombre="Audífonos", descripcion="Con 20 horas.", preguntas_frecuentes="¿Trae estuche? Sí."),
+        fuentes=CamposContenidoDTO(nombre="mixto", descripcion="rocketfy", preguntas_frecuentes="ia"),
+        alertas=[
+            AlertaContenidoDTO(campo=None, texto="General", origen="ia"),
+            AlertaContenidoDTO(campo="preguntasFrecuentes", texto="Menciona «30»", origen="verificacion"),
+        ],
+        uso=UsoIADTO(tope=20, usadas=3, restantes=17),
+    )
+    datos.update(cambios)
+    return BorradorContenidoDTO(**datos)
+
+
+class TestGenerarContenido:
+    @responses.activate
+    def test_sin_login_es_401(self):
+        assert _client().post("/productos-bot/DEMO-1/contenido/generar", json={}).status_code == 401
+        assert _client().get("/productos-bot/contenido/uso").status_code == 401
+
+    @responses.activate
+    def test_devuelve_el_borrador_en_camel_case_sin_los_campos_que_no_se_pidieron(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.generar.return_value = _borrador()
+            resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json={}, headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        cuerpo = resp.get_json()
+        assert cuerpo["campos"] == {"nombre": "Audífonos", "descripcion": "Con 20 horas.", "preguntasFrecuentes": "¿Trae estuche? Sí."}
+        assert cuerpo["fuentes"] == {"nombre": "mixto", "descripcion": "rocketfy", "preguntasFrecuentes": "ia"}
+        assert cuerpo["alertas"][1] == {"campo": "preguntasFrecuentes", "texto": "Menciona «30»", "origen": "verificacion"}
+        assert cuerpo["alertas"][0]["campo"] is None
+        assert cuerpo["uso"] == {"tope": 20, "usadas": 3, "restantes": 17}
+
+    @responses.activate
+    def test_pasa_las_notas_los_campos_y_el_correo_al_servicio(self):
+        mock_login_ok()
+        cuerpo = {
+            "notas": {"dirigidoA": "  jóvenes  ", "destacar": "batería", "evitar": "", "otrosDatos": "Incluye estuche", "campoRaro": "se ignora"},
+            "productoDeSalud": True,
+            "campos": ["preguntasFrecuentes", "nombre", "nombre"],
+        }
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.generar.return_value = _borrador()
+            _client().post("/productos-bot/DEMO-1/contenido/generar", json=cuerpo, headers=AUTH_HEADER)
+
+        sku, notas, campos, usuario = Servicio.return_value.generar.call_args.args
+        assert sku == "DEMO-1"
+        assert notas == NotasDelDueno(dirigido_a="jóvenes", destacar="batería", evitar="", otros_datos="Incluye estuche", producto_de_salud=True)
+        assert campos == ["preguntas_frecuentes", "nombre"]  # a nombres de columna y sin repetidos
+        assert usuario == CORREO_DE_PRUEBA
+
+    @responses.activate
+    def test_un_cuerpo_vacio_redacta_todo_con_notas_vacias(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.generar.return_value = _borrador()
+            resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json={}, headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        _, notas, campos, _ = Servicio.return_value.generar.call_args.args
+        assert notas == NotasDelDueno() and campos is None
+
+    @responses.activate
+    def test_validaciones_de_entrada_no_llegan_al_servicio(self):
+        invalidos = [
+            {"notas": {"destacar": "x" * 601}},
+            {"notas": {"otrosDatos": "x" * 1501}},
+            {"notas": {"dirigidoA": "x" * 601}},
+            {"campos": ["precio"]},
+            {"campos": ["estado"]},
+            {"campos": []},
+            {"campos": "nombre"},
+            {"productoDeSalud": "quizás"},
+            {"notas": "texto suelto"},
+        ]
+        for cuerpo in invalidos:
+            mock_login_ok()
+            with patch(SERVICIO_IA) as Servicio:
+                resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json=cuerpo, headers=AUTH_HEADER)
+            assert resp.status_code == 422, cuerpo
+            Servicio.return_value.generar.assert_not_called()
+
+    @responses.activate
+    def test_el_tope_alcanzado_es_429_con_el_uso(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.generar.side_effect = TopeDeIAAlcanzadoError(20, 20)
+            resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json={}, headers=AUTH_HEADER)
+
+        assert resp.status_code == 429
+        assert "20 borradores" in resp.get_json()["error"]
+        assert resp.get_json()["uso"] == {"tope": 20, "usadas": 20, "restantes": 0}
+
+    @responses.activate
+    def test_errores_conocidos(self):
+        casos = [
+            (IANoDisponibleError("no configurada"), 503),
+            (IAFalloError("falló"), 502),
+            (ProductoBotNoEncontradoError("no existe"), 404),
+            (TransicionInvalidaError("archivado"), 409),
+            (SkuNoExisteEnRocketfyError("ya no existe"), 422),
+            (RocketfyRequestError("caído"), 502),
+        ]
+        for error, estado in casos:
+            mock_login_ok()
+            with patch(SERVICIO_IA) as Servicio:
+                Servicio.return_value.generar.side_effect = error
+                resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json={}, headers=AUTH_HEADER)
+            assert resp.status_code == estado, error
+
+    @responses.activate
+    def test_el_mensaje_de_un_error_de_la_ia_no_expone_detalles_internos(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.generar.side_effect = IANoDisponibleError("La IA no está configurada correctamente.")
+            resp = _client().post("/productos-bot/DEMO-1/contenido/generar", json={}, headers=AUTH_HEADER)
+        assert set(resp.get_json()) == {"error"}
+
+
+class TestUsoDeLaIA:
+    @responses.activate
+    def test_devuelve_cuantos_borradores_quedan(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Servicio:
+            Servicio.return_value.uso.return_value = UsoIADTO(tope=20, usadas=5, restantes=15)
+            resp = _client().get("/productos-bot/contenido/uso", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert resp.get_json() == {"tope": 20, "usadas": 5, "restantes": 15}
+
+    @responses.activate
+    def test_la_ruta_no_se_confunde_con_el_detalle_de_un_producto(self):
+        mock_login_ok()
+        with patch(SERVICIO_IA) as Uso, patch(SERVICIO) as Productos:
+            Uso.return_value.uso.return_value = UsoIADTO(tope=20, usadas=0, restantes=20)
+            _client().get("/productos-bot/contenido/uso", headers=AUTH_HEADER)
+        Productos.return_value.obtener_detalle.assert_not_called()
+
