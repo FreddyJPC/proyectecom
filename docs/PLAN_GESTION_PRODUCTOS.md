@@ -1,8 +1,7 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B y C desplegadas
-> (2026-11-05); Fase D implementada en la rama, pendiente de aplicar la migración
-> 016 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B, C y D desplegadas
+> (2026-11-05); las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -220,9 +219,8 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 - Si vendes productos de salud o suplementos, la regla de la casa evita
   promesas médicas o de resultados; **la revisión final es tuya**.
 
-> **Estado de la Fase D (2026-11-05):** implementada y probada con tests (665 en
-> total) y contra un servidor falso (entrada 0.0.92 de `PROGRESS.md`); **falta
-> aplicar la migración 016, desplegar, y probarla con la IA real (pendiente #53):
+> **Estado de la Fase D (2026-11-05):** desplegada (entradas 0.0.92 y 0.0.93 de
+> `PROGRESS.md`; 665 tests); **falta probarla con la IA real (pendiente #53):
 > nunca se llamó al modelo de verdad.** Cambios respecto a lo escrito arriba:
 > (1) **no** se generan `resumen_corto` (nada lo lee todavía) ni el *tiempo de
 > entrega propuesto* (es una promesa al cliente: solo el dueño la hace); (2) los
