@@ -82,6 +82,64 @@ class TestActualizacion:
 
         assert (100, 8) in repo.actualizaciones
 
+    def test_soporta_la_forma_real_de_produccion_orders_como_diccionario_por_id(self):
+        # Forma vista en los logs de producción el 2026-11-05 (ids ficticios).
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {
+            "code": 200,
+            "error": "",
+            "status": "OK",
+            "message": "",
+            "orders": {
+                "100": {
+                    "id": 100,
+                    "external_id": 1,
+                    "tracking_code": None,
+                    "status_id": 3,
+                    "status_record": [{"id": 9, "order_id": 100, "status_id": 3}],
+                    "incidence_details": None,
+                    "costs": None,
+                },
+                "101": {"id": 101, "status_id": 8, "status_record": []},
+            },
+        }
+        repo = FakeReconciliacionRepository(ids_en_curso=[100, 101])
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        assert sorted(repo.actualizaciones) == [(100, 3), (101, 8)]
+
+    def test_si_el_pedido_del_diccionario_no_trae_id_se_usa_la_clave(self):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"code": 200, "status": "OK", "orders": {"100": {"status_id": 8}}}
+        repo = FakeReconciliacionRepository(ids_en_curso=[100])
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        assert repo.actualizaciones == [(100, 8)]
+
+    def test_respuesta_ok_con_orders_vacio_no_actualiza_ni_avisa(self, caplog):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"code": 200, "status": "OK", "orders": {}}
+        repo = FakeReconciliacionRepository(ids_en_curso=[100])
+
+        with caplog.at_level("WARNING"):
+            ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        assert repo.actualizaciones == []
+        assert not any("no reconocida" in r.getMessage() for r in caplog.records)
+
+    def test_forma_desconocida_avisa_sin_volcar_la_respuesta_completa(self, caplog):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"algo_inesperado": {"nombre": "dato-sensible-de-cliente"}}
+        repo = FakeReconciliacionRepository(ids_en_curso=[100])
+
+        with caplog.at_level("WARNING"):
+            ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        avisos = [r.getMessage() for r in caplog.records if "no reconocida" in r.getMessage()]
+        assert len(avisos) == 1
+        assert "algo_inesperado" in avisos[0]  # se ven las claves para poder ajustar el parseo
+        assert "dato-sensible-de-cliente" not in avisos[0]  # pero no el contenido
+
     def test_forma_de_respuesta_desconocida_no_rompe_y_no_actualiza(self):
         client = MagicMock()
         client.consultar_pedidos_lote.return_value = {"algo_inesperado": True}
