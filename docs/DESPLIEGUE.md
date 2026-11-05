@@ -1,7 +1,7 @@
 # Guía de despliegue — Railway (backend) + Vercel (frontend)
 
 > Decisión registrada en `PROGRESS.md`, ADR-008: monorepo, backend en
-> Railway, frontend en Vercel, ambos con despliegue automático desde GitHub.
+> Railway, frontend en Vercel, ambos conectados a GitHub (el despliegue automático de Railway NO está comprobado, ver pendiente #48 de `PROGRESS.md`).
 >
 > Los nombres de menús de Railway y Vercel pueden cambiar con el tiempo; si
 > algo no coincide con lo que ves, busca el equivalente y avísame.
