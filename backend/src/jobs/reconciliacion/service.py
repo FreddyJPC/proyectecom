@@ -98,11 +98,19 @@ class ReconciliacionService:
 
     @staticmethod
     def _extraer_pedidos(respuesta) -> List[dict]:
-        """La forma exacta de /orders/bulk/getInfo no está confirmada por
-        el proveedor (PROGRESS.md, dudas al proveedor). Se intentan las
-        claves más probables por analogía con el resto de la API; si
-        ninguna calza, se loguea la respuesta cruda para poder ajustar esto
-        con un caso real en cuanto haya pedidos en curso."""
+        """Forma REAL de /orders/bulk/getInfo, vista en los logs de producción
+        el 2026-11-05 (la guía del proveedor no trae ejemplo):
+
+            {"code": 200, "status": "OK", "error": "", "message": "",
+             "orders": {"288645": {"id": 288645, "external_id": ..., "status_id": 3,
+                                   "status_record": [...], "tracking_code": None, ...},
+                        "288726": {...}}}
+
+        o sea `orders` es un DICCIONARIO indexado por el id del pedido, no una
+        lista. Se siguen aceptando listas (en `orders`, `data` o `content`, o
+        la respuesta misma) por si el proveedor cambia o por analogía con el
+        resto de su API. Si ninguna forma calza se avisa, pero SIN volcar la
+        respuesta completa: puede traer datos de clientes."""
         if isinstance(respuesta, list):
             return respuesta
         if isinstance(respuesta, dict):
@@ -110,7 +118,20 @@ class ReconciliacionService:
                 valor = respuesta.get(clave)
                 if isinstance(valor, list):
                     return valor
-        logger.warning("Forma de respuesta de bulk/getInfo no reconocida, se ignora este lote: %s", respuesta)
+                if isinstance(valor, dict):
+                    pedidos = []
+                    for id_clave, pedido in valor.items():
+                        if not isinstance(pedido, dict):
+                            continue
+                        pedido = dict(pedido)
+                        if not pedido.get("id") and str(id_clave).isdigit():
+                            pedido["id"] = int(id_clave)
+                        pedidos.append(pedido)
+                    return pedidos
+        logger.warning(
+            "Forma de respuesta de bulk/getInfo no reconocida, se ignora este lote (claves: %s)",
+            sorted(respuesta.keys()) if isinstance(respuesta, dict) else type(respuesta).__name__,
+        )
         return []
 
     def _actualizar_uno(self, pedido: dict) -> None:
