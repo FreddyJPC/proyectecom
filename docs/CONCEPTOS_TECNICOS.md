@@ -697,3 +697,31 @@ asignársela también.
 **Cuidado:** el token permite **enviar mensajes en nombre de tu negocio**. Es
 un secreto: vive solo en Railway, nunca en el chat ni en el repositorio, y se
 rota si se filtra.
+
+---
+
+## 23. Latido de la base de datos (heartbeat) y pausa de Supabase
+
+**Qué es la pausa:** en el plan gratuito, Supabase apaga el proyecto si en
+**7 días** recibe poca actividad de base de datos. Los datos no se borran
+(se puede restaurar hasta 1 año después), pero mientras esté pausado el
+backend y el bot no funcionan. Supabase avisa por correo ~1 semana antes.
+
+**Qué cuenta como actividad:** consultas reales a la base (desde la app o
+desde el panel). La documentación dice que "unas pocas por día" suelen bastar,
+pero **no lo garantiza**. Los planes de pago nunca se pausan.
+
+**Qué es un latido (*heartbeat*):** una señal pequeña y periódica que
+demuestra que algo sigue vivo. Aquí, un job (`latido_db`, cada 6 horas) que
+sube en 1 un contador en la tabla `latido` (una sola fila) y lee una tabla
+real. Cuesta casi nada y deja a la base con actividad aunque no escriba
+ningún cliente.
+
+**Por qué `/health` no consulta la base:** Railway usa `/health` para decidir
+si el servicio está sano. Si `/health` dependiera de la base y esta se
+pausara, Railway daría por caído al backend y lo reiniciaría en bucle. Por eso
+`/health` solo *informa* el último latido que el proceso guardó en memoria
+(`latido.ultimo_ok` y `latido.fallos_seguidos`).
+
+**Qué NO resuelve:** si el backend entero está caído, el latido tampoco corre;
+y no reemplaza las copias de seguridad (solo el plan Pro las incluye).

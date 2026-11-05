@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
@@ -7,6 +8,7 @@ from src.config.logging_config import configure_logging
 from src.config.settings import load_settings
 from src.config.supabase_auth import verificar_token
 from src.integrations.rocketfy import get_rocketfy_client
+from src.jobs.latido import LatidoService, estado_latido
 from src.jobs.reconciliacion import ReconciliacionService
 from src.jobs.stock_watcher import StockWatcherService
 from src.routes.catalogos import catalogos_bp
@@ -91,7 +93,10 @@ def create_app() -> Flask:
     def health():
         # `scheduler` permite confirmar desde fuera (curl /health) que los
         # jobs quedaron encendidos en producción, sin tener que leer logs.
-        return jsonify(status="ok", scheduler=_scheduler is not None), 200
+        # `latido` dice cuándo fue el último latido exitoso a la base de
+        # datos (guardado en memoria: /health NO consulta la DB, ver
+        # src/jobs/latido/service.py).
+        return jsonify(status="ok", scheduler=_scheduler is not None, latido=estado_latido()), 200
 
     return app
 
@@ -110,9 +115,24 @@ def _job_stock_watcher() -> None:
         logging.getLogger(__name__).exception("Fallo no controlado en job de stock_watcher")
 
 
+def _job_latido() -> None:
+    try:
+        LatidoService().ejecutar()
+    except Exception:
+        logging.getLogger(__name__).exception("Fallo no controlado en job de latido")
+
+
+# Cada cuánto se escribe el latido. Supabase Free pide "unas pocas consultas
+# por día" (sin garantía): 4 al día da margen sin costo apreciable.
+HORAS_ENTRE_LATIDOS = 6
+# La primera corrida se adelanta tras cada arranque para confirmar rápido que
+# la base responde (si no, tras un despliegue se esperarían 6 h para saberlo).
+SEGUNDOS_HASTA_PRIMER_LATIDO = 30
+
+
 def start_scheduler():
     """Arranca APScheduler (reconciliación cada 45 min, stock watcher cada
-    60 min). Idempotente: create_app() puede ejecutarse más de una vez en
+    60 min, latido de la DB cada 6 h). Idempotente: create_app() puede ejecutarse más de una vez en
     el mismo proceso (import del módulo + factory de Flask) y el bloque
     `__main__` también lo llama -- nunca debe haber dos schedulers.
 
@@ -129,11 +149,20 @@ def start_scheduler():
     scheduler = BackgroundScheduler()
     scheduler.add_job(_job_reconciliacion, "interval", minutes=45, id="reconciliacion_pedidos")
     scheduler.add_job(_job_stock_watcher, "interval", minutes=60, id="stock_watcher")
+    scheduler.add_job(
+        _job_latido,
+        "interval",
+        hours=HORAS_ENTRE_LATIDOS,
+        id="latido_db",
+        next_run_time=datetime.now().astimezone() + timedelta(seconds=SEGUNDOS_HASTA_PRIMER_LATIDO),
+    )
     scheduler.start()
     _scheduler = scheduler
     # Logger propio: el de Flask se llama igual que este módulo ("src.app")
     # y tiene su propio handler, así que un mensaje de __name__ salía doble.
-    logging.getLogger("src.scheduler").info("Scheduler iniciado (reconciliación 45 min, stock watcher 60 min)")
+    logging.getLogger("src.scheduler").info(
+        "Scheduler iniciado (reconciliación 45 min, stock watcher 60 min, latido DB %d h)", HORAS_ENTRE_LATIDOS
+    )
     return scheduler
 
 
