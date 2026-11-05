@@ -186,3 +186,55 @@ class TestManejoDeErrores:
 
         with pytest.raises(LLMRequestError):
             provider.generar_respuesta(system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[])
+
+
+class TestHerramientaForzada:
+    """`forzar_herramienta` sirve para recibir JSON con esquema fijo (Fase D)."""
+
+    def _herramienta(self):
+        return HerramientaLLM(nombre="entregar_borrador", descripcion="d", parametros={"type": "object", "properties": {}})
+
+    def test_forzar_manda_tool_choice(self):
+        provider, cliente = _provider_con_cliente_falso()
+        cliente.messages.create.return_value = _mensaje_anthropic(
+            content=[SimpleNamespace(type="tool_use", id="t1", name="entregar_borrador", input={"nombre": "X"})],
+            stop_reason="tool_use",
+        )
+
+        respuesta = provider.generar_respuesta(
+            system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[self._herramienta()],
+            forzar_herramienta="entregar_borrador",
+        )
+
+        assert cliente.messages.create.call_args.kwargs["tool_choice"] == {"type": "tool", "name": "entregar_borrador"}
+        assert respuesta.llamadas_herramientas[0].entrada == {"nombre": "X"}
+
+    def test_sin_forzar_no_se_manda_tool_choice(self):
+        provider, cliente = _provider_con_cliente_falso()
+        cliente.messages.create.return_value = _mensaje_anthropic(
+            content=[SimpleNamespace(type="text", text="ok")], stop_reason="end_turn"
+        )
+
+        provider.generar_respuesta(system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[self._herramienta()])
+
+        assert "tool_choice" not in cliente.messages.create.call_args.kwargs
+
+    def test_no_se_puede_forzar_una_herramienta_que_no_se_ofrecio(self):
+        provider, cliente = _provider_con_cliente_falso()
+        with pytest.raises(ValueError):
+            provider.generar_respuesta(
+                system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[self._herramienta()],
+                forzar_herramienta="otra",
+            )
+        cliente.messages.create.assert_not_called()
+
+    def test_los_errores_siguen_traduciendose_con_la_herramienta_forzada(self):
+        provider, cliente = _provider_con_cliente_falso()
+        cliente.messages.create.side_effect = anthropic.RateLimitError(
+            "limite", response=_respuesta_http(429), body=None
+        )
+        with pytest.raises(LLMRateLimitError):
+            provider.generar_respuesta(
+                system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[self._herramienta()],
+                forzar_herramienta="entregar_borrador",
+            )

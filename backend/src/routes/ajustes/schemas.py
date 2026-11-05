@@ -8,6 +8,7 @@ from marshmallow import EXCLUDE, Schema, ValidationError, fields, validate, vali
 MAX_DINERO = Decimal("1000")
 MAX_PORCENTAJE = Decimal("99.99")
 CERO = Decimal("0")
+MAX_TOPE_REDACCIONES = 200
 REDONDEOS = ("terminado_99", "ninguno")
 
 
@@ -39,6 +40,11 @@ class GuardarAjustesInputSchema(Schema):
         validate=validate.Range(min=CERO, max=MAX_PORCENTAJE),
     )
     redondeo = fields.Str(required=True, validate=validate.OneOf(REDONDEOS))
+    # Opcional: si no viene, se conserva el tope guardado (ver COLUMNAS_OPCIONALES).
+    # strict: solo enteros (sin esto, 2.5 se convertiría en 2 sin avisar).
+    tope_redacciones_dia = fields.Int(
+        data_key="topeRedaccionesDia", strict=True, validate=validate.Range(min=1, max=MAX_TOPE_REDACCIONES)
+    )
 
     @validates_schema
     def _coherencia(self, data, **kwargs):
@@ -67,6 +73,7 @@ class AjustesRespuestaSchema(Schema):
     otros_costos_fijos = fields.Str(data_key="otrosCostosFijos")
     otros_costos_pct = fields.Str(data_key="otrosCostosPct")
     redondeo = fields.Str()
+    tope_redacciones_dia = fields.Int(data_key="topeRedaccionesDia")
     confirmado = fields.Bool()
     actualizado_por = fields.Str(data_key="actualizadoPor", allow_none=True)
     actualizado_en = fields.Str(data_key="actualizadoEn", allow_none=True)

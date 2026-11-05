@@ -199,7 +199,7 @@ const ACCIONES_BOT = { publicar: [["borrador", "listo"], "activo", "publicado"],
 // Espejo reducido de backend/.../calculadora.py, en centavos enteros.
 let ajustes = {
   margenMinimoPct: "25.00", margenObjetivoPct: "35.00", envioEstimado: "5.00", otrosCostosFijos: "0.00", otrosCostosPct: "0.00",
-  redondeo: "terminado_99", confirmado: false, actualizadoPor: null, actualizadoEn: ago(600),
+  redondeo: "terminado_99", topeRedaccionesDia: 20, confirmado: false, actualizadoPor: null, actualizadoEn: ago(600),
   calibracionEnvio: { observaciones: 2, minimo: "7.20", mediana: "8.47", maximo: "9.10" },
 };
 function recomendacionBot(f, precioTxt, competenciaTxt) {
@@ -247,6 +247,35 @@ function manejarAjustes(req, res, send) {
   });
 }
 
+
+// ---------- Redactar con IA (Fase D) ----------
+// Borrador de mentira, pero con la forma de la API real: fuentes por campo, alertas
+// generales y por campo, y una cifra "inventada" (30) para ver cómo se marca.
+let usadasIA = 3;
+function borradorIA(f, b) {
+  const notas = b.notas || {};
+  const todos = {
+    nombre: f.nombre,
+    descripcion: `${f.nombre} liviano y práctico para el día a día. ${notas.destacar ? "Destaca: " + notas.destacar + ". " : ""}Dura hasta 30 horas de uso.`,
+    variantes: "Negro, blanco",
+    preguntasFrecuentes: "¿Incluye estuche? Sí.\n¿Funciona con Android y iPhone? Sí.\n¿Cuánto tarda la entrega? Eso lo confirma una persona.",
+    temasNoResponder: "Garantía, devoluciones, usos médicos",
+  };
+  const fuentes = { nombre: "rocketfy", descripcion: "ia", variantes: "notas", preguntasFrecuentes: "mixto", temasNoResponder: "ia" };
+  let alertas = [
+    { campo: null, texto: "No hay datos sobre la garantía, así que no se mencionó.", origen: "ia" },
+    { campo: "descripcion", texto: "Menciona «30», que no aparece en los datos de Rocketfy ni en tus notas. Verifica que sea cierto o bórralo.", origen: "verificacion" },
+    { campo: "preguntasFrecuentes", texto: "La respuesta sobre Android y iPhone viene de Rocketfy: confírmala.", origen: "ia" },
+  ];
+  if (b.productoDeSalud) alertas.push({ campo: "descripcion", texto: "Producto de salud: no debe prometer ni sugerir beneficios; revísalo con cuidado antes de aceptarlo.", origen: "verificacion" });
+  if (String(notas.otrosDatos || "").includes("INYECCION")) alertas.unshift({ campo: null, texto: "El texto de Rocketfy contiene frases que parecen instrucciones («Ignora las instrucciones»). Se trataron como datos y se ignoraron; revisa el borrador con más cuidado.", origen: "verificacion" });
+  const pedidos = Array.isArray(b.campos) && b.campos.length ? b.campos : Object.keys(todos);
+  const campos = {}, fu = {};
+  for (const c of pedidos) { campos[c] = todos[c]; fu[c] = fuentes[c]; }
+  alertas = alertas.filter((a) => a.campo === null || pedidos.includes(a.campo));
+  return { campos, fuentes: fu, alertas };
+}
+
 function manejarProductosBot(req, res, p, q, send) {
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -264,6 +293,19 @@ function manejarProductosBot(req, res, p, q, send) {
       hist(f, "creado", { desde: "rocketfy" }); productosBot.unshift(f);
       return send(detalleBot(f), 201);
     }
+    if (p === "/productos-bot/contenido/uso") { const tope = ajustes.topeRedaccionesDia; return send({ tope, usadas: usadasIA, restantes: Math.max(0, tope - usadasIA) }); }
+    const g = p.match(/^\/productos-bot\/([^/]+)\/contenido\/generar$/);
+    if (g && req.method === "POST") {
+      const f = productosBot.find((x) => x.sku === decodeURIComponent(g[1]));
+      if (!f) return send({ error: `No existe el producto '${decodeURIComponent(g[1])}'.` }, 404);
+      if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede editar: restáuralo primero." }, 409);
+      const tope = ajustes.topeRedaccionesDia;
+      if (usadasIA >= tope) return send({ error: `Ya usaste los ${tope} borradores de IA de hoy. El contador se reinicia a medianoche (hora de Ecuador); puedes subir el tope en Ajustes de precios.`, uso: { tope, usadas: usadasIA, restantes: 0 } }, 429);
+      if (String(body.notas?.otrosDatos || "").includes("SIN_IA")) return send({ error: "La redacción con IA no está configurada en el servidor." }, 503);
+      usadasIA += 1;
+      hist(f, "redactado_ia", { campos: (Array.isArray(body.campos) && body.campos.length ? body.campos : ["nombre", "descripcion", "variantes", "preguntas_frecuentes", "temas_no_responder"]).map((c) => c.replace(/[A-Z]/g, (m) => "_" + m.toLowerCase())) });
+      return setTimeout(() => send({ ...borradorIA(f, body), uso: { tope, usadas: usadasIA, restantes: Math.max(0, tope - usadasIA) } }), Number(process.env.DELAY_IA || 600));
+    }
     const m = p.match(/^\/productos-bot\/([^/]+)(?:\/([a-z-]+))?$/);
     if (!m) return send({ error: "mock: ruta no implementada " + p }, 404);
     const f = productosBot.find((x) => x.sku === decodeURIComponent(m[1]));
@@ -274,7 +316,8 @@ function manejarProductosBot(req, res, p, q, send) {
     if (!accion && req.method === "PATCH") {
       if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede editar: restáuralo primero." }, 409);
       const cambios = {};
-      for (const [k, v] of Object.entries(body)) if (JSON.stringify(f[k]) !== JSON.stringify(v)) { cambios[k] = [f[k] ?? null, v]; }
+      const columna = (k) => k.replace(/[A-Z]/g, (m) => "_" + m.toLowerCase()).replace("metodos_pago", "metodos_pago_aceptados");
+      for (const [k, v] of Object.entries(body)) if (JSON.stringify(f[k]) !== JSON.stringify(v)) { cambios[columna(k)] = [f[k] ?? null, v]; }
       const antes = new Set(verificarBot(f).bloqueos);
       const propuesto = { ...f, ...body };
       if (f.estado === "activo") { const peor = verificarBot(propuesto).bloqueos.filter((b) => !antes.has(b)); if (peor.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos: peor }, 422); }

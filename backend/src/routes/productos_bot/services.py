@@ -351,6 +351,11 @@ class ProductosBotService:
             raise ProductoBotNoEncontradoError(f"No existe un producto con el SKU '{sku}'.")
         return fila
 
+    def consultar_rocketfy(self, sku: str) -> Optional[dict]:
+        """El producto de Rocketfy con ese SKU EXACTO (en vivo), o None si no
+        existe. Lo usan otros servicios (p. ej. la redacción con IA)."""
+        return self._buscar_en_rocketfy(sku)
+
     def _buscar_en_rocketfy(self, sku: str) -> Optional[dict]:
         """Coincidencia EXACTA de SKU (sin distinguir mayúsculas): la búsqueda
         `q` de Rocketfy también devuelve productos parecidos."""

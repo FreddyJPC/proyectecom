@@ -1,4 +1,4 @@
-from marshmallow import EXCLUDE, Schema, ValidationError, fields, post_load, validate, validates_schema
+from marshmallow import EXCLUDE, Schema, ValidationError, fields, post_dump, post_load, validate, validates_schema
 
 from .verificacion import METODOS_PAGO_VALIDOS
 
@@ -79,6 +79,56 @@ class EditarProductoBotInputSchema(Schema):
         return data
 
 
+MAX_NOTA_CORTA = 600
+MAX_NOTA_LARGA = 1500
+CAMPOS_REDACTABLES_CAMEL = {
+    "nombre": "nombre",
+    "descripcion": "descripcion",
+    "variantes": "variantes",
+    "preguntasFrecuentes": "preguntas_frecuentes",
+    "temasNoResponder": "temas_no_responder",
+}
+
+
+class NotasInputSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    dirigido_a = fields.Str(data_key="dirigidoA", load_default="", validate=validate.Length(max=MAX_NOTA_CORTA))
+    destacar = fields.Str(load_default="", validate=validate.Length(max=MAX_NOTA_CORTA))
+    evitar = fields.Str(load_default="", validate=validate.Length(max=MAX_NOTA_CORTA))
+    otros_datos = fields.Str(data_key="otrosDatos", load_default="", validate=validate.Length(max=MAX_NOTA_LARGA))
+
+
+class GenerarContenidoInputSchema(Schema):
+    """POST .../contenido/generar. Las notas son el material del dueño; `campos`
+    permite «Regenerar» uno solo (si no viene, se redactan todos)."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    notas = fields.Nested(NotasInputSchema, load_default=dict)
+    producto_de_salud = fields.Bool(data_key="productoDeSalud", load_default=False)
+    campos = fields.List(
+        fields.Str(validate=validate.OneOf(list(CAMPOS_REDACTABLES_CAMEL))),
+        load_default=None,
+        validate=validate.Length(min=1, max=len(CAMPOS_REDACTABLES_CAMEL)),
+    )
+
+    @post_load
+    def _normalizar(self, data, **kwargs):
+        for clave in ("dirigido_a", "destacar", "evitar", "otros_datos"):
+            data["notas"][clave] = (data["notas"].get(clave) or "").strip()
+        if data["campos"] is not None:
+            vistos = []
+            for c in data["campos"]:
+                nombre = CAMPOS_REDACTABLES_CAMEL[c]
+                if nombre not in vistos:
+                    vistos.append(nombre)
+            data["campos"] = vistos
+        return data
+
+
 class VerificacionSchema(Schema):
     bloqueos = fields.List(fields.Str())
     avisos = fields.List(fields.Str())
@@ -133,6 +183,37 @@ class ProductoBotDetalleSchema(Schema):
     historial = fields.List(fields.Nested(HistorialSchema))
 
 
+class CamposContenidoSchema(Schema):
+    nombre = fields.Str()
+    descripcion = fields.Str()
+    variantes = fields.Str()
+    preguntas_frecuentes = fields.Str(data_key="preguntasFrecuentes")
+    temas_no_responder = fields.Str(data_key="temasNoResponder")
+
+    @post_dump
+    def _quitar_los_que_no_se_pidieron(self, data, **kwargs):
+        return {k: v for k, v in data.items() if v is not None}
+
+
+class AlertaContenidoSchema(Schema):
+    campo = fields.Str(allow_none=True)
+    texto = fields.Str()
+    origen = fields.Str()
+
+
+class UsoIASchema(Schema):
+    tope = fields.Int()
+    usadas = fields.Int()
+    restantes = fields.Int()
+
+
+class BorradorContenidoSchema(Schema):
+    campos = fields.Nested(CamposContenidoSchema)
+    fuentes = fields.Nested(CamposContenidoSchema)
+    alertas = fields.List(fields.Nested(AlertaContenidoSchema))
+    uso = fields.Nested(UsoIASchema)
+
+
 class NivelPrecioSchema(Schema):
     clave = fields.Str()
     nombre = fields.Str()
@@ -170,3 +251,6 @@ editar_input_schema = EditarProductoBotInputSchema()
 resumen_lista_schema = ProductoBotResumenSchema(many=True)
 detalle_schema = ProductoBotDetalleSchema()
 recomendacion_precio_schema = RecomendacionPrecioSchema()
+generar_contenido_input_schema = GenerarContenidoInputSchema()
+borrador_contenido_schema = BorradorContenidoSchema()
+uso_ia_schema = UsoIASchema()

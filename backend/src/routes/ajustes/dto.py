@@ -22,6 +22,8 @@ class AjustesNegocio:
     otros_costos_fijos: Decimal = Decimal("0.00")
     otros_costos_pct: Decimal = Decimal("0.00")
     redondeo: str = "terminado_99"
+    # Borradores de IA permitidos por día (propuesta del plan: 20). Cada uno cuesta plata.
+    tope_redacciones_dia: int = 20
     confirmado: bool = False
     actualizado_por: Optional[str] = None
     actualizado_en: Optional[str] = None
@@ -46,6 +48,7 @@ class AjustesRespuestaDTO:
     otros_costos_fijos: str
     otros_costos_pct: str
     redondeo: str
+    tope_redacciones_dia: int
     confirmado: bool
     actualizado_por: Optional[str]
     actualizado_en: Optional[str]

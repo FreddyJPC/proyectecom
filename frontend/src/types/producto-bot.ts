@@ -144,14 +144,67 @@ export type AjustesNegocio = {
   otrosCostosFijos: string;
   otrosCostosPct: string;
   redondeo: Redondeo;
+  /** Borradores de IA que se pueden pedir por día (cada uno tiene costo). */
+  topeRedaccionesDia: number;
   confirmado: boolean;
   actualizadoPor: string | null;
   actualizadoEn: string | null;
   calibracionEnvio: CalibracionEnvio | null;
 };
 
-/** Cuerpo del PUT /ajustes/negocio: siempre los seis ajustes completos. */
+/** Cuerpo del PUT /ajustes/negocio: los seis ajustes de precios completos y el tope de IA. */
 export type GuardarAjustesInput = Pick<
   AjustesNegocio,
-  "margenMinimoPct" | "margenObjetivoPct" | "envioEstimado" | "otrosCostosFijos" | "otrosCostosPct" | "redondeo"
+  "margenMinimoPct" | "margenObjetivoPct" | "envioEstimado" | "otrosCostosFijos" | "otrosCostosPct" | "redondeo" | "topeRedaccionesDia"
 >;
+
+// ---------------------------------------------------------------------------
+// Redactar con IA (Fase D). Espejo de backend/src/routes/productos_bot/schemas.py.
+// El borrador NO está guardado en ninguna parte: pasa a la ficha solo cuando la
+// persona lo acepta, y se guarda cuando pulsa «Guardar cambios».
+// ---------------------------------------------------------------------------
+
+/** Los campos de la ficha que la IA puede redactar (nombres como en la API). */
+export type CampoRedactable = "nombre" | "descripcion" | "variantes" | "preguntasFrecuentes" | "temasNoResponder";
+
+export const CAMPOS_REDACTABLES: CampoRedactable[] = ["nombre", "descripcion", "variantes", "preguntasFrecuentes", "temasNoResponder"];
+
+/** De dónde sale un texto: Rocketfy, las notas de la persona, ambos, o lo añadió la IA por su cuenta. */
+export type FuenteContenido = "rocketfy" | "notas" | "mixto" | "ia";
+
+export type AlertaContenido = {
+  /** `null` = alerta general, de todo el borrador. */
+  campo: CampoRedactable | null;
+  texto: string;
+  /** "ia": la escribió el modelo; "verificacion": la detectó el código al revisar el texto. */
+  origen: "ia" | "verificacion";
+};
+
+export type UsoIA = {
+  tope: number;
+  usadas: number;
+  restantes: number;
+};
+
+export type BorradorContenido = {
+  /** Solo vienen los campos que se pidieron. */
+  campos: Partial<Record<CampoRedactable, string>>;
+  fuentes: Partial<Record<CampoRedactable, FuenteContenido>>;
+  alertas: AlertaContenido[];
+  uso: UsoIA;
+};
+
+export type NotasParaIA = {
+  dirigidoA: string;
+  destacar: string;
+  evitar: string;
+  otrosDatos: string;
+};
+
+export type GenerarContenidoInput = {
+  notas: NotasParaIA;
+  productoDeSalud: boolean;
+  /** Si no viene, se redactan todos. Un solo campo = «Regenerar». */
+  campos?: CampoRedactable[];
+};
+

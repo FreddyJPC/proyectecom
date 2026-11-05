@@ -42,6 +42,17 @@ for (const theme of ["light", "dark"]) {
         await page.waitForTimeout(300);
         await auditar(r + " [ajustes abierto]");
         await page.keyboard.press("Escape");
+
+        // Redactar con IA: se audita el paso de las notas y el del borrador.
+        await page.getByRole("button", { name: "Redactar con IA" }).click();
+        await page.getByLabel("¿A quién va dirigido?").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [ia notas]");
+        await page.getByRole("button", { name: "Redactar borrador" }).click();
+        await page.getByRole("button", { name: "Aceptar", exact: true }).first().waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [ia borrador]");
+        await page.keyboard.press("Escape");
       }
     }
     await ctx.close();
