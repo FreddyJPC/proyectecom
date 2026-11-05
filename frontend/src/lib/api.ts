@@ -6,10 +6,24 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** Motivos concretos por los que el backend rechazó una acción (p. ej.
+     * por qué un producto no se puede publicar). Vacío si no los hay. */
+    public bloqueos: string[] = [],
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Los errores de validación del backend llegan como `detalle: { campo: [mensajes] }`;
+ * se aplanan a "campo: mensaje" para poder mostrarlos como lista. */
+function aplanarDetalle(detalle: unknown): string[] {
+  if (!detalle || typeof detalle !== "object") return [];
+  return Object.entries(detalle as Record<string, unknown>).flatMap(([campo, mensajes]) =>
+    (Array.isArray(mensajes) ? mensajes : [mensajes])
+      .filter((m): m is string => typeof m === "string")
+      .map((m) => `${campo}: ${m}`),
+  );
 }
 
 /** Cliente mínimo hacia el backend Flask, desde Client Components. Adjunta
@@ -36,7 +50,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.error ?? `Error ${res.status} llamando a ${path}`, res.status);
+    const motivos = Array.isArray(body.bloqueos) ? body.bloqueos.filter((b: unknown) => typeof b === "string") : aplanarDetalle(body.detalle);
+    throw new ApiError(body.error ?? `Error ${res.status} llamando a ${path}`, res.status, motivos);
   }
 
   return res.json() as Promise<T>;

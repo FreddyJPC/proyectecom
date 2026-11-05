@@ -786,3 +786,29 @@ pausado) falla cerrado.
 **Caché:** guardar un dato unos minutos en memoria para no pedirlo de nuevo cada
 vez. El stock se guarda 5 minutos; pero justo antes de crear un pedido real se
 pide el dato fresco, porque ahí un dato viejo sí cuesta dinero.
+
+---
+
+## 27. Estado de un producto y la regla que lo protege (`CHECK`)
+
+Un producto de ventas pasa por **estados**: `borrador` (recién creado, nadie lo
+ve), `listo`, `activo` (**el único que Victoria ofrece**), `pausado`, `agotado` y
+`archivado`. Cada cambio de estado queda en el historial.
+
+Antes de la Fase B ya existía una columna `activo` (sí/no) que Victoria usa para
+decidir qué vender. Tener dos columnas que dicen casi lo mismo (`estado` y
+`activo`) es peligroso: si alguna vez dicen cosas distintas, ¿Victoria vende o no?
+
+Para que eso sea **imposible**, la base de datos tiene una **restricción
+`CHECK`**: una regla que Postgres comprueba en cada escritura y que rechaza el
+cambio si no se cumple. Aquí la regla es «`activo` es verdadero **si y solo si**
+`estado` es `activo`». Aunque alguien se equivoque en el código, o edite la tabla
+a mano con SQL, la base se niega a guardar una fila contradictoria. Es una red de
+seguridad que no depende de que el programa esté bien escrito.
+
+Dos detalles:
+- El estado nuevo tiene valor por defecto `activo`, así el script antiguo de
+  carga (que no conoce `estado`) sigue creando productos activos. Los productos
+  creados desde la app sí nacen como `borrador`.
+- Publicar o reanudar **consulta Rocketfy en vivo** antes de cambiar el estado y
+  falla cerrado (ver §26): si Rocketfy no responde, el producto no se publica.

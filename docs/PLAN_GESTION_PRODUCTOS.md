@@ -1,8 +1,8 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fase A implementada en
-> la rama, pendiente de aplicar la migración 013 y desplegar; las demás fases,
-> sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fase A desplegada
+> (2026-11-05); Fase B implementada en la rama, pendiente de aplicar la migración
+> 014 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -157,6 +157,16 @@ producto activo desde el teléfono, aunque el precio y el texto los escribas tú
 
 *Listo cuando:* creas, publicas, pausas y reanudas un producto real desde el
 teléfono, y la siguiente conversación de Victoria lo refleja.
+
+> **Estado de la Fase B (2026-11-05):** implementada y probada con tests y contra
+> un servidor falso (entrada 0.0.88 de `PROGRESS.md`); **falta aplicar la
+> migración 014, desplegar y probar con un producto real.** Cambios respecto a lo
+> escrito arriba: no se amplió `GET /productos` (el módulo nuevo busca el SKU
+> exacto con el cliente de Rocketfy que ya existía); *Archivar* solo está en la
+> ficha; de las 5 secciones de la ficha hoy están la 1 (datos de Rocketfy), la 3
+> (manual), la 4 (reglas) y una versión simple de la 2 (piso de precio y
+> diferencia con el costo); la 5 se completa en la Fase E y *Redactar con IA* en
+> la Fase D.
 
 ### Fase C — Precio recomendado
 

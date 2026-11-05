@@ -1,0 +1,150 @@
+"use client";
+
+import { FilePenLine, PackageOpen, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { FilterChips, type Chip } from "@/components/app/filter-chips";
+import { ListSkeleton } from "@/components/app/list-skeleton";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { estadoProductoBotInfo } from "@/lib/estados";
+import { formatMoney, tiempoRelativo } from "@/lib/format";
+import type { EstadoProductoBot, ProductoBotResumen } from "@/types/producto-bot";
+
+import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "./accion-estado";
+import { fichaHref } from "./preparar-boton";
+
+// Igual que en el catálogo: sin un mínimo definido, "poco stock" es una referencia general.
+const POCO_STOCK = 5;
+
+type Filtro = "todos" | "venta" | "borradores" | "pausados" | "archivados";
+
+const ESTADOS_DEL_FILTRO: Record<Exclude<Filtro, "todos">, EstadoProductoBot[]> = {
+  venta: ["activo"],
+  borradores: ["borrador", "listo"],
+  pausados: ["pausado", "agotado"],
+  archivados: ["archivado"],
+};
+
+function coincide(p: ProductoBotResumen, filtro: Filtro): boolean {
+  if (filtro === "todos") return p.estado !== "archivado";
+  return ESTADOS_DEL_FILTRO[filtro].includes(p.estado);
+}
+
+/** Pestaña "Mis productos": los productos que tienen ficha de ventas, con su
+ * estado. Solo los que están "A la venta" los ve Victoria. */
+export function MisProductosTab({
+  items,
+  cargando,
+  error,
+  recargar,
+  onIrAlCatalogo,
+}: {
+  items: ProductoBotResumen[] | null;
+  cargando: boolean;
+  error: string | null;
+  recargar: () => void;
+  onIrAlCatalogo: () => void;
+}) {
+  const [filtro, setFiltro] = useState<Filtro>("todos");
+
+  const chips: Chip[] = [
+    { value: "todos", label: "Todos" },
+    { value: "venta", label: "A la venta", count: items?.filter((p) => coincide(p, "venta")).length },
+    { value: "borradores", label: "Borradores", count: items?.filter((p) => coincide(p, "borradores")).length },
+    { value: "pausados", label: "Pausados", count: items?.filter((p) => coincide(p, "pausados")).length },
+    { value: "archivados", label: "Archivados", count: items?.filter((p) => coincide(p, "archivados")).length },
+  ];
+
+  const visibles = items?.filter((p) => coincide(p, filtro)) ?? [];
+
+  return (
+    <>
+      <p className="max-w-prose text-sm text-muted-foreground">
+        Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados.
+      </p>
+
+      <FilterChips chips={chips} value={filtro} onChange={(v) => setFiltro(v as Filtro)} label="Filtrar por estado" />
+
+      <Card className="gap-0 overflow-hidden py-0">
+        {cargando ? (
+          <ListSkeleton filas={4} />
+        ) : error && !items ? (
+          <EmptyState
+            icon={TriangleAlert}
+            tone="danger"
+            title="No se pudieron cargar tus productos"
+            description={error}
+            action={
+              <Button variant="outline" onClick={recargar}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : visibles.length === 0 ? (
+          items && items.length === 0 ? (
+            <EmptyState
+              icon={PackageOpen}
+              title="Aún no preparaste ningún producto"
+              description="Ve al Catálogo y pulsa «Preparar para vender» en un producto de Rocketfy. Se crea como borrador y Victoria no lo ve hasta que lo publiques."
+              action={<Button onClick={onIrAlCatalogo}>Ir al Catálogo</Button>}
+            />
+          ) : (
+            <EmptyState icon={PackageOpen} title="Nada en este filtro" description="Prueba con otro filtro para ver tus demás productos." />
+          )
+        ) : (
+          <ul className="divide-y">
+            {visibles.map((p) => {
+              const estado = estadoProductoBotInfo(p.estado);
+              const agotado = p.stockUltimo != null && p.stockUltimo <= 0;
+              const bajo = p.stockUltimo != null && !agotado && p.stockUltimo <= POCO_STOCK;
+              const principal = ACCIONES_POR_ESTADO[p.estado][0];
+              return (
+                <li key={p.sku} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5">
+                  <div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-auto">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Link href={fichaHref(p.sku)} className="rounded-sm font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+                        {p.nombre}
+                      </Link>
+                      <StatusBadge label={estado.label} variant={estado.variant} className="h-5 px-2 text-[0.7rem]" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="tabular">{p.sku}</span>
+                      {p.actualizadoEn && <> · actualizado {tiempoRelativo(p.actualizadoEn)}</>}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 sm:gap-6">
+                    <div className="w-20 sm:text-right">
+                      <p className="text-xs text-muted-foreground">Precio</p>
+                      <p className="tabular font-semibold">{formatMoney(p.precio)}</p>
+                    </div>
+                    <div className="w-28">
+                      <p className="text-xs text-muted-foreground">Stock</p>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular font-semibold">{p.stockUltimo ?? "—"}</span>
+                        {agotado ? <StatusBadge label="Agotado" variant="danger" className="h-5 px-2 text-[0.7rem]" /> : bajo ? <StatusBadge label="Bajo" variant="warning" className="h-5 px-2 text-[0.7rem]" /> : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <AccionEstadoBoton accion={principal} producto={p} onHecho={recargar} />
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={fichaHref(p.sku)} aria-label={`Abrir la ficha de ${p.nombre}`}>
+                        <FilePenLine /> Ficha
+                      </Link>
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+    </>
+  );
+}

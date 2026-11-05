@@ -11,16 +11,30 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useApi } from "@/hooks/use-api";
+import { estadoProductoBotInfo } from "@/lib/estados";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CatalogoRocketfy, SkuMonitoreado } from "@/types/producto";
+import type { ProductoBotResumen } from "@/types/producto-bot";
 
 import { MonitorearDialog } from "./monitorear-dialog";
+import { PrepararBoton } from "./preparar-boton";
 
 // Sin un mínimo definido por el dueño, "poco stock" es una referencia general.
 const POCO_STOCK = 5;
 
-export function CatalogoTab({ monitoreados, onCambio }: { monitoreados: SkuMonitoreado[]; onCambio: () => void }) {
+export function CatalogoTab({
+  monitoreados,
+  onCambio,
+  misProductos,
+  onProductoPreparado,
+}: {
+  monitoreados: SkuMonitoreado[];
+  onCambio: () => void;
+  /** Productos que ya tienen ficha de ventas (cualquier estado, archivados incluidos). */
+  misProductos: ProductoBotResumen[];
+  onProductoPreparado: () => void;
+}) {
   const [entrada, setEntrada] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -38,6 +52,7 @@ export function CatalogoTab({ monitoreados, onCambio }: { monitoreados: SkuMonit
   const { data, error, cargando, actualizando, recargar } = useApi<CatalogoRocketfy>(`/productos?${params}`);
 
   const porSku = new Map(monitoreados.filter((m) => m.activo).map((m) => [m.sku, m]));
+  const fichas = new Map(misProductos.map((f) => [f.sku, f]));
 
   return (
     <>
@@ -72,13 +87,18 @@ export function CatalogoTab({ monitoreados, onCambio }: { monitoreados: SkuMonit
           <ul className="divide-y">
             {data?.data.map((p) => {
               const vigilado = porSku.get(p.sku);
+              const ficha = fichas.get(p.sku);
+              const estadoFicha = ficha ? estadoProductoBotInfo(ficha.estado) : null;
               const umbral = vigilado?.umbralStockMinimo ?? POCO_STOCK;
               const agotado = p.stock <= 0;
               const bajo = !agotado && p.stock <= umbral;
               return (
                 <li key={p.sku} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5">
                   <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-                    <p className="font-medium">{p.name}</p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="font-medium">{p.name}</p>
+                      {estadoFicha && <StatusBadge label={estadoFicha.label} variant={estadoFicha.variant} className="h-5 px-2 text-[0.7rem]" />}
+                    </div>
                     <p className="tabular text-xs text-muted-foreground">{p.sku}</p>
                   </div>
 
@@ -96,7 +116,8 @@ export function CatalogoTab({ monitoreados, onCambio }: { monitoreados: SkuMonit
                     </div>
                   </div>
 
-                  <div className="ml-auto sm:ml-0 sm:w-36 sm:text-right">
+                  <div className="ml-auto flex flex-wrap items-center justify-end gap-2 sm:ml-0">
+                    <PrepararBoton sku={p.sku} existente={ficha} onCreado={onProductoPreparado} />
                     <MonitorearDialog
                       sku={p.sku}
                       umbralInicial={vigilado?.umbralStockMinimo}

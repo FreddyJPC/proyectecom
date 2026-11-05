@@ -45,9 +45,23 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.route("**/pedidos?*", (r) => r.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 20 } }));
   await page.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
   await shot(page, "m-vacio-pedidos");
+
+  // ---- Mis productos (Fase B): publicar bloqueado, editar con barra de guardado
+  await page.goto(BASE + "/catalogo?tab=mis-productos", { waitUntil: "networkidle" });
+  const filaBorrador = page.getByRole("listitem").filter({ hasText: "Lámpara LED Recargable" });
+  await filaBorrador.getByRole("button", { name: "Publicar" }).click();
+  await shot(page, "m-productos-publicar-confirmar");
+  await page.getByRole("button", { name: "Sí, publicar" }).click();
+  await page.getByRole("alert").waitFor();
+  await shot(page, "m-productos-publicar-bloqueado");
+  await page.keyboard.press("Escape");
+
+  await page.goto(BASE + "/catalogo/producto/AUD-BT-001", { waitUntil: "networkidle" });
+  await page.getByLabel("Precio de venta (USD)").fill("8");
+  await page.getByLabel("Tiempo de entrega").fill("");
+  await shot(page, "m-ficha-editando");
   await ctx.close();
 }
-// ---- ESCRITORIO
 {
   const { ctx, page } = await sesion({ width: 1440, height: 900 }, false);
   await page.goto(BASE + "/pedidos/nuevo?nombreCliente=Mar%C3%ADa%20Loor&telefono=593987654321&direccion=Av.%209%20de%20Octubre&provincia=Guayas&canton=Guayaquil&productoSku=AUD-BT-001&productoNombre=Aud%C3%ADfonos%20Bluetooth%20Pro&total=8", { waitUntil: "networkidle" });
@@ -72,6 +86,34 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByLabel("Escribe una respuesta").fill("Hola María, soy Freddy. Te llamo ahora mismo.");
   await page.keyboard.press("Enter");
   await shot(page, "d-chat-enviado");
+
+  // ---- Mis productos (Fase B): crear desde el catálogo, guardar, publicar y pausar
+  await page.goto(BASE + "/catalogo", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Preparar para vender" }).first().click();
+  await page.waitForURL(/\/catalogo\/producto\//);
+  await page.getByRole("heading", { level: 1 }).waitFor();
+  await shot(page, "d-ficha-recien-creada");
+
+  await page.goto(BASE + "/catalogo/producto/LMP-LED-220", { waitUntil: "networkidle" });
+  await page.getByLabel("Tiempo de entrega").fill("2 a 4 días hábiles");
+  await page.getByLabel("Precio de venta (USD)").fill("9.50");
+  await shot(page, "d-ficha-editando-precio-bajo");
+  await page.getByLabel("Precio de venta (USD)").fill("24.99");
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await page.getByRole("button", { name: "Guardar cambios" }).waitFor({ state: "detached" });
+  await shot(page, "d-ficha-guardada");
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await shot(page, "d-ficha-publicar-confirmar");
+  await page.getByRole("button", { name: "Sí, publicar" }).click();
+  await page.getByText("A la venta").first().waitFor();
+  await shot(page, "d-ficha-publicada");
+  await page.getByRole("button", { name: "Pausar" }).click();
+  await page.getByRole("button", { name: "Sí, pausar" }).click();
+  await page.getByText("Pausado").first().waitFor();
+  await shot(page, "d-ficha-pausada");
+
+  await page.goto(BASE + "/catalogo/producto/NO-EXISTE", { waitUntil: "networkidle" });
+  await shot(page, "d-ficha-no-existe");
   await ctx.close();
 }
 // ---- TABLET
