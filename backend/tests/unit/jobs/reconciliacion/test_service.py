@@ -92,19 +92,53 @@ class TestActualizacion:
         assert repo.lock_liberado is True
 
 
-class TestParticionDeRangos:
-    def test_particiona_por_rango_no_por_cantidad_de_ids(self):
+class TestVentanas:
+    def test_ids_lejanos_hacen_una_consulta_por_grupo_no_una_por_cada_1000_del_rango(self):
         client = MagicMock()
         client.consultar_pedidos_lote.return_value = {"orders": []}
         repo = FakeReconciliacionRepository(ids_en_curso=[1, 500_000])  # solo 2 ids, rango enorme
 
-        ReconciliacionService(client=client, repo=repo, tamano_maximo_rango=1000).ejecutar()
+        ReconciliacionService(client=client, repo=repo).ejecutar()
 
-        assert client.consultar_pedidos_lote.call_count == 500
-        primera = client.consultar_pedidos_lote.call_args_list[0].args
-        ultima = client.consultar_pedidos_lote.call_args_list[-1].args
-        assert primera == (1, 1000)
-        assert ultima == (499001, 500000)
+        llamadas = [c.args for c in client.consultar_pedidos_lote.call_args_list]
+        assert llamadas == [(1, 1), (500_000, 500_000)]
+
+    def test_con_los_ids_reales_de_produccion_son_tres_consultas_todas_dentro_del_limite(self):
+        # Ids con id_rocketfy en curso el 2026-11-05: antes eran ~84 lotes de 1000
+        # (y con 5000 todos fallaban con 400).
+        ids = [288645, 288926, 288928, 318032, 318037, 318039, 318041, 318457, 371782]
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"orders": []}
+        repo = FakeReconciliacionRepository(ids_en_curso=ids)
+
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        llamadas = [c.args for c in client.consultar_pedidos_lote.call_args_list]
+        assert llamadas == [(288645, 288928), (318032, 318457), (371782, 371782)]
+        assert all(fin - inicio + 1 <= 1000 for inicio, fin in llamadas)
+
+    def test_nunca_pide_mas_de_1000_ids_en_una_consulta(self):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"orders": []}
+        ids = list(range(1, 2501, 7))  # ids repartidos en un rango de 2500
+        repo = FakeReconciliacionRepository(ids_en_curso=ids)
+
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        llamadas = [c.args for c in client.consultar_pedidos_lote.call_args_list]
+        assert len(llamadas) == 3
+        assert all(fin - inicio + 1 <= 1000 for inicio, fin in llamadas)
+        # ningún id queda sin cubrir
+        assert all(any(i <= x <= f for i, f in llamadas) for x in ids)
+
+    def test_ids_repetidos_o_desordenados_no_rompen(self):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = {"orders": []}
+        repo = FakeReconciliacionRepository(ids_en_curso=[30, 10, 20, 10])
+
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        client.consultar_pedidos_lote.assert_called_once_with(10, 30)
 
     def test_rango_pequeno_es_un_solo_lote(self):
         client = MagicMock()
@@ -118,14 +152,55 @@ class TestParticionDeRangos:
 class TestResilenciaAErroresDeRed:
     def test_fallo_en_un_lote_continua_con_los_demas(self):
         client = MagicMock()
-        # ids_en_curso=[100, 160] con tamano_maximo_rango=50 -> 2 lotes: 100-149, 150-160
+        # ids_en_curso=[100, 155, 160] con tamano_maximo_rango=50 -> 2 lotes: (100,100) y (155,160)
         client.consultar_pedidos_lote.side_effect = [
             RocketfyRequestError("timeout en el primer lote"),
             {"orders": [{"id": 155, "status_id": 8}]},
         ]
-        repo = FakeReconciliacionRepository(ids_en_curso=[100, 160])
+        repo = FakeReconciliacionRepository(ids_en_curso=[100, 155, 160])
         ReconciliacionService(client=client, repo=repo, tamano_maximo_rango=50).ejecutar()
 
         assert client.consultar_pedidos_lote.call_count == 2
         assert (155, 8) in repo.actualizaciones
         assert repo.lock_liberado is True
+
+
+class TestRespuestaDeErrorDeRocketfy:
+    """Rocketfy contesta los rechazos de /orders/bulk/getInfo con
+    {"code": 400, "status": "error", ...} y SIN `ok`: el cliente no lo ve como
+    error. Visto en producción el 2026-11-05."""
+
+    RECHAZO = {
+        "code": 400,
+        "error": "El rango solicitado no puede superar los 1000 pedidos.",
+        "status": "error",
+        "message": "El rango solicitado no puede superar los 1000 pedidos.",
+    }
+
+    def test_un_lote_rechazado_se_registra_como_error_y_no_actualiza_nada(self, caplog):
+        client = MagicMock()
+        client.consultar_pedidos_lote.return_value = self.RECHAZO
+        repo = FakeReconciliacionRepository(ids_en_curso=[100])
+
+        with caplog.at_level("ERROR"):
+            ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        assert repo.actualizaciones == []
+        assert repo.lock_liberado is True
+        assert any("rechazó el lote 100-100" in r.getMessage() for r in caplog.records)
+
+    def test_un_lote_rechazado_no_impide_procesar_los_siguientes(self):
+        client = MagicMock()
+        client.consultar_pedidos_lote.side_effect = [
+            self.RECHAZO,
+            {"orders": [{"id": 5000, "status_id": 8}]},
+        ]
+        repo = FakeReconciliacionRepository(ids_en_curso=[100, 5000])
+
+        ReconciliacionService(client=client, repo=repo).ejecutar()
+
+        assert repo.actualizaciones == [(5000, 8)]
+
+    def test_una_respuesta_normal_no_se_confunde_con_error(self):
+        assert ReconciliacionService._es_error({"orders": [], "code": 200}) is False
+        assert ReconciliacionService._es_error([{"id": 1}]) is False

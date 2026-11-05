@@ -20,7 +20,11 @@ from .repository import ReconciliacionRepository
 logger = logging.getLogger(__name__)
 
 JOB_NAME = "reconciliacion_pedidos"
-TAMANO_MAXIMO_RANGO = 5000  # el proveedor advierte no pedir rangos de millones de ids
+# Máximo de ids por consulta. La guía del proveedor dice "unos pocos miles",
+# pero el servidor REAL responde 400 "El rango solicitado no puede superar los
+# 1000 pedidos" (visto en los logs de producción el 2026-11-05: con 5000 todas
+# las consultas fallaban y la reconciliación no actualizaba nada).
+TAMANO_MAXIMO_RANGO = 1000
 
 
 class ReconciliacionService:
@@ -49,7 +53,7 @@ class ReconciliacionService:
             logger.info("Reconciliación: no hay pedidos en curso")
             return
 
-        for id_start, id_end in self._chunks(ids):
+        for id_start, id_end in self._ventanas(ids):
             try:
                 respuesta = self._client.consultar_pedidos_lote(id_start, id_end)
             except (RocketfyRequestError, RocketfyBusinessError):
@@ -58,16 +62,39 @@ class ReconciliacionService:
                 )
                 continue
 
+            if self._es_error(respuesta):
+                # Rocketfy contesta los rechazos de este endpoint con
+                # {"code": 400, "status": "error", ...} SIN el campo `ok`, así
+                # que el cliente no lo reconoce como error y llega hasta acá.
+                logger.error("Rocketfy rechazó el lote %s-%s: %s", id_start, id_end, respuesta)
+                continue
+
             for pedido in self._extraer_pedidos(respuesta):
                 self._actualizar_uno(pedido)
 
-    def _chunks(self, ids: List[int]) -> Iterator[Tuple[int, int]]:
-        id_min, id_max = ids[0], ids[-1]
-        inicio = id_min
-        while inicio <= id_max:
-            fin = min(inicio + self._tamano_maximo_rango - 1, id_max)
-            yield inicio, fin
-            inicio = fin + 1
+    def _ventanas(self, ids: List[int]) -> Iterator[Tuple[int, int]]:
+        """Agrupa los ids REALES en ventanas de como máximo
+        `tamano_maximo_rango` ids consecutivos (de primero a último de la
+        ventana). Antes se partía el rango completo [mínimo, máximo] en
+        bloques: con pocos pedidos muy separados entre sí (p. ej. ids 288645 y
+        371782) eso eran ~84 consultas, casi todas sobre ids que no son
+        nuestros. Así se hace una consulta por cada grupo de pedidos cercanos."""
+        ordenados = sorted(set(ids))
+        inicio = fin = ordenados[0]
+        for id_actual in ordenados[1:]:
+            if id_actual - inicio < self._tamano_maximo_rango:
+                fin = id_actual
+            else:
+                yield inicio, fin
+                inicio = fin = id_actual
+        yield inicio, fin
+
+    @staticmethod
+    def _es_error(respuesta) -> bool:
+        if not isinstance(respuesta, dict):
+            return False
+        codigo = respuesta.get("code")
+        return respuesta.get("status") == "error" or (isinstance(codigo, int) and codigo >= 400)
 
     @staticmethod
     def _extraer_pedidos(respuesta) -> List[dict]:
