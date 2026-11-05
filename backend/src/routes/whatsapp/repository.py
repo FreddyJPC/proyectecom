@@ -10,11 +10,11 @@ _COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en
 _COLUMNAS_PRODUCTO_BOT = (
     "id, sku, nombre, descripcion, precio, variantes, tiempo_entrega, "
     "metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder, "
-    "activo, creado_en, actualizado_en"
+    "max_unidades_por_pedido, activo, creado_en, actualizado_en"
 )
 _COLUMNAS_LEAD = (
     "id, conversacion_id, nombre_cliente, telefono, direccion, canton, provincia, "
-    "producto_sku, producto_nombre, producto_variante, total, metodo_pago, estado_pago, "
+    "producto_sku, producto_nombre, producto_variante, cantidad, total, metodo_pago, estado_pago, "
     "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en"
 )
 
@@ -392,6 +392,7 @@ class ProductoBotRepository:
         variantes: Optional[str] = None,
         preguntas_frecuentes: Optional[str] = None,
         temas_no_responder: Optional[str] = None,
+        max_unidades_por_pedido: int = 1,
     ) -> dict:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -399,12 +400,14 @@ class ProductoBotRepository:
                     f"""
                     insert into productos_bot
                         (sku, nombre, descripcion, precio, variantes, tiempo_entrega,
-                         metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder)
-                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder,
+                         max_unidades_por_pedido)
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     returning {_COLUMNAS_PRODUCTO_BOT}
                     """,
                     (sku, nombre, descripcion, precio, variantes, tiempo_entrega,
-                     metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder),
+                     metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder,
+                     max_unidades_por_pedido),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
@@ -421,6 +424,7 @@ class ProductoBotRepository:
         variantes: Optional[str] = None,
         preguntas_frecuentes: Optional[str] = None,
         temas_no_responder: Optional[str] = None,
+        max_unidades_por_pedido: int = 1,
     ) -> dict:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -430,12 +434,14 @@ class ProductoBotRepository:
                         nombre = %s, descripcion = %s, precio = %s, variantes = %s,
                         tiempo_entrega = %s, metodos_pago_aceptados = %s,
                         preguntas_frecuentes = %s, temas_no_responder = %s,
+                        max_unidades_por_pedido = %s,
                         actualizado_en = now()
                     where sku = %s
                     returning {_COLUMNAS_PRODUCTO_BOT}
                     """,
                     (nombre, descripcion, precio, variantes, tiempo_entrega,
-                     metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder, sku),
+                     metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder,
+                     max_unidades_por_pedido, sku),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
@@ -534,22 +540,30 @@ class LeadRepository:
 
     @staticmethod
     def actualizar_producto(
-        lead_id: int, producto_sku: str, producto_nombre: str, total, variante: Optional[str] = None
+        lead_id: int,
+        producto_sku: str,
+        producto_nombre: str,
+        total,
+        variante: Optional[str] = None,
+        cantidad: int = 1,
     ) -> None:
         # producto_variante usa COALESCE: si esta llamada no trae variante
         # (p.ej. el cliente todavía no la eligió), no borra una que ya se
-        # haya guardado en una llamada anterior.
+        # haya guardado en una llamada anterior. `cantidad` y `total` sí se
+        # reemplazan siempre: el total lo calcula el sistema (precio x
+        # cantidad) cada vez que se registra el producto.
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     update leads set
                         producto_sku = %s, producto_nombre = %s, total = %s,
+                        cantidad = %s,
                         producto_variante = coalesce(%s, producto_variante),
                         actualizado_en = now()
                     where id = %s
                     """,
-                    (producto_sku, producto_nombre, total, variante, lead_id),
+                    (producto_sku, producto_nombre, total, cantidad, variante, lead_id),
                 )
 
     @staticmethod
@@ -589,3 +603,29 @@ class LeadRepository:
                     (telefono,),
                 )
                 return cur.fetchone() is not None
+
+
+class MinimoObservadoRepository:
+    """Montos mínimos que Rocketfy exigió al rechazar una confirmación -- ver
+    migración 013_ventas_seguras.sql y minimos.py. Sirve para calibrar el
+    costo de envío estimado (Fase C del plan de gestión de productos)."""
+
+    @staticmethod
+    def guardar(
+        sku: Optional[str],
+        canton: Optional[str],
+        provincia: Optional[str],
+        cantidad: Optional[int],
+        minimo,
+        mensaje: str,
+    ) -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into rocketfy_minimos_observados
+                        (sku, canton, provincia, cantidad, minimo, mensaje)
+                    values (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (sku, canton, provincia, cantidad, minimo, mensaje),
+                )

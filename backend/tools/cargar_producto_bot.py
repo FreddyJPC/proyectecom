@@ -55,6 +55,18 @@ def _preguntar_precio() -> Decimal:
             print("Precio inválido, escribe un número (ej: 19.99).")
 
 
+def _preguntar_unidades_maximas(por_defecto: int) -> int:
+    """Máximo de unidades por pedido. 1 salvo que ya se haya comprobado que el
+    margen aguanta el flete de más unidades (Rocketfy no tiene cotizador)."""
+    while True:
+        texto = input(f"Unidades máximas por pedido [{por_defecto}]: ").strip()
+        if not texto:
+            return por_defecto
+        if texto.isdigit() and int(texto) >= 1:
+            return int(texto)
+        print("Escribe un número entero de 1 en adelante.")
+
+
 def main():
     print("=== Cargar producto en la base de conocimiento de Victoria ===")
     sku = _preguntar("SKU")
@@ -80,6 +92,9 @@ def main():
     temas_no_responder = _preguntar(
         "Temas que Victoria NO debe responder (opcional, Enter para omitir)", requerido=False
     )
+    max_unidades_por_pedido = _preguntar_unidades_maximas(
+        existente["max_unidades_por_pedido"] if existente else 1
+    )
 
     kwargs = dict(
         sku=sku,
@@ -91,6 +106,7 @@ def main():
         variantes=variantes,
         preguntas_frecuentes=preguntas_frecuentes,
         temas_no_responder=temas_no_responder,
+        max_unidades_por_pedido=max_unidades_por_pedido,
     )
     if existente:
         producto = ProductoBotRepository.actualizar(**kwargs)
