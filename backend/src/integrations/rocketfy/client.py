@@ -139,9 +139,11 @@ class RocketfyClient:
         return self._call("POST", f"/orders/getInfo/{order_id}")
 
     def consultar_pedidos_lote(self, id_start: int, id_end: int) -> dict:
-        """POST /orders/bulk/getInfo. Mantener rangos acotados (unos pocos
-        miles de IDs como máximo) — el proveedor advierte que el endpoint
-        materializa todo el intervalo internamente."""
+        """POST /orders/bulk/getInfo. Máximo 1000 IDs por rango: la guía dice
+        "unos pocos miles", pero el servidor real rechaza más de 1000 con
+        {"code": 400, "status": "error"} y SIN el campo `ok`, así que esta
+        llamada NO lanza en ese caso: quien la use debe revisar la respuesta
+        (ver ReconciliacionService._es_error)."""
         return self._call(
             "POST", "/orders/bulk/getInfo", {"id_start": id_start, "id_end": id_end}
         )
