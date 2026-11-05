@@ -725,3 +725,40 @@ pausara, Railway daría por caído al backend y lo reiniciaría en bucle. Por es
 
 **Qué NO resuelve:** si el backend entero está caído, el latido tampoco corre;
 y no reemplaza las copias de seguridad (solo el plan Pro las incluye).
+
+---
+
+## 24. Los dos catálogos: Rocketfy y Victoria
+
+En el sistema conviven dos listas de productos que **no son lo mismo**:
+
+- **Catálogo de Rocketfy:** lo que tu proveedor logístico tiene para tu cuenta.
+  Sirve para lo *logístico*: confirmar que el producto existe (por su **SKU**,
+  el código único), ver su **costo base**, su **stock** y despachar el pedido.
+- **`productos_bot` (base de conocimiento de Victoria):** lo que Victoria
+  necesita para *vender*: tu **precio de venta**, la descripción, las variantes,
+  el tiempo de entrega, los métodos de pago y las preguntas frecuentes.
+
+El puente entre las dos es el **SKU**: debe ser exactamente el mismo texto. Un
+producto puede estar en Rocketfy y no en Victoria (no se vende por WhatsApp),
+pero nunca al revés (Rocketfy rechazaría el pedido).
+
+Del lado de Rocketfy hay dos precios: `price` (**tu costo**, lo que pagas) y
+`suggested_price` (el precio de venta que sugiere el proveedor). El precio con el
+que vende Victoria es otro, el que tú decides.
+
+**Margen:** ganancia ÷ precio de venta. Con costo + envío de $15 y precio de $24,
+ganas $9, o sea 37.5 % de margen (no 60 %, que sería ganancia ÷ costo, llamado
+*recargo*). En este proyecto "margen" siempre significa lo primero.
+
+## 25. Modo simulación (*dry run*)
+
+Probar a Victoria "de verdad" tiene un peligro: si cierra una venta, el sistema
+crea un **pedido real** en Rocketfy y avisa por Telegram. Un **modo simulación**
+(*dry run*, "ensayo en seco") ejecuta el mismo cerebro de Victoria pero
+sustituye lo peligroso: en vez de llamar a Rocketfy, muestra el pedido que
+*habría* enviado; en vez de avisar por Telegram, lo anota; y guarda la
+conversación solo en memoria, así no deja rastro en la base. Así puedes ver cómo
+se comporta antes de que hable con un cliente real. El simulador de terminal que
+existe hoy (`tools/chat_con_victoria.py`) **no** es un modo ensayo: usa las
+herramientas reales.
