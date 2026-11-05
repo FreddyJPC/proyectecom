@@ -1,0 +1,504 @@
+"""
+Servicio de gestión de productos con un repositorio en memoria y un cliente de
+Rocketfy falso: sin base de datos ni red.
+"""
+from datetime import datetime, timezone
+from decimal import Decimal
+
+import pytest
+
+from src.integrations.rocketfy import RocketfyRequestError
+from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
+from src.routes.productos_bot.exceptions import (
+    ProductoBotNoEncontradoError,
+    ProductoBotYaExisteError,
+    PublicacionBloqueadaError,
+    SkuInvalidoError,
+    TransicionInvalidaError,
+)
+from src.routes.productos_bot.services import ProductosBotService
+
+AHORA = datetime(2026, 11, 5, 21, 0, tzinfo=timezone.utc)
+
+
+def _fila(**cambios):
+    fila = {
+        "id": 1,
+        "sku": "DEMO-1",
+        "nombre": "Producto Demo",
+        "descripcion": "Un buen producto.",
+        "precio": Decimal("24.99"),
+        "variantes": None,
+        "tiempo_entrega": "2 a 4 días hábiles",
+        "metodos_pago_aceptados": "contraentrega",
+        "preguntas_frecuentes": "¿Trae cargador? Sí.",
+        "temas_no_responder": None,
+        "max_unidades_por_pedido": 1,
+        "estado": "borrador",
+        "activo": False,
+        "rocketfy_product_id": 4821,
+        "costo_rocketfy": Decimal("10.00"),
+        "precio_sugerido_rocketfy": Decimal("29.90"),
+        "stock_ultimo": 10,
+        "stock_actualizado_en": AHORA,
+        "peso_kg": Decimal("0.350"),
+        "imagen_url": "https://img/1.png",
+        "notas_internas": None,
+        "publicado_en": None,
+        "publicado_por": None,
+        "creado_en": AHORA,
+        "actualizado_en": AHORA,
+    }
+    fila.update(cambios)
+    return fila
+
+
+class RepoEnMemoria:
+    """Imita al repositorio real, incluida la regla estado <-> activo."""
+
+    def __init__(self, filas=()):
+        self.filas = {f["sku"]: dict(f) for f in filas}
+        self.historial = []
+
+    def listar(self, incluir_archivados=False):
+        return [dict(f) for f in self.filas.values() if incluir_archivados or f["estado"] != "archivado"]
+
+    def obtener(self, sku):
+        return dict(self.filas[sku]) if sku in self.filas else None
+
+    def crear_borrador(self, sku, nombre, descripcion, precio, metodos_pago_aceptados, datos_rocketfy):
+        fila = _fila(
+            sku=sku, nombre=nombre, descripcion=descripcion, precio=precio, tiempo_entrega="",
+            metodos_pago_aceptados=metodos_pago_aceptados, estado="borrador", activo=False, **datos_rocketfy,
+        )
+        self.filas[sku] = fila
+        return dict(fila)
+
+    def actualizar_campos(self, sku, campos):
+        self.filas[sku].update(campos)
+        return dict(self.filas[sku])
+
+    def guardar_datos_rocketfy(self, sku, datos):
+        self.filas[sku].update(datos)
+        return dict(self.filas[sku])
+
+    def cambiar_estado(self, sku, estado, usuario=None):
+        fila = self.filas[sku]
+        fila["estado"] = estado
+        fila["activo"] = estado == "activo"
+        if estado == "activo":
+            fila["publicado_en"] = AHORA
+            fila["publicado_por"] = usuario
+        return dict(fila)
+
+    def registrar_historial(self, sku, accion, usuario, cambios=None):
+        self.historial.append({"sku": sku, "accion": accion, "usuario": usuario, "cambios": cambios, "creado_en": AHORA})
+
+    def listar_historial(self, sku, limite=20):
+        return [h for h in reversed(self.historial) if h["sku"] == sku][:limite]
+
+
+class RocketfyFalso:
+    def __init__(self, productos=None, error=None):
+        self.productos = productos if productos is not None else [self.producto()]
+        self.error = error
+        self.consultas = []
+
+    @staticmethod
+    def producto(**cambios):
+        producto = {
+            "id": 4821, "name": "Reloj deportivo", "description": "<p>Resistente al agua.</p>\n<ul><li>GPS</li></ul>",
+            "sku": "DEMO-1", "stock": 137, "price": "10.00", "suggested_price": "29.90",
+            "weight": "0.35", "image_url": "https://img/reloj.png",
+        }
+        producto.update(cambios)
+        return producto
+
+    def listar_productos(self, q=None, page=1):
+        self.consultas.append(q)
+        if self.error is not None:
+            raise self.error
+        return {"data": self.productos}
+
+
+class MonitoreoFalso:
+    def __init__(self, vigilados=(), falla=False):
+        self.vigilados = {sku: 8 for sku in vigilados}
+        self.falla = falla
+        self.upserts = []
+
+    def listar(self, solo_activos=False):
+        if self.falla:
+            raise RuntimeError("base caída")
+        return [{"sku": sku} for sku in self.vigilados]
+
+    def upsert(self, sku, umbral):
+        self.upserts.append((sku, umbral))
+        self.vigilados[sku] = umbral
+
+
+def _servicio(filas=(), productos=None, error=None, monitoreo=None):
+    repo = RepoEnMemoria(filas)
+    rocketfy = RocketfyFalso(productos, error)
+    monitoreo = monitoreo or MonitoreoFalso()
+    return ProductosBotService(client=rocketfy, repo=repo, monitoreo_repo=monitoreo), repo, rocketfy, monitoreo
+
+
+class TestCrearBorrador:
+    def test_copia_los_datos_de_rocketfy_y_nace_como_borrador(self):
+        servicio, repo, _, _ = _servicio()
+
+        detalle = servicio.crear_borrador("DEMO-1", "freddy@ejemplo.com")
+
+        fila = repo.filas["DEMO-1"]
+        assert (fila["estado"], fila["activo"]) == ("borrador", False)
+        assert detalle.nombre == "Reloj deportivo"
+        assert detalle.costo_rocketfy == "10.00"
+        assert detalle.precio_sugerido_rocketfy == "29.90"
+        assert detalle.stock_ultimo == 137
+        assert detalle.peso_kg == "0.350"
+        assert detalle.rocketfy_product_id == 4821
+        assert detalle.metodos_pago == ["contraentrega"]  # solo contraentrega al arrancar
+        assert detalle.max_unidades_por_pedido == 1
+        assert detalle.tiempo_entrega == ""  # lo debe poner la persona
+
+    def test_el_precio_inicial_es_el_sugerido_o_el_costo_si_no_hay(self):
+        servicio, repo, _, _ = _servicio()
+        servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["precio"] == Decimal("29.90")
+
+        servicio, repo, _, _ = _servicio(productos=[RocketfyFalso.producto(suggested_price=None)])
+        servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["precio"] == Decimal("10.00")
+
+    def test_usa_el_sku_tal_como_lo_escribe_rocketfy_no_como_lo_tecleo_la_persona(self):
+        servicio, repo, rocketfy, _ = _servicio()
+
+        servicio.crear_borrador("  demo-1 ", None)
+
+        assert "DEMO-1" in repo.filas and "demo-1" not in repo.filas
+        assert rocketfy.consultas == ["demo-1"]
+
+    def test_ignora_productos_parecidos_que_devuelve_la_busqueda(self):
+        otro = RocketfyFalso.producto(sku="DEMO-10", name="Otro")
+        servicio, repo, _, _ = _servicio(productos=[otro, RocketfyFalso.producto()])
+        servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["nombre"] == "Reloj deportivo"
+
+    def test_la_descripcion_de_rocketfy_se_deja_como_texto_plano(self):
+        servicio, repo, _, _ = _servicio(
+            productos=[RocketfyFalso.producto(description="<p>Resistente &amp; ligero.</p>\n\n<ul><li>GPS</li></ul>")]
+        )
+        servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["descripcion"] == "Resistente & ligero. GPS"
+
+    def test_una_descripcion_enorme_se_recorta(self):
+        servicio, repo, _, _ = _servicio(productos=[RocketfyFalso.producto(description="palabra " * 500)])
+        servicio.crear_borrador("DEMO-1", None)
+        descripcion = repo.filas["DEMO-1"]["descripcion"]
+        assert len(descripcion) <= 1500 and descripcion.endswith("…")
+
+    def test_deja_constancia_en_el_historial(self):
+        servicio, repo, _, _ = _servicio()
+        servicio.crear_borrador("DEMO-1", "freddy@ejemplo.com")
+        assert repo.historial == [
+            {"sku": "DEMO-1", "accion": "creado", "usuario": "freddy@ejemplo.com", "cambios": {"desde": "rocketfy"}, "creado_en": AHORA}
+        ]
+
+    def test_sku_que_no_existe_en_rocketfy_no_crea_nada(self):
+        servicio, repo, _, _ = _servicio(productos=[RocketfyFalso.producto(sku="OTRO")])
+        with pytest.raises(SkuNoExisteEnRocketfyError):
+            servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas == {}
+
+    @pytest.mark.parametrize("sku", ["", "   ", "A/B", None])
+    def test_sku_invalido(self, sku):
+        servicio, repo, rocketfy, _ = _servicio()
+        with pytest.raises(SkuInvalidoError):
+            servicio.crear_borrador(sku, None)
+        assert rocketfy.consultas == []  # ni siquiera se consulta a Rocketfy
+
+    def test_si_ya_existe_no_se_crea_otro(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="archivado")])
+        with pytest.raises(ProductoBotYaExisteError):
+            servicio.crear_borrador("demo-1", None)
+
+    def test_un_fallo_de_rocketfy_sube_sin_crear_nada(self):
+        servicio, repo, _, _ = _servicio(error=RocketfyRequestError("timeout"))
+        with pytest.raises(RocketfyRequestError):
+            servicio.crear_borrador("DEMO-1", None)
+        assert repo.filas == {}
+
+
+class TestEditar:
+    def test_guarda_solo_lo_que_cambia_y_deja_historial_con_antes_y_despues(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()])
+
+        detalle = servicio.editar(
+            "DEMO-1", {"precio": Decimal("27.50"), "nombre": "Producto Demo", "tiempo_entrega": "3 días"}, "ana@ejemplo.com"
+        )
+
+        assert repo.filas["DEMO-1"]["precio"] == Decimal("27.50")
+        assert detalle.precio == "27.50"
+        assert repo.historial[-1]["accion"] == "editado"
+        assert repo.historial[-1]["usuario"] == "ana@ejemplo.com"
+        assert repo.historial[-1]["cambios"] == {
+            "precio": [Decimal("24.99"), Decimal("27.50")],
+            "tiempo_entrega": ["2 a 4 días hábiles", "3 días"],
+        }  # "nombre" no cambió: no aparece
+
+    def test_sin_cambios_reales_no_escribe_ni_deja_historial(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()])
+        servicio.editar("DEMO-1", {"nombre": "Producto Demo", "precio": Decimal("24.99")}, None)
+        assert repo.historial == []
+
+    def test_los_valores_largos_se_recortan_en_el_historial(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()])
+        servicio.editar("DEMO-1", {"descripcion": "x" * 1000}, None)
+        nuevo = repo.historial[-1]["cambios"]["descripcion"][1]
+        assert len(nuevo) == 300 and nuevo.endswith("…")
+        assert len(repo.filas["DEMO-1"]["descripcion"]) == 1000  # lo guardado queda completo
+
+    def test_un_producto_archivado_no_se_edita(self):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado="archivado")])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.editar("DEMO-1", {"nombre": "Otro"}, None)
+
+    def test_sku_inexistente(self):
+        servicio, _, _, _ = _servicio()
+        with pytest.raises(ProductoBotNoEncontradoError):
+            servicio.editar("NO-EXISTE", {"nombre": "Otro"}, None)
+
+    def test_a_un_producto_activo_no_se_le_puede_borrar_lo_obligatorio(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="activo", activo=True)])
+        with pytest.raises(PublicacionBloqueadaError) as error:
+            servicio.editar("DEMO-1", {"descripcion": ""}, None)
+        assert any("descripción" in b for b in error.value.bloqueos)
+        assert repo.filas["DEMO-1"]["descripcion"] == "Un buen producto."  # no se guardó
+        assert repo.historial == []
+
+    def test_a_un_producto_activo_no_se_le_baja_el_precio_bajo_el_piso(self):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado="activo", activo=True)])
+        with pytest.raises(PublicacionBloqueadaError):
+            servicio.editar("DEMO-1", {"precio": Decimal("5.00")}, None)
+
+    def test_un_borrador_si_puede_quedar_incompleto(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()])
+        servicio.editar("DEMO-1", {"descripcion": ""}, None)
+        assert repo.filas["DEMO-1"]["descripcion"] == ""
+
+    def test_un_problema_anterior_no_bloquea_otras_ediciones_de_un_producto_activo(self):
+        # Ya activo y sin stock/precio bajo el costo por un cambio de Rocketfy: editar el texto sigue siendo posible.
+        fila = _fila(estado="activo", activo=True, costo_rocketfy=Decimal("30.00"), stock_ultimo=0)
+        servicio, repo, _, _ = _servicio(filas=[fila])
+        servicio.editar("DEMO-1", {"preguntas_frecuentes": "Nueva pregunta"}, None)
+        assert repo.filas["DEMO-1"]["preguntas_frecuentes"] == "Nueva pregunta"
+
+
+class TestActualizarDesdeRocketfy:
+    def test_refresca_los_datos_y_anota_el_historial_si_cambio_el_costo(self):
+        servicio, repo, _, _ = _servicio(
+            filas=[_fila()], productos=[RocketfyFalso.producto(price="12.50", stock=3)]
+        )
+
+        detalle = servicio.actualizar_desde_rocketfy("DEMO-1", "ana@ejemplo.com")
+
+        assert detalle.costo_rocketfy == "12.50"
+        assert detalle.stock_ultimo == 3
+        assert repo.historial[-1]["accion"] == "actualizado_rocketfy"
+        assert repo.historial[-1]["cambios"] == {"costo_rocketfy": ["10.00", "12.50"]}
+
+    def test_si_solo_cambia_el_stock_no_se_llena_el_historial(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()], productos=[RocketfyFalso.producto(stock=1)])
+        servicio.actualizar_desde_rocketfy("DEMO-1", None)
+        assert repo.historial == []
+        assert repo.filas["DEMO-1"]["stock_ultimo"] == 1
+
+    def test_no_toca_los_campos_de_ventas(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(precio=Decimal("33.00"))])
+        servicio.actualizar_desde_rocketfy("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["precio"] == Decimal("33.00")
+        assert repo.filas["DEMO-1"]["nombre"] == "Producto Demo"
+
+    def test_si_el_sku_ya_no_existe_en_rocketfy(self):
+        servicio, _, _, _ = _servicio(filas=[_fila()], productos=[])
+        with pytest.raises(SkuNoExisteEnRocketfyError):
+            servicio.actualizar_desde_rocketfy("DEMO-1", None)
+
+
+class TestPublicar:
+    def test_publica_un_borrador_completo(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()])
+
+        detalle = servicio.publicar("DEMO-1", "ana@ejemplo.com")
+
+        assert detalle.estado == "activo"
+        assert repo.filas["DEMO-1"]["activo"] is True
+        assert detalle.publicado_por == "ana@ejemplo.com"
+        assert repo.historial[-1]["accion"] == "publicado"
+        assert repo.historial[-1]["cambios"] == {"estado": ["borrador", "activo"]}
+
+    def test_antes_de_publicar_refresca_los_datos_en_vivo_de_rocketfy(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(stock_ultimo=0)], productos=[RocketfyFalso.producto(stock=40, price="11.00")])
+
+        servicio.publicar("DEMO-1", None)
+
+        assert repo.filas["DEMO-1"]["stock_ultimo"] == 40  # el 0 guardado era viejo
+        assert repo.filas["DEMO-1"]["costo_rocketfy"] == Decimal("11.00")
+
+    def test_al_publicar_agrega_el_producto_a_vigilados(self):
+        servicio, _, _, monitoreo = _servicio(filas=[_fila()])
+        servicio.publicar("DEMO-1", None)
+        assert monitoreo.upserts == [("DEMO-1", 5)]
+
+    def test_no_pisa_el_umbral_de_un_producto_ya_vigilado(self):
+        servicio, _, _, monitoreo = _servicio(filas=[_fila()], monitoreo=MonitoreoFalso(vigilados=["DEMO-1"]))
+        servicio.publicar("DEMO-1", None)
+        assert monitoreo.upserts == []
+        assert monitoreo.vigilados["DEMO-1"] == 8
+
+    def test_si_falla_vigilar_la_publicacion_sigue(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()], monitoreo=MonitoreoFalso(falla=True))
+        servicio.publicar("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["estado"] == "activo"
+
+    @pytest.mark.parametrize(
+        "cambios, fragmento",
+        [
+            ({"descripcion": ""}, "descripción"),
+            ({"tiempo_entrega": ""}, "tiempo de entrega"),
+            ({"metodos_pago_aceptados": ""}, "método de pago"),
+            ({"precio": Decimal("5.00")}, "por debajo del mínimo"),
+        ],
+    )
+    def test_un_borrador_incompleto_no_se_publica_y_queda_igual(self, cambios, fragmento):
+        servicio, repo, _, monitoreo = _servicio(filas=[_fila(**cambios)])
+
+        with pytest.raises(PublicacionBloqueadaError) as error:
+            servicio.publicar("DEMO-1", None)
+
+        assert any(fragmento in b for b in error.value.bloqueos), error.value.bloqueos
+        assert (repo.filas["DEMO-1"]["estado"], repo.filas["DEMO-1"]["activo"]) == ("borrador", False)
+        assert monitoreo.upserts == []
+        assert repo.historial == []
+
+    def test_sin_stock_en_vivo_no_se_publica(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()], productos=[RocketfyFalso.producto(stock=0)])
+        with pytest.raises(PublicacionBloqueadaError) as error:
+            servicio.publicar("DEMO-1", None)
+        assert any("stock" in b for b in error.value.bloqueos)
+        assert repo.filas["DEMO-1"]["estado"] == "borrador"
+
+    def test_si_el_sku_ya_no_existe_en_rocketfy_no_se_publica(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()], productos=[])
+        with pytest.raises(PublicacionBloqueadaError) as error:
+            servicio.publicar("DEMO-1", None)
+        assert any("no existe" in b for b in error.value.bloqueos)
+
+    def test_si_rocketfy_no_responde_no_se_publica_a_ciegas(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila()], error=RocketfyRequestError("timeout"))
+        with pytest.raises(RocketfyRequestError):
+            servicio.publicar("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["estado"] == "borrador"
+
+    @pytest.mark.parametrize("estado", ["activo", "pausado", "agotado", "archivado"])
+    def test_publicar_solo_desde_borrador_o_listo(self, estado):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado=estado, activo=estado == "activo")])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.publicar("DEMO-1", None)
+
+    def test_desde_listo_tambien_se_puede_publicar(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="listo")])
+        servicio.publicar("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["estado"] == "activo"
+
+
+class TestPausarReanudarArchivarRestaurar:
+    def test_pausar_un_producto_activo(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="activo", activo=True)])
+
+        detalle = servicio.pausar("DEMO-1", "ana@ejemplo.com")
+
+        assert detalle.estado == "pausado"
+        assert repo.filas["DEMO-1"]["activo"] is False  # Victoria deja de verlo
+        assert repo.historial[-1]["accion"] == "pausado"
+
+    @pytest.mark.parametrize("estado", ["borrador", "pausado", "archivado"])
+    def test_solo_se_pausa_lo_activo(self, estado):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado=estado)])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.pausar("DEMO-1", None)
+
+    def test_reanudar_un_producto_pausado_vuelve_a_verificar_con_rocketfy(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="pausado")])
+        detalle = servicio.reanudar("DEMO-1", None)
+        assert detalle.estado == "activo"
+        assert repo.historial[-1]["accion"] == "reanudado"
+
+    def test_no_se_reanuda_un_producto_sin_stock(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="agotado")], productos=[RocketfyFalso.producto(stock=0)])
+        with pytest.raises(PublicacionBloqueadaError):
+            servicio.reanudar("DEMO-1", None)
+        assert repo.filas["DEMO-1"]["estado"] == "agotado"
+
+    @pytest.mark.parametrize("estado", ["borrador", "activo", "archivado"])
+    def test_reanudar_solo_desde_pausado_o_agotado(self, estado):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado=estado, activo=estado == "activo")])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.reanudar("DEMO-1", None)
+
+    def test_archivar_un_producto_activo_lo_saca_de_circulacion(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="activo", activo=True)])
+        servicio.archivar("DEMO-1", None)
+        assert (repo.filas["DEMO-1"]["estado"], repo.filas["DEMO-1"]["activo"]) == ("archivado", False)
+
+    def test_archivar_dos_veces_es_un_error(self):
+        servicio, _, _, _ = _servicio(filas=[_fila(estado="archivado")])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.archivar("DEMO-1", None)
+
+    def test_restaurar_devuelve_un_borrador_nunca_uno_activo(self):
+        servicio, repo, _, _ = _servicio(filas=[_fila(estado="archivado")])
+        detalle = servicio.restaurar("DEMO-1", None)
+        assert detalle.estado == "borrador"
+        assert repo.filas["DEMO-1"]["activo"] is False
+
+    def test_restaurar_solo_lo_archivado(self):
+        servicio, _, _, _ = _servicio(filas=[_fila()])
+        with pytest.raises(TransicionInvalidaError):
+            servicio.restaurar("DEMO-1", None)
+
+    def test_ninguna_accion_sobre_un_sku_inexistente(self):
+        servicio, _, _, _ = _servicio()
+        for accion in (servicio.publicar, servicio.pausar, servicio.reanudar, servicio.archivar, servicio.restaurar):
+            with pytest.raises(ProductoBotNoEncontradoError):
+                accion("NO-EXISTE", None)
+
+
+class TestListarYDetalle:
+    def test_la_lista_oculta_los_archivados_salvo_que_se_pidan(self):
+        servicio, _, _, _ = _servicio(filas=[_fila(), _fila(sku="VIEJO", estado="archivado")])
+        assert [p.sku for p in servicio.listar()] == ["DEMO-1"]
+        assert sorted(p.sku for p in servicio.listar(incluir_archivados=True)) == ["DEMO-1", "VIEJO"]
+
+    def test_el_dinero_viaja_como_texto_con_dos_decimales(self):
+        servicio, _, _, _ = _servicio(filas=[_fila(precio=Decimal("24.9"), costo_rocketfy=None)])
+        resumen = servicio.listar()[0]
+        assert resumen.precio == "24.90"
+        assert resumen.costo_rocketfy is None
+
+    def test_el_detalle_incluye_verificacion_con_lo_ultimo_guardado_e_historial(self):
+        servicio, repo, rocketfy, _ = _servicio(filas=[_fila(descripcion="", stock_ultimo=2)])
+        repo.registrar_historial("DEMO-1", "creado", "ana@ejemplo.com", {"desde": "rocketfy"})
+
+        detalle = servicio.obtener_detalle("DEMO-1")
+
+        assert any("descripción" in b for b in detalle.verificacion.bloqueos)
+        assert any("pocas unidades" in a for a in detalle.verificacion.avisos)
+        assert [h.accion for h in detalle.historial] == ["creado"]
+        assert rocketfy.consultas == []  # el detalle no llama a la red
+
+    def test_detalle_de_un_sku_inexistente(self):
+        servicio, _, _, _ = _servicio()
+        with pytest.raises(ProductoBotNoEncontradoError):
+            servicio.obtener_detalle("NO-EXISTE")

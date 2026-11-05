@@ -17,6 +17,7 @@ from src.routes.incidencias import incidencias_bp
 from src.routes.metricas import metricas_bp
 from src.routes.pedidos import pedidos_bp
 from src.routes.productos import productos_bp
+from src.routes.productos_bot import productos_bot_bp
 from src.routes.webhooks import webhooks_bp
 from src.routes.whatsapp import whatsapp_bp
 from src.routes.whatsapp.factory import get_bot_worker
@@ -63,6 +64,7 @@ def create_app() -> Flask:
     app.register_blueprint(incidencias_bp)
     app.register_blueprint(pedidos_bp)
     app.register_blueprint(productos_bp)
+    app.register_blueprint(productos_bot_bp)
     app.register_blueprint(metricas_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(whatsapp_bp)

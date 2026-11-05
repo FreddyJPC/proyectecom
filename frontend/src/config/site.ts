@@ -73,5 +73,8 @@ export function migasDe(pathname: string): Miga[] {
   }
   if (seccion.url === "/pedidos") return [{ label: seccion.title, href: seccion.url }, { label: `Pedido #${resto}` }];
   if (seccion.url === "/conversaciones") return [{ label: seccion.title, href: seccion.url }, { label: "Conversación" }];
+  if (seccion.url === "/catalogo" && resto.startsWith("producto/")) {
+    return [{ label: seccion.title, href: `${seccion.url}?tab=mis-productos` }, { label: "Ficha del producto" }];
+  }
   return [{ label: seccion.title, href: seccion.url }, { label: resto }];
 }

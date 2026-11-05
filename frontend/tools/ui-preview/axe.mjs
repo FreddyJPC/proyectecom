@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/metricas"];
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/metricas"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 for (const theme of ["light", "dark"]) {

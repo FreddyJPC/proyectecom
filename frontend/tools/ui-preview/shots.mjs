@@ -16,6 +16,10 @@ const rutas = [
   ["pedido-nuevo", "/pedidos/nuevo", true],
   ["incidencias", "/incidencias", true],
   ["catalogo", "/catalogo", true],
+  ["mis-productos", "/catalogo?tab=mis-productos", true],
+  ["ficha-activo", "/catalogo/producto/AUD-BT-001", true],
+  ["ficha-borrador", "/catalogo/producto/LMP-LED-220", true],
+  ["ficha-archivado", "/catalogo/producto/CAM-SEG-360", true],
   ["metricas", "/metricas", true],
 ];
 const vistas = [["desktop", { width: 1440, height: 900 }], ["movil", { width: 390, height: 844 }]];

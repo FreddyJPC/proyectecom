@@ -135,6 +135,111 @@ const metricas = {
   avisoImportante: "Estos valores son un agregado de pedidos y montos por estado. No equivalen al saldo real de tu billetera de Rocketfy.",
 };
 
+
+// ---------- Mis productos (gestión de productos de ventas, Fase B) ----------
+// Mantiene estado en memoria para poder probar crear, editar y publicar. Las
+// reglas de verificación son un espejo reducido de backend/.../verificacion.py.
+const PISO_MIN = 1000; // $10.00 en centavos (recaudo mínimo de Rocketfy)
+const cents = (m) => { const r = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(m ?? "").trim()); return r ? Number(r[1]) * 100 + Number((r[2] || "").padEnd(2, "0") || 0) : null; };
+const dinero = (c) => `${Math.floor(c / 100)}.${String(c % 100).padStart(2, "0")}`;
+const fichaBase = (sku, nombre, estado, precio, costo, sugerido, stock, extra = {}) => ({
+  sku, nombre, estado, precio, costoRocketfy: costo, precioSugeridoRocketfy: sugerido, stockUltimo: stock, stockActualizadoEn: ago(12),
+  pesoKg: "0.350", imagenUrl: null, rocketfyProductId: 4800 + sku.length, descripcion: "", variantes: null, tiempoEntrega: "", metodosPago: ["contraentrega"],
+  preguntasFrecuentes: null, temasNoResponder: null, maxUnidadesPorPedido: 1, notasInternas: null, publicadoEn: null, publicadoPor: null,
+  creadoEn: ago(9000), actualizadoEn: ago(60), historial: [], ...extra,
+});
+const productosBot = [
+  fichaBase("AUD-BT-001", "Audífonos Bluetooth Pro", "activo", "34.90", "18.50", "34.90", 4, {
+    descripcion: "Audífonos inalámbricos con cancelación de ruido, hasta 30 horas de batería y estuche de carga.", tiempoEntrega: "2 a 4 días hábiles",
+    variantes: "Negro, blanco", preguntasFrecuentes: "¿Trae cargador? Sí, cable USB-C incluido.", publicadoEn: ago(4000), publicadoPor: "freddy@azoshop.ec", actualizadoEn: ago(35),
+    historial: [
+      { accion: "editado", usuario: "freddy@azoshop.ec", cambios: { precio: ["29.90", "34.90"], tiempo_entrega: ["", "2 a 4 días hábiles"] }, creadoEn: ago(4100) },
+      { accion: "publicado", usuario: "freddy@azoshop.ec", cambios: { estado: ["borrador", "activo"] }, creadoEn: ago(4000) },
+      { accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "rocketfy" }, creadoEn: ago(9000) },
+    ],
+  }),
+  fichaBase("RLJ-SM-014", "Reloj Inteligente Serie 7", "activo", "34.90", "20.00", "39.90", 62, {
+    descripcion: "Reloj con monitor de actividad, notificaciones y resistencia al agua.", tiempoEntrega: "2 a 4 días hábiles", metodosPago: ["contraentrega", "transferencia"],
+    publicadoEn: ago(2800), publicadoPor: "freddy@azoshop.ec", actualizadoEn: ago(300),
+    historial: [{ accion: "publicado", usuario: "freddy@azoshop.ec", cambios: { estado: ["borrador", "activo"] }, creadoEn: ago(2800) }, { accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "rocketfy" }, creadoEn: ago(3000) }],
+  }),
+  fichaBase("LMP-LED-220", "Lámpara LED Recargable", "borrador", "24.99", "12.00", "24.99", 28, {
+    descripcion: "Lámpara LED recargable con tres niveles de luz.", actualizadoEn: ago(20), historial: [{ accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "rocketfy" }, creadoEn: ago(20) }],
+  }),
+  fichaBase("CRG-RAP-33", "Cargador Rápido 33W", "pausado", "12.50", "7.00", "12.50", 140, {
+    descripcion: "Cargador de pared de carga rápida 33W con cable USB-C.", tiempoEntrega: "2 a 4 días hábiles", publicadoEn: ago(6000), publicadoPor: "freddy@azoshop.ec", actualizadoEn: ago(1500),
+    historial: [{ accion: "pausado", usuario: "freddy@azoshop.ec", cambios: { estado: ["activo", "pausado"] }, creadoEn: ago(1500) }],
+  }),
+  fichaBase("SPK-MIN-20", "Parlante Bluetooth Mini", "agotado", "22.00", "11.00", "22.00", 0, {
+    descripcion: "Parlante portátil con sonido de 360° y batería de 8 horas.", tiempoEntrega: "2 a 4 días hábiles", actualizadoEn: ago(600),
+  }),
+  fichaBase("CAM-SEG-360", "Cámara de Seguridad 360°", "archivado", "39.99", "25.00", "39.99", 28, { descripcion: "Cámara Wi-Fi con giro de 360°.", tiempoEntrega: "3 a 5 días hábiles", actualizadoEn: ago(20000) }),
+];
+const resumenBot = (f) => ({ sku: f.sku, nombre: f.nombre, estado: f.estado, precio: f.precio, costoRocketfy: f.costoRocketfy, stockUltimo: f.stockUltimo, maxUnidadesPorPedido: f.maxUnidadesPorPedido, imagenUrl: f.imagenUrl, publicadoEn: f.publicadoEn, actualizadoEn: f.actualizadoEn });
+function verificarBot(f) {
+  const bloqueos = [], avisos = [];
+  if (!f.nombre.trim()) bloqueos.push("Falta el nombre del producto.");
+  if (!f.descripcion.trim()) bloqueos.push("Falta la descripción: es lo que Victoria cuenta al cliente.");
+  if (!f.tiempoEntrega.trim()) bloqueos.push("Falta el tiempo de entrega.");
+  if (!f.metodosPago.length) bloqueos.push("Falta al menos un método de pago.");
+  const piso = Math.max(cents(f.costoRocketfy) ?? 0, PISO_MIN), precio = cents(f.precio);
+  if (precio == null || precio <= 0) bloqueos.push("El precio debe ser mayor que cero.");
+  else if (precio < piso) bloqueos.push(`El precio ($${f.precio}) está por debajo del mínimo para vender ($${dinero(piso)}).`);
+  if (f.stockUltimo === 0) bloqueos.push("Rocketfy reporta 0 unidades en stock.");
+  else if (f.stockUltimo != null && f.stockUltimo <= 5) avisos.push(`Quedan pocas unidades (${f.stockUltimo}): conviene vigilarlo.`);
+  if (f.metodosPago.includes("transferencia")) avisos.push("Acepta transferencia: tendrás que confirmar cada pago a mano.");
+  if (!f.preguntasFrecuentes) avisos.push("No tiene preguntas frecuentes: Victoria te consultará más seguido.");
+  if (f.variantes) avisos.push("Tiene variantes: Victoria deberá preguntar cuál quiere el cliente.");
+  return { bloqueos, avisos };
+}
+const detalleBot = (f) => ({ ...f, verificacion: verificarBot(f) });
+const ACCIONES_BOT = { publicar: [["borrador", "listo"], "activo", "publicado"], reanudar: [["pausado", "agotado"], "activo", "reanudado"], pausar: [["activo"], "pausado", "pausado"], archivar: [["borrador", "listo", "activo", "pausado", "agotado"], "archivado", "archivado"], restaurar: [["archivado"], "borrador", "restaurado"] };
+function manejarProductosBot(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = raw ? JSON.parse(raw) : {};
+    const usuario = "freddy@azoshop.ec";
+    const hist = (f, accion, cambios) => f.historial.unshift({ accion, usuario, cambios, creadoEn: new Date().toISOString() });
+    if (p === "/productos-bot" && req.method === "GET") return send(productosBot.filter((f) => q.get("incluirArchivados") === "true" || f.estado !== "archivado").map(resumenBot));
+    if (p === "/productos-bot" && req.method === "POST") {
+      const rk = catalogo.find((x) => x.sku === body.sku);
+      if (!rk) return send({ error: `El SKU '${body.sku}' no existe en el catálogo de Rocketfy.` }, 422);
+      if (productosBot.some((f) => f.sku === rk.sku)) return send({ error: `El producto '${rk.sku}' ya tiene ficha.` }, 409);
+      const f = fichaBase(rk.sku, rk.name, "borrador", rk.price, String(Math.round(Number(rk.price) * 55) / 100), rk.price, rk.stock, { descripcion: `${rk.name}.`, actualizadoEn: new Date().toISOString() });
+      f.costoRocketfy = dinero(Math.round((cents(rk.price) ?? 0) * 0.55));
+      hist(f, "creado", { desde: "rocketfy" }); productosBot.unshift(f);
+      return send(detalleBot(f), 201);
+    }
+    const m = p.match(/^\/productos-bot\/([^/]+)(?:\/([a-z-]+))?$/);
+    if (!m) return send({ error: "mock: ruta no implementada " + p }, 404);
+    const f = productosBot.find((x) => x.sku === decodeURIComponent(m[1]));
+    if (!f) return send({ error: `No existe el producto '${decodeURIComponent(m[1])}'.` }, 404);
+    const accion = m[2];
+    if (!accion && req.method === "GET") return send(detalleBot(f));
+    if (!accion && req.method === "PATCH") {
+      if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede editar: restáuralo primero." }, 409);
+      const cambios = {};
+      for (const [k, v] of Object.entries(body)) if (JSON.stringify(f[k]) !== JSON.stringify(v)) { cambios[k] = [f[k] ?? null, v]; }
+      const antes = new Set(verificarBot(f).bloqueos);
+      const propuesto = { ...f, ...body };
+      if (f.estado === "activo") { const peor = verificarBot(propuesto).bloqueos.filter((b) => !antes.has(b)); if (peor.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos: peor }, 422); }
+      Object.assign(f, body, { actualizadoEn: new Date().toISOString() });
+      if (Object.keys(cambios).length) hist(f, "editado", cambios);
+      return send(detalleBot(f));
+    }
+    if (accion === "actualizar-rocketfy") { f.stockActualizadoEn = new Date().toISOString(); f.actualizadoEn = f.stockActualizadoEn; return send(detalleBot(f)); }
+    const regla = ACCIONES_BOT[accion];
+    if (!regla) return send({ error: "mock: acción no implementada " + accion }, 404);
+    if (!regla[0].includes(f.estado)) return send({ error: `No se puede ${accion} un producto que está en estado '${f.estado}'.` }, 409);
+    if (regla[1] === "activo") { const { bloqueos } = verificarBot(f); if (bloqueos.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos }, 422); }
+    hist(f, regla[2], { estado: [f.estado, regla[1]] });
+    f.estado = regla[1]; f.actualizadoEn = new Date().toISOString();
+    if (regla[1] === "activo") { f.publicadoEn = f.actualizadoEn; f.publicadoPor = usuario; }
+    return send(detalleBot(f));
+  });
+}
+
 // ---------- servidor ----------
 function paginar(arr, q) {
   const page = Number(q.get("page") || 1), pageSize = Number(q.get("pageSize") || 20);
@@ -189,6 +294,7 @@ const server = http.createServer((req, res) => {
     if (p === "/productos/monitoreados") return send(monitoreados);
     if (p === "/catalogos/ubicaciones") return send({ provincias });
     if ((m = p.match(/^\/catalogos\/ubicaciones\/(.+)\/cantones$/))) return send({ cantones: cantones[decodeURIComponent(m[1])] || [] });
+    if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     send({ error: "mock: ruta no implementada " + p }, 404);
   };
   delay ? setTimeout(go, delay) : go();

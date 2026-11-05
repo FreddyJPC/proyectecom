@@ -16,6 +16,36 @@ export function formatMoney(valor: string | number | null | undefined): string {
   return `${negativo ? "-" : ""}$${conMiles}.${dec}`;
 }
 
+/** Rocketfy no entrega un pedido contra entrega por menos de este monto
+ * (espejo de `RECAUDO_MINIMO_CONTRAENTREGA` del backend), en centavos. */
+export const RECAUDO_MINIMO_CENTAVOS = 1000;
+
+/** Texto que escribe una persona -> monto normalizado ("24,5" -> "24.50").
+ * Devuelve `null` si no es un monto válido (más de 2 decimales, letras, 0…).
+ * Se trabaja sobre el texto, nunca con `float`. */
+export function normalizarMonto(texto: string): string | null {
+  const limpio = texto.trim().replace(",", ".").replace(/^\$/, "");
+  const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(limpio);
+  if (!m) return null;
+  const monto = `${Number(m[1])}.${(m[2] ?? "").padEnd(2, "0")}`;
+  return monto === "0.00" ? null : monto;
+}
+
+/** "24.99" -> 2499 (centavos enteros, para comparar sin errores de redondeo). */
+export function aCentavos(monto: string | null | undefined): number | null {
+  if (monto == null) return null;
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(monto.trim());
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0") || "0");
+}
+
+/** 1250 -> "12.50" */
+export function deCentavos(centavos: number): string {
+  const negativo = centavos < 0;
+  const abs = Math.abs(centavos);
+  return `${negativo ? "-" : ""}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
 /** "593987654321" -> "+593 98 765 4321". Si no tiene la forma de un celular
  * ecuatoriano, devuelve el número tal cual para no ocultar información. */
 export function formatPhone(telefono: string | null | undefined): string {

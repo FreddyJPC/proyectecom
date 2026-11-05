@@ -70,6 +70,55 @@ export const ESTADOS_CONVERSACION: Record<string, EstadoInfo> = {
   fria: { label: "Fría", variant: "neutral" },
 };
 
+/**
+ * Estados de `productos_bot.estado` (Fase B de la gestión de productos).
+ * Espejo de `backend/src/routes/productos_bot/services.py`. Solo "activo"
+ * (aquí "A la venta") es lo que Victoria ofrece; el resto son productos que
+ * no se venden: aún sin publicar, en pausa, sin stock o archivados.
+ */
+export const ESTADOS_PRODUCTO_BOT: Record<string, EstadoInfo & { explicacion: string }> = {
+  borrador: { label: "Borrador", variant: "neutral", explicacion: "Todavía no se vende. Completa los datos y publícalo." },
+  listo: { label: "Listo", variant: "info", explicacion: "Completo, a la espera de publicarse." },
+  activo: { label: "A la venta", variant: "success", explicacion: "Victoria lo ofrece a los clientes." },
+  pausado: { label: "Pausado", variant: "warning", explicacion: "Victoria no lo ofrece. Puedes reanudarlo cuando quieras." },
+  agotado: { label: "Agotado", variant: "danger", explicacion: "Sin stock: Victoria no lo ofrece hasta que lo reanudes." },
+  archivado: { label: "Archivado", variant: "neutral", explicacion: "Fuera de la lista. Puedes restaurarlo como borrador." },
+};
+
+export function estadoProductoBotInfo(estado: string): EstadoInfo & { explicacion: string } {
+  return ESTADOS_PRODUCTO_BOT[estado] ?? { label: estado, variant: "neutral", explicacion: "" };
+}
+
+/** Etiqueta legible de cada acción del historial de un producto. */
+export const ACCIONES_HISTORIAL: Record<string, string> = {
+  creado: "Creado como borrador",
+  editado: "Editado",
+  publicado: "Publicado",
+  pausado: "Pausado",
+  reanudado: "Reanudado",
+  archivado: "Archivado",
+  restaurado: "Restaurado como borrador",
+  actualizado_rocketfy: "Datos de Rocketfy actualizados",
+};
+
+/** Nombre legible de cada campo que aparece en `cambios` del historial (son
+ * nombres de columna de `productos_bot`). */
+export const CAMPOS_HISTORIAL: Record<string, string> = {
+  nombre: "Nombre",
+  descripcion: "Descripción",
+  precio: "Precio",
+  variantes: "Variantes",
+  tiempo_entrega: "Tiempo de entrega",
+  metodos_pago_aceptados: "Métodos de pago",
+  preguntas_frecuentes: "Preguntas frecuentes",
+  temas_no_responder: "Temas que no debe responder",
+  max_unidades_por_pedido: "Unidades máximas por pedido",
+  notas_internas: "Notas internas",
+  costo_rocketfy: "Costo en Rocketfy",
+  precio_sugerido_rocketfy: "Precio sugerido por Rocketfy",
+  estado: "Estado",
+};
+
 export function estadoConversacionInfo(estado: string): EstadoInfo {
   return ESTADOS_CONVERSACION[estado] ?? { label: estado, variant: "neutral" };
 }
