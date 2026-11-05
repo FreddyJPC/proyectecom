@@ -53,6 +53,32 @@ for (const theme of ["light", "dark"]) {
         await page.waitForTimeout(300);
         await auditar(r + " [ia borrador]");
         await page.keyboard.press("Escape");
+
+        // Probar con Victoria: se audita el chat vacío, con una conversación y con el pedido simulado.
+        await page.getByRole("button", { name: "Abrir la prueba" }).click();
+        await page.getByText("Escribe como lo haría un cliente").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba vacia]");
+        await page.keyboard.press("Escape");
+      }
+      if (r === "/catalogo/producto/AUD-BT-001") {
+        await page.getByRole("button", { name: "Abrir la prueba" }).click();
+        await page.getByRole("button", { name: "Quiero comprarlo" }).click();
+        await page.getByText("Herramientas que usó").first().waitFor();
+        await page.getByText("Herramientas que usó").first().click();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba chat]");
+        await page.getByLabel("Mensaje del cliente de prueba").fill("Soy Ana Pérez, vivo en Av. Amazonas 123 y Colón, Quito, Pichincha. Pago contra entrega");
+        await page.getByRole("button", { name: "Enviar" }).click();
+        await page.getByText("Pedido que se habría enviado a Rocketfy").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba pedido]");
+        await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+        await page.getByRole("button", { name: "Pregunta fuera de la ficha" }).click();
+        await page.getByText("Avisos que se habrían enviado a Telegram").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba escalada]");
+        await page.keyboard.press("Escape");
       }
     }
     await ctx.close();

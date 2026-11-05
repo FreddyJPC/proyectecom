@@ -246,11 +246,100 @@ class RecomendacionPrecioSchema(Schema):
     avisos = fields.List(fields.Str())
 
 
+# ---- Probar con Victoria (Fase E) ------------------------------------------
+MAX_MENSAJE_DE_PRUEBA = 1000
+MAX_MENSAJES_EN_EL_HISTORIAL = 100
+MAX_LARGO_DE_UN_MENSAJE_DEL_HISTORIAL = 4000
+
+
+class MensajeDePruebaSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    rol = fields.Str(required=True, validate=validate.OneOf(["cliente", "bot"]))
+    contenido = fields.Str(required=True, validate=validate.Length(min=1, max=MAX_LARGO_DE_UN_MENSAJE_DEL_HISTORIAL))
+
+
+class EstadoDeLaPruebaSchema(Schema):
+    """La venta en curso (el lead de mentira) tal como la app la guarda y la
+    reenvía. Lo que no se conoce se descarta (`lead_desde_estado` vuelve a filtrar)."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    nombre_cliente = fields.Str(data_key="nombreCliente", allow_none=True)
+    direccion = fields.Str(allow_none=True)
+    canton = fields.Str(allow_none=True)
+    provincia = fields.Str(allow_none=True)
+    producto_sku = fields.Str(data_key="productoSku", allow_none=True)
+    producto_nombre = fields.Str(data_key="productoNombre", allow_none=True)
+    producto_variante = fields.Str(data_key="productoVariante", allow_none=True)
+    cantidad = fields.Int(allow_none=True)
+    total = fields.Str(allow_none=True)
+    metodo_pago = fields.Str(data_key="metodoPago", allow_none=True)
+    estado = fields.Str(allow_none=True)
+    id_pedido_local = fields.Int(data_key="idPedidoLocal", allow_none=True)
+    id_pedido_rocketfy = fields.Int(data_key="idPedidoRocketfy", allow_none=True)
+
+
+class ProbarInputSchema(Schema):
+    """POST .../probar: un mensaje del cliente de mentira, la conversación hasta
+    ahora y la venta en curso."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    mensaje = fields.Str(required=True, validate=validate.Length(min=1, max=MAX_MENSAJE_DE_PRUEBA))
+    historial = fields.List(
+        fields.Nested(MensajeDePruebaSchema),
+        load_default=list,
+        validate=validate.Length(max=MAX_MENSAJES_EN_EL_HISTORIAL),
+    )
+    estado = fields.Nested(EstadoDeLaPruebaSchema, load_default=None, allow_none=True)
+    desde_anuncio = fields.Bool(data_key="desdeAnuncio", load_default=False)
+    escalada = fields.Bool(load_default=False)
+
+    @post_load
+    def _limpiar(self, data, **kwargs):
+        data["mensaje"] = data["mensaje"].strip()
+        if not data["mensaje"]:
+            raise ValidationError("Escribe un mensaje.", "mensaje")
+        return data
+
+
+class LlamadaHerramientaSchema(Schema):
+    nombre = fields.Str()
+    entrada = fields.Dict()
+    resultado = fields.Str()
+
+
+class PedidoSimuladoSchema(Schema):
+    payload = fields.Dict()
+    confirmado = fields.Bool()
+
+
+class AvisoSimuladoSchema(Schema):
+    canal = fields.Str()
+    texto = fields.Str()
+
+
+class TurnoSimuladoSchema(Schema):
+    respuesta = fields.Str()
+    herramientas = fields.List(fields.Nested(LlamadaHerramientaSchema))
+    estado = fields.Dict()
+    escalada = fields.Bool()
+    pedido = fields.Nested(PedidoSimuladoSchema, allow_none=True)
+    avisos = fields.List(fields.Nested(AvisoSimuladoSchema))
+    uso = fields.Nested(UsoIASchema)
+
+
 crear_input_schema = CrearProductoBotInputSchema()
 editar_input_schema = EditarProductoBotInputSchema()
 resumen_lista_schema = ProductoBotResumenSchema(many=True)
 detalle_schema = ProductoBotDetalleSchema()
 recomendacion_precio_schema = RecomendacionPrecioSchema()
 generar_contenido_input_schema = GenerarContenidoInputSchema()
+probar_input_schema = ProbarInputSchema()
+turno_simulado_schema = TurnoSimuladoSchema()
 borrador_contenido_schema = BorradorContenidoSchema()
 uso_ia_schema = UsoIASchema()

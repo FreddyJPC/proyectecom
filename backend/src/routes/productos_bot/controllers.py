@@ -15,11 +15,14 @@ from .exceptions import (
     IANoDisponibleError,
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
+    PruebaInvalidaError,
     PublicacionBloqueadaError,
     SkuInvalidoError,
     TopeDeIAAlcanzadoError,
+    TopeDePruebasAlcanzadoError,
     TransicionInvalidaError,
 )
+from .pruebas import PruebasService
 from .redaccion import NotasDelDueno
 from .schemas import (
     borrador_contenido_schema,
@@ -27,8 +30,10 @@ from .schemas import (
     detalle_schema,
     editar_input_schema,
     generar_contenido_input_schema,
+    probar_input_schema,
     recomendacion_precio_schema,
     resumen_lista_schema,
+    turno_simulado_schema,
     uso_ia_schema,
 )
 from .services import ProductosBotService
@@ -42,6 +47,10 @@ def _build_service() -> ProductosBotService:
 
 def _build_contenido_service() -> ContenidoIAService:
     return ContenidoIAService()
+
+
+def _build_pruebas_service() -> PruebasService:
+    return PruebasService()
 
 
 def _usuario():
@@ -58,7 +67,7 @@ def _responder_error(exc):
     Devuelve None si no es una de las conocidas."""
     if isinstance(exc, ProductoBotNoEncontradoError):
         return jsonify(error=str(exc)), 404
-    if isinstance(exc, (ProductoBotYaExisteError, TransicionInvalidaError)):
+    if isinstance(exc, (ProductoBotYaExisteError, TransicionInvalidaError, PruebaInvalidaError)):
         return jsonify(error=str(exc)), 409
     if isinstance(exc, PublicacionBloqueadaError):
         return jsonify(error="El producto no cumple lo mínimo para esa acción.", bloqueos=exc.bloqueos), 422
@@ -67,6 +76,8 @@ def _responder_error(exc):
     if isinstance(exc, _ERRORES_ROCKETFY):
         return jsonify(error=f"No se pudo consultar Rocketfy: {exc}"), 502
     if isinstance(exc, TopeDeIAAlcanzadoError):
+        return jsonify(error=str(exc), uso={"tope": exc.tope, "usadas": exc.usadas, "restantes": 0}), 429
+    if isinstance(exc, TopeDePruebasAlcanzadoError):
         return jsonify(error=str(exc), uso={"tope": exc.tope, "usadas": exc.usadas, "restantes": 0}), 429
     if isinstance(exc, IANoDisponibleError):
         return jsonify(error=str(exc)), 503
@@ -83,6 +94,8 @@ _ERRORES_CONOCIDOS = (
     SkuInvalidoError,
     SkuNoExisteEnRocketfyError,
     TopeDeIAAlcanzadoError,
+    TopeDePruebasAlcanzadoError,
+    PruebaInvalidaError,
     IANoDisponibleError,
     IAFalloError,
 ) + _ERRORES_ROCKETFY
@@ -100,6 +113,15 @@ def uso_de_la_ia():
     """Cuántos borradores de IA quedan hoy (para mostrarlo antes de pedir uno)."""
     try:
         return jsonify(uso_ia_schema.dump(asdict(_build_contenido_service().uso()))), 200
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.get("/pruebas/uso")
+def uso_de_las_pruebas():
+    """Cuántos mensajes de prueba con Victoria quedan hoy."""
+    try:
+        return jsonify(uso_ia_schema.dump(asdict(_build_pruebas_service().uso()))), 200
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
 
@@ -153,6 +175,31 @@ def generar_contenido(sku: str):
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
     return jsonify(borrador_contenido_schema.dump(asdict(borrador))), 200
+
+
+@productos_bot_bp.post("/<sku>/probar")
+def probar_con_victoria(sku: str):
+    """Un turno de la conversación de PRUEBA con Victoria. No guarda nada de la
+    conversación ni toca Rocketfy, WhatsApp o Telegram (ver simulacion.py): la
+    app lleva el estado y lo reenvía en cada turno."""
+    try:
+        data = probar_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        turno = _build_pruebas_service().probar(
+            sku=sku,
+            mensaje=data["mensaje"],
+            historial=data["historial"],
+            estado=data["estado"],
+            desde_anuncio=data["desde_anuncio"],
+            escalada=data["escalada"],
+            usuario=_usuario(),
+        )
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+    return jsonify(turno_simulado_schema.dump(asdict(turno))), 200
 
 
 _MONTO = re.compile(r"^\d{1,7}(\.\d{1,2})?$")

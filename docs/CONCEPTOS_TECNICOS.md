@@ -894,3 +894,54 @@ precio se marca. Los números los calcula el código (ver §28).
 es el de Ecuador: si fuera el de UTC, el contador se reiniciaría a las 19:00 de
 Quito. Un borrador con formato inválido sí cuenta (la IA contestó); un fallo del
 proveedor no.
+
+
+## 30. Probar con Victoria: el mismo cerebro en un mundo de mentira
+
+**Para qué sirve.** Antes de publicar un producto quieres ver cómo se comporta
+Victoria con él, sin que un cliente real sea el conejillo de indias y sin
+crear pedidos reales en Rocketfy.
+
+**La idea.** No se escribe una «Victoria de mentira»: se usa **la misma** (el
+mismo código, el mismo prompt, el mismo modelo, las mismas reglas de sus
+herramientas) y se cambia **lo que la rodea**. Es como ensayar una obra con los
+mismos actores pero con un escenario de cartón: lo que hacen es real, el
+decorado no.
+
+**Qué se cambia (y cómo se llama la técnica).** Las piezas con las que Victoria
+habla con el exterior se reemplazan por dobles:
+- la **base de datos** por **memoria** (repositorios en memoria): nada se guarda;
+- **Rocketfy** por un cliente que **solo anota** lo que recibiría (esto se llama
+  *test double* o «doble de prueba», y a la variante que registra las llamadas,
+  *spy*). El código real que valida la dirección y arma el pedido sí corre,
+  así que ves el pedido **exactamente como se enviaría**;
+- **Telegram** por un grabador: el aviso queda a la vista, pero no sale.
+
+Esto es lo que §25 llama *dry run* (ensayo): hace todo el trabajo menos el último
+paso irreversible.
+
+**Cómo se comprueba que de verdad no toca nada.** Con un test que prohíbe lo
+prohibido: una petición HTTP cualquiera falla (la librería de pruebas
+`responses` no tiene ninguna URL permitida) y abrir una conexión a la base
+también falla. Si alguien algún día cambia el código y la simulación empieza a
+tocar el mundo real, ese test se pone en rojo. Además se **comprobó que el test
+sí detecta fallos** (control negativo): un test que nunca falla no demuestra nada.
+
+**Sin estado en el servidor.** La conversación de prueba no se guarda: la app
+la lleva y la manda completa en cada mensaje. Así no queda nada que limpiar y
+reiniciar la prueba es simplemente borrar lo que tiene la pantalla.
+
+**Cuesta plata, así que tiene tope.** Cada mensaje de prueba llama a la IA (y a
+veces varias veces, porque Victoria usa herramientas): hay un tope diario
+(100 mensajes, ajustable) y un máximo de 20 mensajes por prueba.
+
+**Qué NO prueba (para no confiar de más).** Que Rocketfy acepte de verdad el
+pedido (cobertura, saldo), el stock real, las imágenes (el comprobante de una
+transferencia) ni cómo elige Victoria entre varios productos. Una simulación
+reduce el riesgo, **no lo elimina**: la primera venta real de cada producto sigue
+mereciendo ojos humanos (un pedido de prueba).
+
+**La lista de verificación.** Antes de publicar, la app junta lo que
+**bloquea** (precio bajo el piso, falta un dato, sin stock…) y lo que solo
+**avisa** (margen bajo, no probaste una compra completa, se usó IA…). Lo que
+avisa se puede ignorar a conciencia; lo que bloquea, no.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ArchiveRestore, Loader2, Pause, Play, Rocket, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Archive, ArchiveRestore, Info, Loader2, Pause, Play, Rocket, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import type { AccionProductoBot, EstadoProductoBot, ProductoBotDetalle } from "@/types/producto-bot";
+import type { AccionProductoBot, EstadoProductoBot, ProductoBotDetalle, Verificacion } from "@/types/producto-bot";
 
 type ProductoMinimo = { sku: string; nombre: string; precio: string };
 
@@ -38,7 +38,7 @@ const CONFIG: Record<AccionProductoBot, Config> = {
     variant: "default",
     titulo: (p) => `¿Publicar «${p.nombre}»?`,
     descripcion: (p) =>
-      `Victoria empezará a ofrecer este producto a ${formatMoney(p.precio)} en cuanto confirmes. Antes se comprueba en Rocketfy que exista y tenga stock.`,
+      `Victoria empezará a vender «${p.nombre}» a ${formatMoney(p.precio)} en cuanto confirmes. Antes se comprueba en Rocketfy que exista y tenga stock.`,
     confirmar: "Sí, publicar",
     exito: "Publicado: Victoria ya puede venderlo.",
   },
@@ -48,7 +48,7 @@ const CONFIG: Record<AccionProductoBot, Config> = {
     variant: "default",
     titulo: (p) => `¿Reanudar «${p.nombre}»?`,
     descripcion: (p) =>
-      `Victoria volverá a ofrecerlo a ${formatMoney(p.precio)}. Antes se comprueba en Rocketfy que siga existiendo y tenga stock.`,
+      `Victoria volverá a vender «${p.nombre}» a ${formatMoney(p.precio)}. Antes se comprueba en Rocketfy que siga existiendo y tenga stock.`,
     confirmar: "Sí, reanudar",
     exito: "Reanudado: Victoria vuelve a ofrecerlo.",
   },
@@ -102,6 +102,7 @@ export const ACCIONES_POR_ESTADO: Record<EstadoProductoBot, AccionProductoBot[]>
 export function AccionEstadoBoton({
   accion,
   producto,
+  verificacion,
   onHecho,
   deshabilitado,
   variant,
@@ -110,6 +111,9 @@ export function AccionEstadoBoton({
 }: {
   accion: AccionProductoBot;
   producto: ProductoMinimo;
+  /** La lista de verificación del producto: al publicar o reanudar, sus avisos se muestran
+   * antes de confirmar (los bloqueos ya los impiden desde el botón). */
+  verificacion?: Verificacion;
   onHecho: (detalle: ProductoBotDetalle) => void;
   deshabilitado?: boolean;
   variant?: "default" | "outline";
@@ -122,6 +126,7 @@ export function AccionEstadoBoton({
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bloqueos, setBloqueos] = useState<string[]>([]);
+  const avisosPrevios = accion === "publicar" || accion === "reanudar" ? (verificacion?.avisos ?? []) : [];
 
   function cambiarApertura(v: boolean) {
     if (cargando) return;
@@ -167,6 +172,20 @@ export function AccionEstadoBoton({
           <AlertDialogTitle>{cfg.titulo(producto)}</AlertDialogTitle>
           <AlertDialogDescription>{cfg.descripcion(producto)}</AlertDialogDescription>
         </AlertDialogHeader>
+
+        {avisosPrevios.length > 0 && (
+          <div className="flex items-start gap-2.5 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <div className="min-w-0 space-y-1.5">
+              <p className="font-medium">Ten en cuenta antes de confirmar</p>
+              <ul className="list-disc space-y-1 pl-4">
+                {avisosPrevios.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-status-danger/30 bg-status-danger-soft p-3 text-sm text-status-danger-ink">

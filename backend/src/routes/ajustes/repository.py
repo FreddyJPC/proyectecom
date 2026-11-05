@@ -8,7 +8,7 @@ from .exceptions import AjustesInvalidosError
 
 _COLUMNAS = (
     "margen_minimo_pct, margen_objetivo_pct, envio_estimado, otros_costos_fijos, "
-    "otros_costos_pct, redondeo, tope_redacciones_dia, confirmado_en, actualizado_por, actualizado_en"
+    "otros_costos_pct, redondeo, tope_redacciones_dia, tope_pruebas_dia, confirmado_en, actualizado_por, actualizado_en"
 )
 
 # Únicas columnas que se pueden guardar (lista blanca: ningún nombre de
@@ -24,7 +24,7 @@ COLUMNAS_GUARDABLES = (
 
 # Ajustes que pueden venir o no en el PUT (si faltan, se conserva el valor guardado):
 # así un frontend viejo, que no los conoce, no los pisa ni falla.
-COLUMNAS_OPCIONALES = ("tope_redacciones_dia",)
+COLUMNAS_OPCIONALES = ("tope_redacciones_dia", "tope_pruebas_dia")
 
 
 def _fila(cur) -> Optional[Dict[str, Any]]:

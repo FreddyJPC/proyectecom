@@ -27,7 +27,7 @@ def _client():
 def _respuesta(**cambios):
     datos = dict(
         margen_minimo_pct="25.00", margen_objetivo_pct="35.00", envio_estimado="5.50", otros_costos_fijos="0.00",
-        otros_costos_pct="2.50", redondeo="terminado_99", tope_redacciones_dia=20, confirmado=True,
+        otros_costos_pct="2.50", redondeo="terminado_99", tope_redacciones_dia=20, tope_pruebas_dia=100, confirmado=True,
         actualizado_por="ana@ejemplo.com",
         actualizado_en="2026-11-05T22:00:00+00:00",
         calibracion_envio=CalibracionEnvioDTO(observaciones=2, minimo="7.00", mediana="8.00", maximo="9.00"),
@@ -51,7 +51,7 @@ class TestVer:
         assert resp.status_code == 200
         assert resp.get_json() == {
             "margenMinimoPct": "25.00", "margenObjetivoPct": "35.00", "envioEstimado": "5.50", "otrosCostosFijos": "0.00",
-            "otrosCostosPct": "2.50", "redondeo": "terminado_99", "topeRedaccionesDia": 20, "confirmado": True,
+            "otrosCostosPct": "2.50", "redondeo": "terminado_99", "topeRedaccionesDia": 20, "topePruebasDia": 100, "confirmado": True,
             "actualizadoPor": "ana@ejemplo.com",
             "actualizadoEn": "2026-11-05T22:00:00+00:00",
             "calibracionEnvio": {"observaciones": 2, "minimo": "7.00", "mediana": "8.00", "maximo": "9.00"},
@@ -98,6 +98,31 @@ class TestGuardar:
             datos = Servicio.return_value.guardar.call_args.args[0]
             assert datos.get("tope_redacciones_dia") == esperado
             assert ("tope_redacciones_dia" in datos) == (esperado is not None)
+
+    @responses.activate
+    def test_el_tope_de_pruebas_es_opcional_y_se_pasa_si_viene(self):
+        for cuerpo, esperado in (
+            (VALIDO, None),
+            ({**VALIDO, "topePruebasDia": 250}, 250),
+        ):
+            mock_login_ok()
+            with patch(SERVICIO) as Servicio:
+                Servicio.return_value.guardar.return_value = _respuesta(tope_pruebas_dia=esperado or 100)
+                resp = _client().put("/ajustes/negocio", json=cuerpo, headers=AUTH_HEADER)
+            assert resp.status_code == 200
+            assert resp.get_json()["topePruebasDia"] == (esperado or 100)
+            datos = Servicio.return_value.guardar.call_args.args[0]
+            assert datos.get("tope_pruebas_dia") == esperado
+            assert ("tope_pruebas_dia" in datos) == (esperado is not None)
+
+    @responses.activate
+    def test_tope_de_pruebas_fuera_de_rango_es_422(self):
+        for valor in (0, -1, 1001, "abc", 2.5):
+            mock_login_ok()
+            with patch(SERVICIO) as Servicio:
+                resp = _client().put("/ajustes/negocio", json={**VALIDO, "topePruebasDia": valor}, headers=AUTH_HEADER)
+            assert resp.status_code == 422, valor
+            Servicio.return_value.guardar.assert_not_called()
 
     @responses.activate
     def test_tope_de_redacciones_fuera_de_rango_es_422(self):

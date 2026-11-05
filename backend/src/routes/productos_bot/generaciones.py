@@ -7,6 +7,8 @@ from typing import List, Optional
 from src.config.database import get_connection
 
 TIPO_CONTENIDO = "contenido"
+# Mensajes de «Probar con Victoria» (Fase E): comparten la tabla pero tienen su propio tope.
+TIPO_SIMULACION = "simulacion"
 RESULTADOS = ("ok", "invalido", "fallo")
 # Los únicos resultados que costaron plata (la IA sí contestó): son los que
 # cuentan para el tope. Un "fallo" (el proveedor no respondió) no cuenta.

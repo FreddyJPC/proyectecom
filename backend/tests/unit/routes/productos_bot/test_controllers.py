@@ -13,14 +13,18 @@ from src.integrations.rocketfy import RocketfyRequestError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos_bot.dto import (
     AlertaContenidoDTO,
+    AvisoSimuladoDTO,
     BorradorContenidoDTO,
     CamposContenidoDTO,
     EvaluacionPrecioDTO,
     HistorialDTO,
+    LlamadaHerramientaDTO,
     NivelPrecioDTO,
+    PedidoSimuladoDTO,
     ProductoBotDetalleDTO,
     ProductoBotResumenDTO,
     RecomendacionPrecioDTO,
+    TurnoSimuladoDTO,
     UsoIADTO,
     VerificacionDTO,
 )
@@ -29,9 +33,11 @@ from src.routes.productos_bot.exceptions import (
     IANoDisponibleError,
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
+    PruebaInvalidaError,
     PublicacionBloqueadaError,
     SkuInvalidoError,
     TopeDeIAAlcanzadoError,
+    TopeDePruebasAlcanzadoError,
     TransicionInvalidaError,
 )
 from src.routes.productos_bot.redaccion import NotasDelDueno
@@ -39,6 +45,7 @@ from tests.conftest import AUTH_HEADER, mock_login_ok
 
 SERVICIO = "src.routes.productos_bot.controllers.ProductosBotService"
 SERVICIO_IA = "src.routes.productos_bot.controllers.ContenidoIAService"
+SERVICIO_PRUEBAS = "src.routes.productos_bot.controllers.PruebasService"
 CORREO_DE_PRUEBA = "freddyjavier556@gmail.com"  # el que devuelve mock_login_ok
 
 
@@ -499,3 +506,137 @@ class TestUsoDeLaIA:
             _client().get("/productos-bot/contenido/uso", headers=AUTH_HEADER)
         Productos.return_value.obtener_detalle.assert_not_called()
 
+
+
+
+def _turno(**cambios):
+    datos = dict(
+        respuesta="Hola, soy Victoria.",
+        herramientas=[LlamadaHerramientaDTO(nombre="registrar_producto", entrada={"producto_sku": "DEMO-1"}, resultado="Producto registrado.")],
+        estado={"nombreCliente": "Ana", "productoSku": "DEMO-1", "cantidad": 1, "total": "24.99", "estado": "despachado"},
+        escalada=False,
+        pedido=PedidoSimuladoDTO(payload={"name": "Ana", "total": "24.99", "not_COD": 0}, confirmado=True),
+        avisos=[AvisoSimuladoDTO(canal="telegram", texto="Victoria escaló la conversación. Motivo: x")],
+        uso=UsoIADTO(tope=100, usadas=1, restantes=99),
+    )
+    datos.update(cambios)
+    return TurnoSimuladoDTO(**datos)
+
+
+class TestProbarConVictoria:
+    @responses.activate
+    def test_sin_login_es_401(self):
+        assert _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}).status_code == 401
+        assert _client().get("/productos-bot/pruebas/uso").status_code == 401
+
+    @responses.activate
+    def test_devuelve_el_turno_en_camel_case(self):
+        mock_login_ok()
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.probar.return_value = _turno()
+            resp = _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}, headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        cuerpo = resp.get_json()
+        assert cuerpo["respuesta"] == "Hola, soy Victoria."
+        assert cuerpo["herramientas"] == [{"nombre": "registrar_producto", "entrada": {"producto_sku": "DEMO-1"}, "resultado": "Producto registrado."}]
+        assert cuerpo["estado"]["nombreCliente"] == "Ana" and cuerpo["escalada"] is False
+        assert cuerpo["pedido"] == {"payload": {"name": "Ana", "total": "24.99", "not_COD": 0}, "confirmado": True}
+        assert cuerpo["avisos"] == [{"canal": "telegram", "texto": "Victoria escaló la conversación. Motivo: x"}]
+        assert cuerpo["uso"] == {"tope": 100, "usadas": 1, "restantes": 99}
+
+    @responses.activate
+    def test_sin_pedido_va_null(self):
+        mock_login_ok()
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.probar.return_value = _turno(pedido=None, avisos=[])
+            resp = _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}, headers=AUTH_HEADER)
+        assert resp.get_json()["pedido"] is None
+
+    @responses.activate
+    def test_pasa_todo_lo_que_importa_al_servicio(self):
+        mock_login_ok()
+        cuerpo = {
+            "mensaje": "  Quiero 2  ",
+            "historial": [{"rol": "cliente", "contenido": "Hola", "extra": "se ignora"}, {"rol": "bot", "contenido": "Hola!"}],
+            "estado": {"nombreCliente": "Ana", "productoSku": "DEMO-1", "cantidad": 2, "total": "49.98", "metodoPago": "contraentrega", "idPedidoRocketfy": 9000001, "raro": 1},
+            "desdeAnuncio": True,
+            "escalada": False,
+        }
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.probar.return_value = _turno()
+            resp = _client().post("/productos-bot/DEMO-1/probar", json=cuerpo, headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        kw = Servicio.return_value.probar.call_args.kwargs
+        assert kw["sku"] == "DEMO-1" and kw["mensaje"] == "Quiero 2"
+        assert kw["historial"] == [{"rol": "cliente", "contenido": "Hola"}, {"rol": "bot", "contenido": "Hola!"}]
+        assert kw["estado"] == {
+            "nombre_cliente": "Ana", "producto_sku": "DEMO-1", "cantidad": 2, "total": "49.98",
+            "metodo_pago": "contraentrega", "id_pedido_rocketfy": 9000001,
+        }
+        assert kw["desde_anuncio"] is True and kw["escalada"] is False and kw["usuario"] == CORREO_DE_PRUEBA
+
+    @responses.activate
+    def test_lo_que_no_viene_toma_valores_por_defecto(self):
+        mock_login_ok()
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.probar.return_value = _turno()
+            _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}, headers=AUTH_HEADER)
+        kw = Servicio.return_value.probar.call_args.kwargs
+        assert kw["historial"] == [] and kw["estado"] is None and kw["desde_anuncio"] is False and kw["escalada"] is False
+
+    @responses.activate
+    def test_validaciones_de_entrada_no_llegan_al_servicio(self):
+        invalidos = [
+            {},
+            {"mensaje": ""},
+            {"mensaje": "   "},
+            {"mensaje": "x" * 1001},
+            {"mensaje": "Hola", "historial": [{"rol": "admin", "contenido": "hola"}]},
+            {"mensaje": "Hola", "historial": [{"rol": "cliente", "contenido": ""}]},
+            {"mensaje": "Hola", "historial": [{"rol": "cliente", "contenido": "x" * 4001}]},
+            {"mensaje": "Hola", "historial": [{"rol": "cliente", "contenido": "hola"}] * 101},
+            {"mensaje": "Hola", "estado": "no-es-un-objeto"},
+        ]
+        for cuerpo in invalidos:
+            mock_login_ok()
+            with patch(SERVICIO_PRUEBAS) as Servicio:
+                resp = _client().post("/productos-bot/DEMO-1/probar", json=cuerpo, headers=AUTH_HEADER)
+            assert resp.status_code == 422, cuerpo
+            Servicio.return_value.probar.assert_not_called()
+
+    @responses.activate
+    def test_errores_conocidos_se_traducen(self):
+        casos = [
+            (ProductoBotNoEncontradoError("no existe"), 404, None),
+            (TransicionInvalidaError("archivado"), 409, None),
+            (PruebaInvalidaError("La prueba ya terminó."), 409, None),
+            (PublicacionBloqueadaError(["Falta el nombre del producto."]), 422, "bloqueos"),
+            (TopeDePruebasAlcanzadoError(100, 100), 429, "uso"),
+            (IANoDisponibleError("sin clave"), 503, None),
+            (IAFalloError("no responde"), 502, None),
+        ]
+        for error, estado, clave in casos:
+            mock_login_ok()
+            with patch(SERVICIO_PRUEBAS) as Servicio:
+                Servicio.return_value.probar.side_effect = error
+                resp = _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}, headers=AUTH_HEADER)
+            assert resp.status_code == estado, error
+            assert "error" in resp.get_json()
+            if clave:
+                assert clave in resp.get_json()
+        # el tope trae el uso para que la app lo muestre
+        mock_login_ok()
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.probar.side_effect = TopeDePruebasAlcanzadoError(100, 100)
+            resp = _client().post("/productos-bot/DEMO-1/probar", json={"mensaje": "Hola"}, headers=AUTH_HEADER)
+        assert resp.get_json()["uso"] == {"tope": 100, "usadas": 100, "restantes": 0}
+
+    @responses.activate
+    def test_uso_de_las_pruebas(self):
+        mock_login_ok()
+        with patch(SERVICIO_PRUEBAS) as Servicio:
+            Servicio.return_value.uso.return_value = UsoIADTO(tope=100, usadas=12, restantes=88)
+            resp = _client().get("/productos-bot/pruebas/uso", headers=AUTH_HEADER)
+        assert resp.status_code == 200 and resp.get_json() == {"tope": 100, "usadas": 12, "restantes": 88}

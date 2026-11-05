@@ -52,6 +52,11 @@ _COLUMNAS_ROCKETFY = (
 )
 
 
+# Entrada del historial cuando una compra de prueba con Victoria se completó de
+# punta a punta (Fase E). Alimenta el aviso de la lista de verificación al publicar.
+ACCION_SIMULACION_COMPLETA = "simulacion_completa"
+
+
 def _fila(cur) -> Optional[Dict[str, Any]]:
     row = cur.fetchone()
     if row is None:
@@ -180,6 +185,19 @@ class ProductoBotGestionRepository:
                         Json(cambios, dumps=lambda o: json.dumps(o, default=str)) if cambios is not None else None,
                     ),
                 )
+
+    @staticmethod
+    def ultima_fecha_de(sku: str, accion: str):
+        """Cuándo fue la última vez que ocurrió `accion` en este producto (o None).
+        Es una consulta propia (no el historial recortado a 20) para que un
+        producto con mucha actividad no «olvide» su última simulación."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select max(creado_en) from productos_bot_historial where sku = %s and accion = %s",
+                    (sku, accion),
+                )
+                return cur.fetchone()[0]
 
     @staticmethod
     def listar_historial(sku: str, limite: int = 20) -> List[dict]:

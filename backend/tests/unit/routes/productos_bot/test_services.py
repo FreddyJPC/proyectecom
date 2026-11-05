@@ -98,6 +98,10 @@ class RepoEnMemoria:
     def listar_historial(self, sku, limite=20):
         return [h for h in reversed(self.historial) if h["sku"] == sku][:limite]
 
+    def ultima_fecha_de(self, sku, accion):
+        fechas = [h["creado_en"] for h in self.historial if h["sku"] == sku and h["accion"] == accion]
+        return max(fechas) if fechas else None
+
 
 class RocketfyFalso:
     def __init__(self, productos=None, error=None):
@@ -618,3 +622,83 @@ class TestPrecioDeLaCompetenciaEnLaFicha:
     def test_se_puede_borrar(self):
         servicio, _, _, _ = _servicio([_fila(precio_competencia=Decimal("22.50"))])
         assert servicio.editar("DEMO-1", {"precio_competencia": None}, None).precio_competencia is None
+
+
+
+class TestAvisosDeLaListaDeVerificacion:
+    """Plan de gestión de productos, sección 9: margen bajo y «no hubo una simulación completa»."""
+
+    @staticmethod
+    def _avisos(servicio, sku="DEMO-1"):
+        return servicio.obtener_detalle(sku).verificacion.avisos
+
+    def test_sin_compra_de_prueba_avisa_en_borrador_y_en_listo(self):
+        for estado in ("borrador", "listo"):
+            servicio, _, _, _ = _servicio([_fila(estado=estado)])
+            assert any("Todavía no probaste una compra completa" in a for a in self._avisos(servicio))
+
+    def test_no_avisa_en_productos_ya_publicados(self):
+        for estado in ("activo", "pausado", "agotado"):
+            servicio, _, _, _ = _servicio([_fila(estado=estado, activo=estado == "activo")])
+            assert not any("compra de prueba" in a or "compra completa" in a for a in self._avisos(servicio))
+
+    def test_con_una_compra_de_prueba_hecha_ya_no_avisa(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+        repo.registrar_historial("DEMO-1", "simulacion_completa", "ana@ejemplo.com")
+        assert not any("compra completa" in a or "compra de prueba" in a for a in self._avisos(servicio))
+
+    def test_si_se_edito_la_ficha_despues_de_la_prueba_avisa_que_conviene_repetirla(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+        repo.registrar_historial("DEMO-1", "simulacion_completa", None)
+        repo.historial[-1]["creado_en"] = AHORA
+        repo.registrar_historial("DEMO-1", "editado", None, {"precio": ["20.00", "24.99"]})
+        repo.historial[-1]["creado_en"] = datetime(2026, 11, 5, 22, 0, tzinfo=timezone.utc)
+        assert any("Cambiaste la ficha después de tu última compra de prueba" in a for a in self._avisos(servicio))
+
+    def test_una_edicion_anterior_a_la_prueba_no_cuenta(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+        repo.registrar_historial("DEMO-1", "editado", None, {})
+        repo.historial[-1]["creado_en"] = datetime(2026, 11, 5, 20, 0, tzinfo=timezone.utc)
+        repo.registrar_historial("DEMO-1", "simulacion_completa", None)
+        assert not any("Cambiaste la ficha" in a or "compra completa" in a for a in self._avisos(servicio))
+
+    def test_margen_bajo_el_minimo_avisa_solo_con_ajustes_confirmados(self):
+        # costo 10, envío 5 -> con precio 18 la ganancia es 3.00 = 16.7 %, menor que el 25 % mínimo
+        fila = _fila(precio=Decimal("18.00"), costo_rocketfy=Decimal("10.00"))
+        confirmado, _, _, _ = _servicio([fila], ajustes=AjustesFalsos(confirmado=True))
+        de_partida, _, _, _ = _servicio([fila], ajustes=AjustesFalsos(confirmado=False))
+        assert any("Tu margen (16.7 %) está por debajo del mínimo que definiste (25.00 %)" in a for a in self._avisos(confirmado))
+        assert not any("margen" in a.lower() for a in self._avisos(de_partida))
+
+    def test_con_margen_suficiente_no_avisa(self):
+        servicio, _, _, _ = _servicio([_fila(precio=Decimal("39.99"))], ajustes=AjustesFalsos(confirmado=True))
+        assert not any("margen" in a.lower() for a in self._avisos(servicio))
+
+    def test_si_vendes_a_perdida_lo_dice_con_el_monto(self):
+        servicio, _, _, _ = _servicio([_fila(precio=Decimal("12.00"))], ajustes=AjustesFalsos(confirmado=True))
+        assert any("pierdes $3.00 por unidad" in a for a in self._avisos(servicio))
+
+    def test_sin_costo_no_hay_margen_que_avisar(self):
+        servicio, _, _, _ = _servicio([_fila(costo_rocketfy=None)], ajustes=AjustesFalsos(confirmado=True))
+        assert not any("margen" in a.lower() for a in self._avisos(servicio))
+
+    def test_si_falla_el_calculo_la_ficha_se_muestra_igual(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+
+        def roto(*args, **kwargs):
+            raise RuntimeError("base caída")
+
+        repo.ultima_fecha_de = roto
+        detalle = servicio.obtener_detalle("DEMO-1")
+        assert detalle.sku == "DEMO-1"
+
+    def test_si_se_uso_la_ia_para_redactar_avisa_que_hay_que_verificar(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+        assert not any("redactó con IA" in a for a in self._avisos(servicio))
+        repo.registrar_historial("DEMO-1", "redactado_ia", None, {"campos": ["nombre"]})
+        assert any("Parte de la ficha se redactó con IA" in a for a in self._avisos(servicio))
+
+    def test_el_aviso_de_la_ia_no_sale_en_productos_ya_publicados(self):
+        servicio, repo, _, _ = _servicio([_fila(estado="activo", activo=True)])
+        repo.registrar_historial("DEMO-1", "redactado_ia", None, {"campos": ["nombre"]})
+        assert not any("redactó con IA" in a for a in self._avisos(servicio))

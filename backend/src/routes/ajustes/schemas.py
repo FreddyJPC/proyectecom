@@ -9,6 +9,7 @@ MAX_DINERO = Decimal("1000")
 MAX_PORCENTAJE = Decimal("99.99")
 CERO = Decimal("0")
 MAX_TOPE_REDACCIONES = 200
+MAX_TOPE_PRUEBAS = 1000
 REDONDEOS = ("terminado_99", "ninguno")
 
 
@@ -45,6 +46,9 @@ class GuardarAjustesInputSchema(Schema):
     tope_redacciones_dia = fields.Int(
         data_key="topeRedaccionesDia", strict=True, validate=validate.Range(min=1, max=MAX_TOPE_REDACCIONES)
     )
+    tope_pruebas_dia = fields.Int(
+        data_key="topePruebasDia", strict=True, validate=validate.Range(min=1, max=MAX_TOPE_PRUEBAS)
+    )
 
     @validates_schema
     def _coherencia(self, data, **kwargs):
@@ -74,6 +78,7 @@ class AjustesRespuestaSchema(Schema):
     otros_costos_pct = fields.Str(data_key="otrosCostosPct")
     redondeo = fields.Str()
     tope_redacciones_dia = fields.Int(data_key="topeRedaccionesDia")
+    tope_pruebas_dia = fields.Int(data_key="topePruebasDia")
     confirmado = fields.Bool()
     actualizado_por = fields.Str(data_key="actualizadoPor", allow_none=True)
     actualizado_en = fields.Str(data_key="actualizadoEn", allow_none=True)

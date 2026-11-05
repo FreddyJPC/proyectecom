@@ -100,6 +100,7 @@ export const ACCIONES_HISTORIAL: Record<string, string> = {
   restaurado: "Restaurado como borrador",
   actualizado_rocketfy: "Datos de Rocketfy actualizados",
   redactado_ia: "Borrador redactado con IA",
+  simulacion_completa: "Compra de prueba completada con Victoria",
 };
 
 /** De dónde sale un texto redactado con IA. «Sugerido por IA» es la señal de
