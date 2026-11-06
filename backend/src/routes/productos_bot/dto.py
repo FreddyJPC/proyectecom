@@ -31,6 +31,10 @@ class ProductoBotResumenDTO:
     imagen_url: Optional[str]
     publicado_en: Optional[str]
     actualizado_en: Optional[str]
+    # Fase F: pedidos creados en Rocketfy con este SKU en los últimos 30 días, y si el
+    # margen con el precio y el costo de hoy está bajo el mínimo del dueño.
+    pedidos_30d: int = 0
+    margen_en_riesgo: bool = False
 
 
 @dataclass

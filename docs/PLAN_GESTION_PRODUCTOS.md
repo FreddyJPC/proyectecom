@@ -1,7 +1,7 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B, C y D desplegadas
-> (2026-11-05); Fase E implementada (entrada 0.0.94 de `PROGRESS.md`); las demás, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B, C, D y E desplegadas
+> (2026-11-05 y 2026-11-06); Fase F implementada (entrada 0.0.96 de `PROGRESS.md`); la G, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -254,7 +254,7 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 *Listo cuando:* un test comprueba que una compra simulada completa no genera
 **ninguna** llamada a Rocketfy, Telegram o WhatsApp ni filas nuevas reales.
 
-> **Estado de la Fase E (2026-11-05):** implementada (entrada 0.0.94 de `PROGRESS.md`;
+> **Estado de la Fase E (2026-11-06):** desplegada (entradas 0.0.94 y 0.0.95 de `PROGRESS.md`;
 > 752 tests); **falta probarla con la IA real (pendiente #54)**. Cambios respecto a lo
 > escrito arriba: (1) el tope de pruebas es **mensajes por día** (100 por defecto,
 > ajustable en *Ajustes de precios*, migración 017) más un máximo de **20 mensajes por
@@ -279,6 +279,17 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 - **Alerta de margen en riesgo:** si el costo sube y el margen cae del mínimo,
   insignia y aviso; **no cambia el precio solo**.
 - En la lista: pedidos creados por producto (últimos 30 días) e historial.
+
+> **Estado de la Fase F (2026-11-06):** implementada (entrada 0.0.96 de `PROGRESS.md`;
+> 827 tests; **sin migración**). Cambios respecto a lo escrito arriba: (1) la
+> sincronización es un job propio (`sync_productos`, cada 60 min, con su candado) en
+> vez de ir dentro del vigilante, para que sus fallos no se mezclen con los del
+> vigilante; (2) sincroniza los productos **activos y agotados**; (3) **no hay
+> reanudación automática** (ni opción para activarla): reanudar es siempre manual;
+> (4) la alerta de margen solo se evalúa con los ajustes confirmados y avisa **al
+> cruzar el umbral**, no en cada corrida; la insignia de la lista, en cambio, se
+> recalcula siempre; (5) «historial» ya existía desde la Fase B: ahora además registra
+> lo que hace el sistema («Se pausó solo: sin stock»).
 
 ### Fase G — Extras opcionales
 

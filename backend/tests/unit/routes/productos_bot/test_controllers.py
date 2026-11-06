@@ -94,6 +94,23 @@ class TestListar:
         item = resp.get_json()[0]
         assert item["costoRocketfy"] == "10.00" and item["stockUltimo"] == 3 and item["maxUnidadesPorPedido"] == 1
         Servicio.return_value.listar.assert_called_once_with(incluir_archivados=False)
+        # Fase F: sin datos nuevos, los valores por defecto (nada de pedidos, sin insignia)
+        assert item["pedidos30d"] == 0 and item["margenEnRiesgo"] is False
+
+    @responses.activate
+    def test_la_lista_trae_los_pedidos_de_30_dias_y_la_insignia_de_margen(self):
+        mock_login_ok()
+        with patch(SERVICIO) as Servicio:
+            Servicio.return_value.listar.return_value = [
+                ProductoBotResumenDTO(
+                    sku="DEMO-1", nombre="Producto Demo", estado="activo", precio="24.99", costo_rocketfy="10.00",
+                    stock_ultimo=3, max_unidades_por_pedido=1, imagen_url=None, publicado_en=None, actualizado_en=None,
+                    pedidos_30d=12, margen_en_riesgo=True,
+                )
+            ]
+            resp = _client().get("/productos-bot", headers=AUTH_HEADER)
+        item = resp.get_json()[0]
+        assert item["pedidos30d"] == 12 and item["margenEnRiesgo"] is True
 
     @responses.activate
     def test_incluir_archivados(self):

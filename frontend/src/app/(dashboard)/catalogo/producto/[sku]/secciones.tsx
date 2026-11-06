@@ -183,8 +183,11 @@ function Cambios({ cambios }: { cambios: Record<string, unknown> }) {
   // Las acciones sin pares «antes → después» (p. ej. "creado") no tienen detalle que mostrar.
   const filas = Object.entries(cambios).filter(([, v]) => Array.isArray(v) && v.length === 2);
   if (filas.length === 0) return null;
+  // Los cambios que hace el sistema (p. ej. la pausa por agotado) explican su motivo.
+  const motivo = typeof cambios.motivo === "string" ? cambios.motivo : null;
   return (
     <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+      {motivo && <li className="break-words">Motivo: {motivo}</li>}
       {filas.map(([campo, par]) => {
         const [antes, despues] = par as [unknown, unknown];
         return (

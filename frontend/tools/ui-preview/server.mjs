@@ -113,7 +113,9 @@ const eventos = [
 const alertas = [
   ["AUD-BT-001", "stock_bajo", { stock: 4, umbral: 10 }, 35], ["RLJ-SM-014", "cambio_precio", { precioAnterior: "29.90", precioActual: "34.90" }, 240],
   ["LMP-LED-220", "stock_bajo", { stock: 2, umbral: 8 }, 600], ["CRG-RAP-33", "cambio_precio", { precioAnterior: "14.00", precioActual: "12.50" }, 1500],
-].map((a, i) => ({ id: 50 - i, sku: a[0], tipo: a[1], detalle: a[2], creadoEn: ago(a[3]) }));
+  // Fase F: los genera la sincronización de productos publicados
+  ["SPK-MIN-20", "producto_agotado", { stock: 0 }, 90], ["CRG-RAP-33", "margen_en_riesgo", { costoAnterior: "5.50", costoActual: "7.00", precio: "12.50", margenPct: "4.0", margenMinimoPct: "25.00" }, 180],
+].sort((a, b) => a[3] - b[3]).map((a, i) => ({ id: 50 - i, sku: a[0], tipo: a[1], detalle: a[2], creadoEn: ago(a[3]) }));
 
 // ---------- Catálogo ----------
 const catalogo = [
@@ -175,7 +177,15 @@ const productosBot = [
   }),
   fichaBase("CAM-SEG-360", "Cámara de Seguridad 360°", "archivado", "39.99", "25.00", "39.99", 28, { descripcion: "Cámara Wi-Fi con giro de 360°.", tiempoEntrega: "3 a 5 días hábiles", actualizadoEn: ago(20000) }),
 ];
-const resumenBot = (f) => ({ sku: f.sku, nombre: f.nombre, estado: f.estado, precio: f.precio, costoRocketfy: f.costoRocketfy, stockUltimo: f.stockUltimo, maxUnidadesPorPedido: f.maxUnidadesPorPedido, imagenUrl: f.imagenUrl, publicadoEn: f.publicadoEn, actualizadoEn: f.actualizadoEn });
+const PEDIDOS_30D = { "AUD-BT-001": 23, "RLJ-SM-014": 9, "CRG-RAP-33": 4 };
+function margenEnRiesgo(f) {
+  if (!ajustes.confirmado || !["listo", "activo", "pausado", "agotado"].includes(f.estado)) return false;
+  const precio = cents(f.precio), costo = cents(f.costoRocketfy);
+  if (!precio || costo == null) return false;
+  const gan = precio - costo - cents(ajustes.envioEstimado) - cents(ajustes.otrosCostosFijos);
+  return gan <= 0 || (gan / precio) * 100 < Number(ajustes.margenMinimoPct);
+}
+const resumenBot = (f) => ({ pedidos30d: PEDIDOS_30D[f.sku] ?? 0, margenEnRiesgo: margenEnRiesgo(f), sku: f.sku, nombre: f.nombre, estado: f.estado, precio: f.precio, costoRocketfy: f.costoRocketfy, stockUltimo: f.stockUltimo, maxUnidadesPorPedido: f.maxUnidadesPorPedido, imagenUrl: f.imagenUrl, publicadoEn: f.publicadoEn, actualizadoEn: f.actualizadoEn });
 function verificarBot(f) {
   const bloqueos = [], avisos = [];
   if (!f.nombre.trim()) bloqueos.push("Falta el nombre del producto.");

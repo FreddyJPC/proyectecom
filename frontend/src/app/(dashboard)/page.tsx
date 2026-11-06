@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
 import { useMontado } from "@/hooks/use-montado";
 import { estadoConversacionInfo, estadoLocalInfo, rocketfyStatusInfo, tipoAlertaStockInfo } from "@/lib/estados";
+import { resumenAlertaStock } from "@/lib/alertas";
 import { formatFecha, formatMoney, formatPhone, tiempoRelativo } from "@/lib/format";
 import type { ConversacionesListado } from "@/types/conversacion";
 import type { AlertaStock, EventoWebhook, Paginado } from "@/types/incidencia";
@@ -273,14 +274,12 @@ export default function Home() {
                 return (
                   <li key={a.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-status-warning-soft text-status-warning-ink">
-                      {a.tipo === "stock_bajo" ? <AlertTriangle className="size-[1.1rem]" aria-hidden /> : <CreditCard className="size-[1.1rem]" aria-hidden />}
+                      {a.tipo === "cambio_precio" ? <CreditCard className="size-[1.1rem]" aria-hidden /> : <AlertTriangle className="size-[1.1rem]" aria-hidden />}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="tabular truncate font-medium">{a.sku}</p>
                       <p className="truncate text-sm text-muted-foreground">
-                        {a.tipo === "stock_bajo"
-                          ? `Quedan ${a.detalle.stock} (mínimo ${a.detalle.umbral})`
-                          : `De ${formatMoney(String(a.detalle.precioAnterior))} a ${formatMoney(String(a.detalle.precioActual))}`}
+                        {resumenAlertaStock(a)}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">

@@ -98,6 +98,16 @@ class RepoEnMemoria:
     def listar_historial(self, sku, limite=20):
         return [h for h in reversed(self.historial) if h["sku"] == sku][:limite]
 
+    def pausar_por_agotado(self, sku):
+        fila = self.filas.get(sku)
+        if fila is None or fila["estado"] != "activo":
+            return None
+        fila["estado"], fila["activo"] = "agotado", False
+        return dict(fila)
+
+    def contar_pedidos_por_sku(self, dias=30):
+        return dict(getattr(self, "pedidos", {}))
+
     def ultima_fecha_de(self, sku, accion):
         fechas = [h["creado_en"] for h in self.historial if h["sku"] == sku and h["accion"] == accion]
         return max(fechas) if fechas else None
@@ -702,3 +712,63 @@ class TestAvisosDeLaListaDeVerificacion:
         servicio, repo, _, _ = _servicio([_fila(estado="activo", activo=True)])
         repo.registrar_historial("DEMO-1", "redactado_ia", None, {"campos": ["nombre"]})
         assert not any("redactó con IA" in a for a in self._avisos(servicio))
+
+
+class TestListaConPedidosYMargen:
+    @staticmethod
+    def _lista(filas, pedidos=None, ajustes=None):
+        servicio, repo, _, _ = _servicio(filas, ajustes=ajustes or AjustesFalsos(confirmado=True))
+        repo.pedidos = pedidos or {}
+        return {r.sku: r for r in servicio.listar()}
+
+    def test_trae_los_pedidos_de_los_ultimos_30_dias_por_sku(self):
+        lista = self._lista([_fila(sku="A-1"), _fila(sku="B-2")], pedidos={"A-1": 7})
+        assert (lista["A-1"].pedidos_30d, lista["B-2"].pedidos_30d) == (7, 0)
+
+    def test_el_sku_se_busca_sin_distinguir_mayusculas(self):
+        assert self._lista([_fila(sku="aud-1")], pedidos={"AUD-1": 3})["aud-1"].pedidos_30d == 3
+
+    def test_si_falla_el_conteo_la_lista_se_muestra_igual(self):
+        servicio, repo, _, _ = _servicio([_fila()])
+
+        def roto(dias=30):
+            raise RuntimeError("base caída")
+
+        repo.contar_pedidos_por_sku = roto
+        assert servicio.listar()[0].pedidos_30d == 0
+
+    def test_margen_en_riesgo_en_un_producto_que_se_vende(self):
+        # costo 22 + envío 5 con precio 34.90: ganancia 7.90 = 22.6 %, bajo el 25 % mínimo
+        lista = self._lista([_fila(estado="activo", activo=True, precio=Decimal("34.90"), costo_rocketfy=Decimal("22.00"))])
+        assert lista["DEMO-1"].margen_en_riesgo is True
+
+    @pytest.mark.parametrize("estado", ["listo", "activo", "pausado", "agotado"])
+    def test_la_insignia_sale_en_estos_estados(self, estado):
+        fila = _fila(estado=estado, activo=estado == "activo", precio=Decimal("34.90"), costo_rocketfy=Decimal("22.00"))
+        assert self._lista([fila])["DEMO-1"].margen_en_riesgo is True
+
+    @pytest.mark.parametrize("estado", ["borrador", "archivado"])
+    def test_no_sale_en_borradores_ni_archivados(self, estado):
+        fila = _fila(estado=estado, activo=False, precio=Decimal("34.90"), costo_rocketfy=Decimal("22.00"))
+        ajustes = AjustesNegocio(confirmado=True)
+        assert ProductosBotService._tiene_margen_en_riesgo(fila, ajustes) is False
+
+    def test_con_margen_sano_no_hay_insignia(self):
+        fila = _fila(estado="activo", activo=True, precio=Decimal("34.90"), costo_rocketfy=Decimal("10.00"))
+        assert self._lista([fila])["DEMO-1"].margen_en_riesgo is False
+
+    def test_con_ajustes_sin_confirmar_no_hay_insignia(self):
+        fila = _fila(estado="activo", activo=True, precio=Decimal("34.90"), costo_rocketfy=Decimal("22.00"))
+        assert self._lista([fila], ajustes=AjustesFalsos(confirmado=False))["DEMO-1"].margen_en_riesgo is False
+
+    def test_sin_costo_no_se_puede_evaluar(self):
+        fila = _fila(estado="activo", activo=True, costo_rocketfy=None)
+        assert self._lista([fila])["DEMO-1"].margen_en_riesgo is False
+
+    def test_si_fallan_los_ajustes_la_lista_se_muestra_igual(self):
+        class AjustesRotos:
+            def obtener_ajustes(self):
+                raise RuntimeError("base caída")
+
+        servicio, _, _, _ = _servicio([_fila(estado="activo", activo=True)], ajustes=AjustesRotos())
+        assert servicio.listar()[0].margen_en_riesgo is False

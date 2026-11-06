@@ -173,6 +173,48 @@ class ProductoBotGestionRepository:
                 return _fila(cur)
 
     @staticmethod
+    def pausar_por_agotado(sku: str) -> Optional[dict]:
+        """Pasa un producto de `activo` a `agotado` SOLO si sigue activo en este
+        instante (`where estado = 'activo'`): si una persona lo pausó o lo
+        archivó mientras corría la sincronización, no se pisa su decisión. Devuelve
+        la fila nueva, o None si ya no estaba activo."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    update productos_bot set estado = 'agotado', activo = false, actualizado_en = now()
+                    where sku = %s and estado = 'activo'
+                    returning {_COLUMNAS}
+                    """,
+                    (sku,),
+                )
+                return _fila(cur)
+
+    @staticmethod
+    def contar_pedidos_por_sku(dias: int = 30) -> Dict[str, int]:
+        """Pedidos creados en Rocketfy en los últimos `dias` días, por SKU (en
+        mayúsculas). Un pedido con varias líneas del mismo SKU cuenta una vez.
+        No cuentan los que fallaron al crearse ni los rechazados."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select upper(l ->> 'sku') as sku, count(distinct p.id_local)
+                      from pedidos p
+                      cross join lateral jsonb_array_elements(
+                          case when jsonb_typeof(p.payload_creacion -> 'lineas') = 'array'
+                               then p.payload_creacion -> 'lineas' else '[]'::jsonb end
+                      ) as l
+                     where p.creado_en >= now() - (%s || ' days')::interval
+                       and p.estado_local in ('creado', 'confirmado')
+                       and l ->> 'sku' is not null
+                     group by 1
+                    """,
+                    (dias,),
+                )
+                return {fila[0]: int(fila[1]) for fila in cur.fetchall()}
+
+    @staticmethod
     def registrar_historial(sku: str, accion: str, usuario: Optional[str], cambios: Optional[dict] = None) -> None:
         with get_connection() as conn:
             with conn.cursor() as cur:

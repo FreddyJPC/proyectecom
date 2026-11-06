@@ -59,3 +59,29 @@ class TestTelegramNotifier:
         notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
 
         notifier.notificar_escalado(conversacion_id=1, telefono="593999999999", motivo="prueba")  # no debe lanzar
+
+
+class TestNotificarAviso:
+    @responses.activate
+    def test_manda_titulo_y_detalle(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_aviso("🟠 Producto sin stock", "DEMO-1 tiene 0 unidades")
+
+        cuerpo = json.loads(responses.calls[0].request.body)
+        assert cuerpo["chat_id"] == "999"
+        assert cuerpo["text"] == "🟠 Producto sin stock\n\nDEMO-1 tiene 0 unidades"
+
+    @responses.activate
+    def test_sin_credenciales_no_llama_ni_lanza(self):
+        TelegramNotifier(bot_token=None, chat_id=None).notificar_aviso("t", "d")
+        assert len(responses.calls) == 0
+
+    @responses.activate
+    def test_los_fallos_no_se_propagan(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", body=RequestsConnectionError("boom"))
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_aviso("t", "d")  # no debe lanzar
+
+    @responses.activate
+    def test_ok_false_de_telegram_no_lanza(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": False, "description": "chat not found"}, status=200)
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_aviso("t", "d")  # no debe lanzar

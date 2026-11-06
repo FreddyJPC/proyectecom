@@ -35,6 +35,21 @@ for (const theme of ["light", "dark"]) {
         }
       };
       await auditar(r);
+      // Fase F: alertas nuevas de Incidencias y la insignia de margen en la lista (necesita ajustes confirmados).
+      if (r === "/incidencias") {
+        await page.getByRole("tab", { name: "Stock y precio" }).click();
+        await page.getByText("Se pausó: sin stock").first().waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [alertas stock y precio]");
+      }
+      if (r === "/catalogo?tab=mis-productos") {
+        await page.getByRole("button", { name: "Ajustes de precios" }).click();
+        await page.getByRole("button", { name: "Guardar ajustes" }).click();
+        await page.getByRole("button", { name: "Guardar ajustes" }).waitFor({ state: "detached" });
+        await page.getByText("Margen en riesgo").first().waitFor();
+        await page.waitForTimeout(400);
+        await auditar(r + " [margen en riesgo]");
+      }
       // Cuadros que solo existen al abrirlos: también se auditan.
       if (r === "/catalogo/producto/LMP-LED-220") {
         await page.getByRole("button", { name: "Ajustes de precios" }).click();

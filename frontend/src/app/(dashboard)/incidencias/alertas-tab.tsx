@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, PackageMinus, Search, Tag, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, PackageMinus, PackageX, Search, Tag, TrendingDown, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -17,6 +17,14 @@ import { cn } from "@/lib/utils";
 import type { AlertaStock, Paginado } from "@/types/incidencia";
 
 const PAGE_SIZE = 20;
+
+/** Icono y color de cada tipo de alerta (el color siempre va acompañado de su etiqueta). */
+const ESTILO_POR_TIPO: Record<string, { icono: LucideIcon; tono: string }> = {
+  stock_bajo: { icono: PackageMinus, tono: "bg-status-warning-soft text-status-warning-ink" },
+  cambio_precio: { icono: Tag, tono: "bg-status-info-soft text-status-info-ink" },
+  producto_agotado: { icono: PackageX, tono: "bg-status-danger-soft text-status-danger-ink" },
+  margen_en_riesgo: { icono: TrendingDown, tono: "bg-status-warning-soft text-status-warning-ink" },
+};
 
 function Detalle({ alerta }: { alerta: AlertaStock }) {
   if (alerta.tipo === "stock_bajo") {
@@ -42,6 +50,29 @@ function Detalle({ alerta }: { alerta: AlertaStock }) {
         <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
         <strong className="font-semibold">{formatMoney(String(alerta.detalle.precioActual))}</strong>
       </p>
+    );
+  }
+  if (alerta.tipo === "producto_agotado") {
+    return (
+      <p className="text-sm">
+        Rocketfy reporta <strong className="tabular font-semibold">0</strong> unidades: el producto se pausó solo y Victoria ya no lo ofrece. Reanúdalo desde Mis productos cuando vuelva el stock.
+      </p>
+    );
+  }
+  if (alerta.tipo === "margen_en_riesgo") {
+    return (
+      <div className="space-y-1">
+        <p className="tabular flex flex-wrap items-center gap-x-2 text-sm">
+          <span>Costo</span>
+          <span className="text-muted-foreground line-through">{formatMoney(String(alerta.detalle.costoAnterior ?? ""))}</span>
+          <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
+          <strong className="font-semibold">{formatMoney(String(alerta.detalle.costoActual))}</strong>
+        </p>
+        <p className="text-sm">
+          Con tu precio de <span className="tabular">{formatMoney(String(alerta.detalle.precio))}</span> el margen es <strong className="tabular font-semibold">{alerta.detalle.margenPct} %</strong> (tu mínimo es{" "}
+          <span className="tabular">{alerta.detalle.margenMinimoPct} %</span>). El precio no se cambió: revísalo tú.
+        </p>
+      </div>
     );
   }
   return <p className="text-sm text-muted-foreground">{JSON.stringify(alerta.detalle)}</p>;
@@ -95,20 +126,17 @@ export function AlertasTab() {
           <EmptyState
             icon={CheckCircle2}
             title={sku ? "Sin alertas para ese SKU" : "Sin alertas de stock o precio"}
-            description={sku ? "Prueba con otro SKU." : "Cuando un producto vigilado baje de su mínimo o cambie de precio, te avisamos aquí."}
+            description={sku ? "Prueba con otro SKU." : "Cuando un producto vigilado baje de su mínimo, cambie de precio, se quede sin stock o su margen quede en riesgo, te avisamos aquí."}
           />
         ) : (
           <ul className="divide-y">
             {data?.items.map((a) => {
               const info = tipoAlertaStockInfo(a.tipo);
-              const Icono = a.tipo === "stock_bajo" ? PackageMinus : Tag;
+              const { icono: Icono, tono } = ESTILO_POR_TIPO[a.tipo] ?? ESTILO_POR_TIPO.cambio_precio;
               return (
                 <li key={a.id} className="flex items-start gap-3 px-4 py-4 sm:px-5">
                   <span
-                    className={cn(
-                      "mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full",
-                      a.tipo === "stock_bajo" ? "bg-status-warning-soft text-status-warning-ink" : "bg-status-info-soft text-status-info-ink",
-                    )}
+                    className={cn("mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full", tono)}
                   >
                     <Icono className="size-[1.1rem]" aria-hidden />
                   </span>

@@ -24,21 +24,29 @@ class TelegramNotifier:
         self._advertido = False
 
     def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str) -> None:
-        if not self._bot_token or not self._chat_id:
-            if not self._advertido:
-                logger.warning(
-                    "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID no configurados -- "
-                    "no se puede notificar el escalado (best-effort, no bloquea)"
-                )
-                self._advertido = True
-            return
-
         texto = (
             "🔴 Victoria escaló una conversación\n\n"
             f"Teléfono: {telefono}\n"
             f"Motivo: {motivo}\n"
             f"Conversación ID: {conversacion_id}"
         )
+        self._enviar(texto, {"conversacion_id": conversacion_id}, "el escalado")
+
+    def notificar_aviso(self, titulo: str, detalle: str) -> None:
+        """Aviso genérico para el dueño (p. ej. un producto que se pausó solo
+        por falta de stock). Igual que el escalado: best-effort, nunca lanza."""
+        self._enviar(f"{titulo}\n\n{detalle}", {}, "un aviso")
+
+    def _enviar(self, texto: str, extra: dict, que: str) -> None:
+        if not self._bot_token or not self._chat_id:
+            if not self._advertido:
+                logger.warning(
+                    "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID no configurados -- "
+                    "no se puede notificar %s (best-effort, no bloquea)", que
+                )
+                self._advertido = True
+            return
+
         try:
             resp = requests.post(
                 _URL_TEMPLATE.format(token=self._bot_token),
@@ -52,17 +60,17 @@ class TelegramNotifier:
                 # etc.) -- no es un RequestException, hay que revisar el
                 # cuerpo para no dar por enviado algo que en realidad falló.
                 logger.warning(
-                    "Telegram respondió sin éxito notificando el escalado: %s",
-                    data.get("description", "sin detalle"),
-                    extra={"conversacion_id": conversacion_id},
+                    "Telegram respondió sin éxito notificando %s: %s",
+                    que, data.get("description", "sin detalle"),
+                    extra=extra,
                 )
             else:
                 logger.info(
-                    "Notificación de escalado enviada a Telegram (message_id=%s)",
-                    data.get("result", {}).get("message_id"),
-                    extra={"conversacion_id": conversacion_id},
+                    "Notificación de %s enviada a Telegram (message_id=%s)",
+                    que, data.get("result", {}).get("message_id"),
+                    extra=extra,
                 )
         except Exception:
             # Cualquier fallo acá (red, JSON inválido, lo que sea) es
-            # best-effort a propósito -- nunca debe tumbar el escalado.
-            logger.exception("Fallo notificando escalado por Telegram -- no se propaga, es best-effort")
+            # best-effort a propósito -- nunca debe tumbar el flujo que avisa.
+            logger.exception("Fallo notificando %s por Telegram -- no se propaga, es best-effort", que)
