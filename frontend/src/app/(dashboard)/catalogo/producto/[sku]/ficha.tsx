@@ -19,6 +19,7 @@ import { METODOS_PAGO, type EditarProductoBotInput, type ProductoBotDetalle } fr
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "../../accion-estado";
 import { Campo, descripcionDe } from "./campo";
+import { ProbarConVictoria } from "./probar-victoria";
 import { RedactarIADialog } from "./redactar-ia-dialog";
 import { DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
 import { SeccionPrecio } from "./seccion-precio";
@@ -206,6 +207,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
               key={accion}
               accion={accion}
               producto={detalle}
+              verificacion={detalle.verificacion}
               onHecho={onCambio}
               size="default"
               variant={i === 0 ? undefined : "outline"}
@@ -226,18 +228,24 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
         </p>
       )}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[1fr_22rem] lg:grid-rows-[auto_auto_auto_1fr]">
+      <div className="grid items-start gap-5 lg:grid-cols-[1fr_22rem] lg:grid-rows-[auto_auto_auto_auto_1fr]">
         {!soloLectura && (
           <div className="lg:col-start-2 lg:row-start-1">
             <RevisionPanel verificacion={detalle.verificacion} vendiendo={vendiendo} />
           </div>
         )}
 
-        <div className="lg:col-start-2 lg:row-start-2">
+        {!soloLectura && (
+          <div className="lg:col-start-2 lg:row-start-2">
+            <ProbarConVictoria sku={detalle.sku} nombre={detalle.nombre} sinCambiosPendientes={!hayCambios} />
+          </div>
+        )}
+
+        <div className="lg:col-start-2 lg:row-start-3">
           <DatosRocketfy detalle={detalle} sinCambiosPendientes={!hayCambios} onActualizado={onCambio} />
         </div>
 
-        <form onSubmit={guardar} noValidate className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-span-4 lg:row-start-1">
+        <form onSubmit={guardar} noValidate className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-span-5 lg:row-start-1">
           <fieldset disabled={soloLectura || guardando} className="contents">
             <legend className="sr-only">Datos de venta de {detalle.nombre}</legend>
 
@@ -488,7 +496,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
           )}
         </form>
 
-        <div className="lg:col-start-2 lg:row-start-3">
+        <div className="lg:col-start-2 lg:row-start-4">
           <HistorialCard historial={detalle.historial} />
         </div>
       </div>

@@ -192,3 +192,35 @@ class TestHistorial:
         for i in range(5):
             Repo.registrar_historial(SKU, "editado", None, {"n": i})
         assert len(Repo.listar_historial(SKU, limite=3)) == 3
+
+
+class TestUltimaFechaDe:
+    def test_sin_registros_es_none(self):
+        _crear()
+        assert Repo.ultima_fecha_de(SKU, "simulacion_completa") is None
+
+    def test_devuelve_la_mas_reciente_de_esa_accion_y_no_mezcla_acciones_ni_productos(self):
+        _crear()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into productos_bot_historial (sku, accion, creado_en) values
+                      (%s, 'simulacion_completa', '2026-11-01 10:00+00'),
+                      (%s, 'simulacion_completa', '2026-11-03 10:00+00'),
+                      (%s, 'editado',             '2026-11-04 10:00+00'),
+                      (%s, 'simulacion_completa', '2026-11-09 10:00+00')
+                    """,
+                    (SKU, SKU, SKU, SKU_LEGADO),
+                )
+        ultima = Repo.ultima_fecha_de(SKU, "simulacion_completa")
+        assert (ultima.year, ultima.month, ultima.day) == (2026, 11, 3)
+        assert Repo.ultima_fecha_de(SKU, "editado").day == 4
+
+    def test_no_se_limita_a_las_ultimas_20_entradas_del_historial(self):
+        _crear()
+        Repo.registrar_historial(SKU, "simulacion_completa", None)
+        for _ in range(25):
+            Repo.registrar_historial(SKU, "editado", None, {})
+        assert Repo.ultima_fecha_de(SKU, "simulacion_completa") is not None
+        assert all(h["accion"] != "simulacion_completa" for h in Repo.listar_historial(SKU))  # el historial sí la «olvida»

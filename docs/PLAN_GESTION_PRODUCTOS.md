@@ -1,8 +1,7 @@
 # Plan: gestión de productos desde la app
 
-> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B y C desplegadas
-> (2026-11-05); Fase D implementada en la rama, pendiente de aplicar la migración
-> 016 y desplegar; las demás fases, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B, C y D desplegadas
+> (2026-11-05); Fase E implementada (entrada 0.0.94 de `PROGRESS.md`); las demás, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -220,9 +219,8 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 - Si vendes productos de salud o suplementos, la regla de la casa evita
   promesas médicas o de resultados; **la revisión final es tuya**.
 
-> **Estado de la Fase D (2026-11-05):** implementada y probada con tests (665 en
-> total) y contra un servidor falso (entrada 0.0.92 de `PROGRESS.md`); **falta
-> aplicar la migración 016, desplegar, y probarla con la IA real (pendiente #53):
+> **Estado de la Fase D (2026-11-05):** desplegada (entradas 0.0.92 y 0.0.93 de
+> `PROGRESS.md`; 665 tests); **falta probarla con la IA real (pendiente #53):
 > nunca se llamó al modelo de verdad.** Cambios respecto a lo escrito arriba:
 > (1) **no** se generan `resumen_corto` (nada lo lee todavía) ni el *tiempo de
 > entrega propuesto* (es una promesa al cliente: solo el dueño la hace); (2) los
@@ -255,6 +253,20 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
 
 *Listo cuando:* un test comprueba que una compra simulada completa no genera
 **ninguna** llamada a Rocketfy, Telegram o WhatsApp ni filas nuevas reales.
+
+> **Estado de la Fase E (2026-11-05):** implementada (entrada 0.0.94 de `PROGRESS.md`;
+> 752 tests); **falta probarla con la IA real (pendiente #54)**. Cambios respecto a lo
+> escrito arriba: (1) el tope de pruebas es **mensajes por día** (100 por defecto,
+> ajustable en *Ajustes de precios*, migración 017) más un máximo de **20 mensajes por
+> prueba**; (2) el servidor **no guarda la conversación**: la app la lleva y la reenvía
+> (así no hay filas que limpiar); (3) la prueba solo exige lo mínimo para conversar
+> (nombre, descripción, entrega, pago y precio): un precio bajo el piso se puede probar,
+> lo bloquea *Publicar*; (4) el aviso 8 (*no hubo una simulación completa*) se calcula
+> con la entrada *simulacion_completa* del historial (y avisa si la ficha cambió después);
+> el aviso 10 (*alertas sin resolver*) se sustituye por «se usó la IA en esta ficha»,
+> porque los borradores no se guardan; (5) la simulación **no reemplaza un pedido real
+> de prueba**: no valida que Rocketfy acepte el pedido, ni ve imágenes, ni prueba la
+> elección entre varios productos.
 
 ### Fase F — Operación continua
 

@@ -24,6 +24,8 @@ class AjustesNegocio:
     redondeo: str = "terminado_99"
     # Borradores de IA permitidos por día (propuesta del plan: 20). Cada uno cuesta plata.
     tope_redacciones_dia: int = 20
+    # Mensajes de prueba con Victoria permitidos por día (Fase E): cada uno llama a la IA.
+    tope_pruebas_dia: int = 100
     confirmado: bool = False
     actualizado_por: Optional[str] = None
     actualizado_en: Optional[str] = None
@@ -49,6 +51,7 @@ class AjustesRespuestaDTO:
     otros_costos_pct: str
     redondeo: str
     tope_redacciones_dia: int
+    tope_pruebas_dia: int
     confirmado: bool
     actualizado_por: Optional[str]
     actualizado_en: Optional[str]

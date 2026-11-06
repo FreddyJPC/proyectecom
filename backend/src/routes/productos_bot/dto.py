@@ -136,3 +136,40 @@ class BorradorContenidoDTO:
     alertas: List[AlertaContenidoDTO]
     uso: UsoIADTO
 
+
+
+@dataclass
+class LlamadaHerramientaDTO:
+    """Una herramienta que Victoria usó en un turno de la prueba."""
+
+    nombre: str
+    entrada: dict
+    resultado: str
+
+
+@dataclass
+class PedidoSimuladoDTO:
+    """El pedido que SE HABRÍA enviado a Rocketfy (no se envió nada)."""
+
+    payload: dict
+    confirmado: bool
+
+
+@dataclass
+class AvisoSimuladoDTO:
+    canal: str
+    texto: str
+
+
+@dataclass
+class TurnoSimuladoDTO:
+    """Un turno de la prueba. `estado` es la venta en curso: la app lo guarda y
+    lo reenvía en el siguiente turno (el servidor no guarda nada de la prueba)."""
+
+    respuesta: str
+    herramientas: List[LlamadaHerramientaDTO]
+    estado: dict
+    escalada: bool
+    pedido: Optional[PedidoSimuladoDTO]
+    avisos: List[AvisoSimuladoDTO]
+    uso: UsoIADTO

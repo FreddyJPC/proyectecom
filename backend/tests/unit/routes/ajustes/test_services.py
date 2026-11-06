@@ -16,6 +16,7 @@ def _fila(**cambios):
         "otros_costos_pct": Decimal("0.00"),
         "redondeo": "terminado_99",
         "tope_redacciones_dia": 20,
+        "tope_pruebas_dia": 100,
         "confirmado_en": None,
         "actualizado_por": None,
         "actualizado_en": AHORA,

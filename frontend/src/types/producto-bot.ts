@@ -146,16 +146,25 @@ export type AjustesNegocio = {
   redondeo: Redondeo;
   /** Borradores de IA que se pueden pedir por día (cada uno tiene costo). */
   topeRedaccionesDia: number;
+  /** Mensajes de prueba con Victoria que se pueden enviar por día (cada uno llama a la IA). */
+  topePruebasDia: number;
   confirmado: boolean;
   actualizadoPor: string | null;
   actualizadoEn: string | null;
   calibracionEnvio: CalibracionEnvio | null;
 };
 
-/** Cuerpo del PUT /ajustes/negocio: los seis ajustes de precios completos y el tope de IA. */
+/** Cuerpo del PUT /ajustes/negocio: los seis ajustes de precios completos y los topes de IA. */
 export type GuardarAjustesInput = Pick<
   AjustesNegocio,
-  "margenMinimoPct" | "margenObjetivoPct" | "envioEstimado" | "otrosCostosFijos" | "otrosCostosPct" | "redondeo" | "topeRedaccionesDia"
+  | "margenMinimoPct"
+  | "margenObjetivoPct"
+  | "envioEstimado"
+  | "otrosCostosFijos"
+  | "otrosCostosPct"
+  | "redondeo"
+  | "topeRedaccionesDia"
+  | "topePruebasDia"
 >;
 
 // ---------------------------------------------------------------------------
@@ -208,3 +217,67 @@ export type GenerarContenidoInput = {
   campos?: CampoRedactable[];
 };
 
+// ---------------------------------------------------------------------------
+// Probar con Victoria (Fase E). Espejo de backend/src/routes/productos_bot/schemas.py.
+// La prueba NO se guarda en el servidor: la app lleva la conversación y la venta
+// en curso y las reenvía en cada mensaje. Nada sale a Rocketfy, WhatsApp ni Telegram.
+// ---------------------------------------------------------------------------
+
+export type MensajePrueba = {
+  rol: "cliente" | "bot";
+  contenido: string;
+};
+
+/** La venta en curso (lo que Victoria va anotando). */
+export type EstadoPrueba = {
+  nombreCliente: string | null;
+  direccion: string | null;
+  canton: string | null;
+  provincia: string | null;
+  productoSku: string | null;
+  productoNombre: string | null;
+  productoVariante: string | null;
+  cantidad: number;
+  /** Lo calcula el sistema (precio × cantidad); dinero como string. */
+  total: string | null;
+  metodoPago: "contraentrega" | "transferencia" | null;
+  estado: "recopilando_datos" | "esperando_pago" | "despachado";
+  idPedidoLocal: number | null;
+  idPedidoRocketfy: number | null;
+};
+
+export type LlamadaHerramienta = {
+  nombre: string;
+  entrada: Record<string, unknown>;
+  /** Lo que el sistema le respondió a Victoria. */
+  resultado: string;
+};
+
+/** Lo que SE HABRÍA enviado a Rocketfy (con los nombres de campo de su API). No se envió nada. */
+export type PedidoSimulado = {
+  payload: Record<string, unknown>;
+  confirmado: boolean;
+};
+
+export type AvisoSimulado = {
+  canal: string;
+  texto: string;
+};
+
+export type TurnoSimulado = {
+  respuesta: string;
+  herramientas: LlamadaHerramienta[];
+  estado: EstadoPrueba;
+  escalada: boolean;
+  pedido: PedidoSimulado | null;
+  avisos: AvisoSimulado[];
+  uso: UsoIA;
+};
+
+export type ProbarInput = {
+  mensaje: string;
+  historial: MensajePrueba[];
+  estado: EstadoPrueba | null;
+  desdeAnuncio: boolean;
+  escalada: boolean;
+};

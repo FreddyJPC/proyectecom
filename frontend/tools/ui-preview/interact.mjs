@@ -77,6 +77,19 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByRole("button", { name: "Redactar borrador" }).click();
   await page.getByRole("button", { name: "Aceptar", exact: true }).first().waitFor();
   await shot(page, "m-ia-borrador");
+  await page.keyboard.press("Escape");
+
+  // ---- Probar con Victoria (Fase E) a 390 px
+  await page.goto(BASE + "/catalogo/producto/AUD-BT-001", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Abrir la prueba" }).click();
+  await page.getByRole("button", { name: "Quiero comprarlo" }).click();
+  await page.getByText("Herramientas que usó").first().waitFor();
+  await shot(page, "m-prueba-chat");
+  await page.getByLabel("Mensaje del cliente de prueba").fill("Soy Ana Pérez, vivo en Av. Amazonas 123 y Colón, Quito, Pichincha. Pago contra entrega");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await page.getByText("Pedido que se habría enviado a Rocketfy").waitFor();
+  await page.getByText("Pedido que se habría enviado a Rocketfy").scrollIntoViewIfNeeded();
+  await shot(page, "m-prueba-pedido");
   await ctx.close();
 }
 {
@@ -171,6 +184,7 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await shot(page, "d-ia-ficha-con-cambios");
   await page.getByRole("button", { name: "Guardar cambios" }).click();
   await page.getByRole("button", { name: "Guardar cambios" }).waitFor({ state: "detached" });
+  await page.waitForTimeout(400);
   await page.getByText("Borrador redactado con IA").first().scrollIntoViewIfNeeded();
   await shot(page, "d-ia-historial");
 
@@ -190,6 +204,74 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByRole("button", { name: "Redactar con IA" }).click();
   await page.getByText("Llegaste al tope de hoy").waitFor();
   await shot(page, "d-ia-tope");
+  await page.keyboard.press("Escape");
+
+  // ---- Probar con Victoria (Fase E): faltan datos -> lista de verificación -> chat -> compra completa -> escalar -> tope
+  await page.goto(BASE + "/catalogo", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Preparar para vender" }).first().click();
+  await page.waitForURL(/\/catalogo\/producto\//);
+  const fichaNueva = page.url();
+  await page.getByRole("heading", { level: 1 }).waitFor();
+  await shot(page, "d-ficha-con-prueba");
+  await page.getByRole("button", { name: "Abrir la prueba" }).click();
+  await page.getByText("Escribe como lo haría un cliente").waitFor();
+  await shot(page, "d-prueba-vacia");
+  await page.getByRole("button", { name: "Quiero comprarlo" }).click();
+  await page.getByText("Antes de probar, completa esto en la ficha").waitFor();
+  await shot(page, "d-prueba-faltan");
+  await page.keyboard.press("Escape");
+  await page.locator("#tiempoEntrega").fill("2 a 4 días hábiles");
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await page.getByRole("button", { name: "Guardar cambios" }).waitFor({ state: "detached" });
+
+  // Lista de verificación al publicar: todavía no se probó una compra completa
+  await page.getByRole("button", { name: "Publicar" }).click();
+  const dialogo = page.getByRole("alertdialog");
+  await dialogo.getByText("Ten en cuenta antes de confirmar").waitFor();
+  await dialogo.getByText("Todavía no probaste una compra completa con Victoria").waitFor();
+  await shot(page, "d-publicar-lista");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Abrir la prueba" }).click();
+  await page.getByRole("button", { name: "Quiero comprarlo" }).click();
+  await page.getByText("Herramientas que usó").first().waitFor();
+  await page.getByText("Herramientas que usó").first().click();
+  await shot(page, "d-prueba-chat");
+  await page.getByLabel("Mensaje del cliente de prueba").fill("Soy Ana Pérez, vivo en Av. Amazonas 123 y Colón, Quito, Pichincha. Pago contra entrega");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await page.getByText("Pedido que se habría enviado a Rocketfy").waitFor();
+  await page.getByText("La compra se cerró").waitFor();
+  await shot(page, "d-prueba-pedido");
+
+  await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+  await page.getByRole("button", { name: "Pregunta fuera de la ficha" }).click();
+  await page.getByText("Victoria pasó la conversación a una persona").waitFor();
+  await page.getByText("Avisos que se habrían enviado a Telegram").waitFor();
+  await shot(page, "d-prueba-escalada");
+
+  await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+  await page.getByRole("button", { name: "Quiero 2 unidades" }).click();
+  await page.getByText("puedes pedir hasta 1 por pedido").waitFor();
+  await page.getByText("Herramientas que usó").first().click();
+  await shot(page, "d-prueba-dos-unidades");
+  await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+
+  // Con la compra de prueba hecha, el aviso desaparece de la lista de verificación
+  await page.goto(fichaNueva, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await page.getByRole("alertdialog").getByText("Ten en cuenta antes de confirmar").waitFor();
+  if (await page.getByText("Todavía no probaste una compra completa").count()) throw new Error("el aviso de la compra de prueba debía desaparecer");
+  await shot(page, "d-publicar-lista-despues");
+  await page.keyboard.press("Escape");
+
+  // Tope de pruebas: se baja a 1 en Ajustes de precios y el cuadro de la prueba lo respeta
+  await page.getByRole("button", { name: "Ajustes de precios" }).click();
+  await page.getByLabel("Mensajes de prueba con Victoria por día").fill("1");
+  await page.getByRole("button", { name: "Guardar ajustes" }).click();
+  await page.getByLabel("Mensajes de prueba con Victoria por día").waitFor({ state: "detached" });
+  await page.getByRole("button", { name: /la prueba$/ }).click();
+  await page.getByText("Llegaste al tope de hoy (1 mensajes de prueba)").waitFor();
+  await shot(page, "d-prueba-tope");
   await page.keyboard.press("Escape");
 
   // Mis productos: el botón de ajustes también está en la lista

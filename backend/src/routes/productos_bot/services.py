@@ -25,7 +25,7 @@ from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
 
-from .calculadora import envio_para_piso, recomendar
+from .calculadora import envio_para_piso, ganancia_por_unidad, margen_pct, recomendar
 from .dto import (
     EvaluacionPrecioDTO,
     HistorialDTO,
@@ -42,7 +42,7 @@ from .exceptions import (
     SkuInvalidoError,
     TransicionInvalidaError,
 )
-from .repository import ProductoBotGestionRepository
+from .repository import ACCION_SIMULACION_COMPLETA, ProductoBotGestionRepository
 from .verificacion import bloqueos_de_contenido, metodos_de_pago, verificar_producto
 
 logger = logging.getLogger(__name__)
@@ -392,9 +392,54 @@ class ProductosBotService:
             actualizado_en=_iso(fila.get("actualizado_en")),
         )
 
+    def _avisos_de_la_lista(self, fila: dict) -> List[str]:
+        """Los avisos de la lista de verificación al publicar que necesitan más
+        que la ficha (plan de gestión de productos, sección 9): el margen con
+        los ajustes del dueño y si se probó una compra completa con Victoria.
+        Son para un producto que todavía no se vende o que se está revisando: no
+        bloquean nada. Si falla la consulta, la ficha se muestra igual."""
+        avisos: List[str] = []
+        try:
+            ajustes = self._ajustes.obtener_ajustes()
+            costo = _decimal(fila.get("costo_rocketfy"), "0.01")
+            precio = _decimal(fila.get("precio"), "0.01")
+            # Con ajustes de partida (sin confirmar) el margen sería inventado: no se avisa.
+            if ajustes.confirmado and costo is not None and precio is not None and precio > 0:
+                ganancia = ganancia_por_unidad(precio, costo, ajustes)
+                margen = margen_pct(precio, ganancia)
+                if ganancia <= 0:
+                    avisos.append(f"Con este precio pierdes ${-ganancia:.2f} por unidad (con tu envío estimado).")
+                elif margen < ajustes.margen_minimo_pct:
+                    avisos.append(
+                        f"Tu margen ({margen} %) está por debajo del mínimo que definiste ({ajustes.margen_minimo_pct} %)."
+                    )
+
+            if fila.get("estado") in ("borrador", "listo"):
+                # Los borradores de la IA no se guardan, así que no se puede saber qué alertas
+                # quedaron sin resolver: lo que sí se sabe es si se usó la IA para esta ficha.
+                if self._repo.ultima_fecha_de(fila["sku"], "redactado_ia") is not None:
+                    avisos.append(
+                        "Parte de la ficha se redactó con IA: verifica que cada dato sea cierto antes de publicar "
+                        "(la IA puede equivocarse)."
+                    )
+                simulada = self._repo.ultima_fecha_de(fila["sku"], ACCION_SIMULACION_COMPLETA)
+                editada = self._repo.ultima_fecha_de(fila["sku"], "editado")
+                if simulada is None:
+                    avisos.append(
+                        "Todavía no probaste una compra completa con Victoria: usa «Probar con Victoria» antes de publicar."
+                    )
+                elif editada is not None and editada > simulada:
+                    avisos.append(
+                        "Cambiaste la ficha después de tu última compra de prueba con Victoria: conviene repetirla."
+                    )
+        except Exception:
+            logger.exception("No se pudieron calcular los avisos de la lista de verificación de '%s'", fila.get("sku"))
+        return avisos
+
     def _a_detalle(self, fila: dict) -> ProductoBotDetalleDTO:
         # Sobre lo último guardado de Rocketfy, sin llamar a la red.
         verificacion = verificar_producto(fila, envio_para_piso=self._envio_para_piso())
+        verificacion.avisos.extend(self._avisos_de_la_lista(fila))
         peso = fila.get("peso_kg")
         return ProductoBotDetalleDTO(
             sku=fila["sku"],

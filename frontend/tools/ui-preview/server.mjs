@@ -190,6 +190,18 @@ function verificarBot(f) {
   if (f.metodosPago.includes("transferencia")) avisos.push("Acepta transferencia: tendrás que confirmar cada pago a mano.");
   if (!f.preguntasFrecuentes) avisos.push("No tiene preguntas frecuentes: Victoria te consultará más seguido.");
   if (f.variantes) avisos.push("Tiene variantes: Victoria deberá preguntar cuál quiere el cliente.");
+  // Fase E: lista de verificación (margen, uso de la IA y compra de prueba).
+  if (ajustes.confirmado && precio != null && precio > 0 && f.costoRocketfy != null) {
+    const gan = precio - cents(f.costoRocketfy) - cents(ajustes.envioEstimado) - cents(ajustes.otrosCostosFijos), mg = (gan / precio) * 100;
+    if (gan <= 0) avisos.push(`Con este precio pierdes $${dinero(-gan)} por unidad (con tu envío estimado).`);
+    else if (mg < Number(ajustes.margenMinimoPct)) avisos.push(`Tu margen (${mg.toFixed(1)} %) está por debajo del mínimo que definiste (${ajustes.margenMinimoPct} %).`);
+  }
+  if (f.estado === "borrador" || f.estado === "listo") {
+    if (f.historial.some((h) => h.accion === "redactado_ia")) avisos.push("Parte de la ficha se redactó con IA: verifica que cada dato sea cierto antes de publicar (la IA puede equivocarse).");
+    const sim = f.historial.find((h) => h.accion === "simulacion_completa"), edi = f.historial.find((h) => h.accion === "editado");
+    if (!sim) avisos.push("Todavía no probaste una compra completa con Victoria: usa «Probar con Victoria» antes de publicar.");
+    else if (edi && edi.creadoEn > sim.creadoEn) avisos.push("Cambiaste la ficha después de tu última compra de prueba con Victoria: conviene repetirla.");
+  }
   return { bloqueos, avisos };
 }
 const detalleBot = (f) => ({ ...f, verificacion: verificarBot(f) });
@@ -199,7 +211,7 @@ const ACCIONES_BOT = { publicar: [["borrador", "listo"], "activo", "publicado"],
 // Espejo reducido de backend/.../calculadora.py, en centavos enteros.
 let ajustes = {
   margenMinimoPct: "25.00", margenObjetivoPct: "35.00", envioEstimado: "5.00", otrosCostosFijos: "0.00", otrosCostosPct: "0.00",
-  redondeo: "terminado_99", topeRedaccionesDia: 20, confirmado: false, actualizadoPor: null, actualizadoEn: ago(600),
+  redondeo: "terminado_99", topeRedaccionesDia: 20, topePruebasDia: 100, confirmado: false, actualizadoPor: null, actualizadoEn: ago(600),
   calibracionEnvio: { observaciones: 2, minimo: "7.20", mediana: "8.47", maximo: "9.10" },
 };
 function recomendacionBot(f, precioTxt, competenciaTxt) {
@@ -276,6 +288,61 @@ function borradorIA(f, b) {
   return { campos, fuentes: fu, alertas };
 }
 
+
+// ---------- Probar con Victoria (Fase E) ----------
+// Victoria de mentira (reglas por palabras clave), pero con la forma de la API real:
+// herramientas usadas, estado de la venta en curso, pedido simulado y avisos.
+let usadasPruebas = 7;
+const MAX_MENSAJES_PRUEBA = 20;
+function turnoVictoria(f, b) {
+  const msg = String(b.mensaje || ""), bajo = msg.toLowerCase();
+  const e = { nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}) };
+  const herramientas = [], avisos = [];
+  let escalada = false, pedido = null, respuesta = "";
+  const usar = (nombre, entrada, resultado) => herramientas.push({ nombre, entrada, resultado });
+  const registrar = (n) => {
+    const max = f.maxUnidadesPorPedido;
+    if (n > max) { usar("registrar_producto", { producto_sku: f.sku, producto_nombre: f.nombre, cantidad: n }, `De este producto solo se puede pedir hasta ${max} ${max === 1 ? "unidad" : "unidades"} por pedido. Explícaselo al cliente con naturalidad.`); return false; }
+    e.productoSku = f.sku; e.productoNombre = f.nombre; e.cantidad = n; e.total = dinero(cents(f.precio) * n);
+    usar("registrar_producto", { producto_sku: f.sku, producto_nombre: f.nombre, cantidad: n }, `Producto registrado: ${n} x ${f.nombre}. Total a cobrar: $${e.total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.`);
+    return true;
+  };
+  const escalar = (motivo) => {
+    escalada = true; usar("escalar_a_humano", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
+    avisos.push({ canal: "telegram", texto: `Victoria escaló la conversación. Motivo: ${motivo}` });
+  };
+  if (/garant|cuotas|tarjeta|factura/.test(bajo)) { escalar("El cliente pregunta algo que no está en la ficha del producto"); respuesta = "Eso no lo tengo confirmado, así que te paso con un asesor que te lo aclara enseguida 🙋"; }
+  else if (/persona|asesor|humano/.test(bajo)) { escalar("El cliente pidió hablar con una persona"); respuesta = "¡Claro! Ya te conecto con un asesor humano 🙋"; }
+  else if (/env[ií]o|demora|llega/.test(bajo) && !/soy\s/.test(bajo)) { respuesta = `La entrega es en ${f.tiempoEntrega || "el plazo que acordemos"}. Sobre el costo del envío no tengo información confirmada, ¿quieres que lo consulte con un asesor?`; }
+  else if (/transferencia/.test(bajo)) {
+    if (!f.metodosPago.includes("transferencia")) respuesta = "Por ahora este producto solo se paga contra entrega: pagas al recibirlo 😊";
+    else { e.metodoPago = "transferencia"; e.estado = "esperando_pago"; usar("registrar_metodo_pago", { metodo_pago: "transferencia" }, "Método de pago registrado."); respuesta = "Perfecto, por transferencia. Envíame la foto del comprobante cuando lo hagas y un asesor lo confirma."; }
+  } else if (/(\d+)\s*unidades?|\bdos\b/.test(bajo)) {
+    const n = Number((/(\d+)\s*unidades?/.exec(bajo) || [])[1] || 2);
+    respuesta = registrar(n) ? `Anotado: ${n} × ${f.nombre}. El total es $${e.total}. ¿Me das tu nombre, dirección, cantón y provincia?` : `De este producto puedes pedir hasta ${f.maxUnidadesPorPedido} por pedido. ¿Te registro ${f.maxUnidadesPorPedido}?`;
+  } else if (/comprar|quiero|llevo/.test(bajo) && !e.nombreCliente && !/soy\s/.test(bajo)) {
+    registrar(1);
+    respuesta = `¡Genial! ${f.nombre} cuesta $${e.total}. Para enviarlo necesito tu nombre completo, dirección, cantón, provincia y si pagas contra entrega.`;
+  } else if (/soy\s/.test(bajo)) {
+    const nombre = (/soy ([^,.]+)/i.exec(msg) || [])[1]?.trim(), prov = provincias.find((x) => bajo.includes(x.toLowerCase())), canton = prov && cantones[prov].find((x) => bajo.includes(x.toLowerCase()));
+    const dir = (/vivo en (.+?),\s*[A-ZÁÉÍÓÚ]/.exec(msg) || [])[1]?.trim();
+    if (!e.productoSku) registrar(1);
+    if (nombre) e.nombreCliente = nombre; if (dir) e.direccion = dir; if (canton) e.canton = canton; if (prov) e.provincia = prov;
+    usar("guardar_datos_cliente", { nombre_cliente: e.nombreCliente, direccion: e.direccion, canton: e.canton, provincia: e.provincia }, "Datos guardados correctamente.");
+    if (/contra ?entrega/.test(bajo)) { e.metodoPago = "contraentrega"; usar("registrar_metodo_pago", { metodo_pago: "contraentrega" }, "Método de pago registrado."); }
+    const falta = ["nombreCliente", "direccion", "canton", "provincia", "metodoPago"].filter((k) => !e[k]);
+    if (falta.length) respuesta = `Me falta: ${falta.join(", ")}. ¿Me los confirmas?`;
+    else if (Number(e.total) < 10) { escalar("El total ($" + e.total + ") es menor al recaudo mínimo de contraentrega ($10.00)"); respuesta = "Un asesor te contactará para terminar tu pedido 🙋"; }
+    else {
+      e.idPedidoLocal = Math.floor(Date.now() / 1000); e.idPedidoRocketfy = 9000001; e.estado = "despachado";
+      pedido = { confirmado: true, payload: { id: e.idPedidoLocal, name: e.nombreCliente, phone: "990000000", address: e.direccion, address_2: "", city: e.canton, province: e.provincia, total: e.total, order_details: JSON.stringify([{ sku: f.sku, name: f.nombre, quantity: e.cantidad }]), not_COD: 0, carrier_observations: "" } };
+      usar("cerrar_venta", {}, `¡Pedido confirmado! Llega en ${f.tiempoEntrega}. Comunícaselo al cliente y agradécele.`);
+      respuesta = `¡Pedido confirmado, ${e.nombreCliente}! Llega en ${f.tiempoEntrega}. Total a pagar al recibir: $${e.total}. ¡Gracias por tu compra!`;
+    }
+  } else { respuesta = `¡Hola! Soy Victoria de AzoShop 😊 Te cuento sobre ${f.nombre}: ${f.descripcion} ¿Te gustaría pedirlo?`; }
+  return { respuesta, herramientas, estado: e, escalada, pedido, avisos };
+}
+
 function manejarProductosBot(req, res, p, q, send) {
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -294,6 +361,32 @@ function manejarProductosBot(req, res, p, q, send) {
       return send(detalleBot(f), 201);
     }
     if (p === "/productos-bot/contenido/uso") { const tope = ajustes.topeRedaccionesDia; return send({ tope, usadas: usadasIA, restantes: Math.max(0, tope - usadasIA) }); }
+    if (p === "/productos-bot/pruebas/uso") { const tope = ajustes.topePruebasDia; return send({ tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas) }); }
+    const pr = p.match(/^\/productos-bot\/([^/]+)\/probar$/);
+    if (pr && req.method === "POST") {
+      const f = productosBot.find((x) => x.sku === decodeURIComponent(pr[1]));
+      if (!f) return send({ error: `No existe el producto '${decodeURIComponent(pr[1])}'.` }, 404);
+      if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede probar: restáuralo primero." }, 409);
+      const faltan = [];
+      if (!f.nombre.trim()) faltan.push("Falta el nombre del producto.");
+      if (!f.descripcion.trim()) faltan.push("Falta la descripción de ventas: es lo que Victoria sabe del producto.");
+      if (!f.tiempoEntrega.trim()) faltan.push("Falta el tiempo de entrega.");
+      if (!f.metodosPago.length) faltan.push("Falta elegir al menos un método de pago.");
+      if (!(cents(f.precio) > 0)) faltan.push("El precio de venta debe ser mayor que cero.");
+      if (faltan.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos: faltan }, 422);
+      const mensaje = String(body.mensaje || "").trim();
+      if (!mensaje || mensaje.length > 1000) return send({ error: "Datos inválidos.", detalle: { mensaje: ["Escribe un mensaje de hasta 1000 caracteres."] } }, 422);
+      if (body.escalada) return send({ error: "Victoria ya pasó esta conversación a una persona: en la vida real no seguiría respondiendo. Reinicia la prueba para empezar otra." }, 409);
+      if (body.estado?.estado === "despachado") return send({ error: "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende una persona. Reinicia la prueba para empezar otra." }, 409);
+      if ((body.historial || []).filter((h) => h.rol === "cliente").length >= MAX_MENSAJES_PRUEBA) return send({ error: `La prueba llegó a ${MAX_MENSAJES_PRUEBA} mensajes. Reiníciala para empezar de nuevo.` }, 409);
+      const tope = ajustes.topePruebasDia;
+      if (usadasPruebas >= tope) return send({ error: `Ya usaste los ${tope} mensajes de prueba de hoy. El contador se reinicia a medianoche (hora de Ecuador); puedes subir el tope en Ajustes de precios.`, uso: { tope, usadas: usadasPruebas, restantes: 0 } }, 429);
+      if (mensaje.includes("SIN_IA")) return send({ error: "Probar con Victoria no está configurado en el servidor (falta la clave de la IA)." }, 503);
+      usadasPruebas += 1;
+      const turno = turnoVictoria(f, { ...body, mensaje });
+      if (turno.pedido) hist(f, "simulacion_completa", null);
+      return setTimeout(() => send({ ...turno, uso: { tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas) } }), Number(process.env.DELAY_IA || 600));
+    }
     const g = p.match(/^\/productos-bot\/([^/]+)\/contenido\/generar$/);
     if (g && req.method === "POST") {
       const f = productosBot.find((x) => x.sku === decodeURIComponent(g[1]));

@@ -106,6 +106,21 @@ class TestTopeDeRedacciones:
             Repo.guardar({**VALIDOS, "tope_redacciones_dia": 10, "id": 2}, None)
 
 
+class TestTopeDePruebas:
+    def test_por_defecto_es_100(self):
+        assert Repo.obtener()["tope_pruebas_dia"] == 100
+
+    def test_se_guarda_cuando_viene_y_se_conserva_cuando_no(self):
+        assert Repo.guardar({**VALIDOS, "tope_pruebas_dia": 40}, None)["tope_pruebas_dia"] == 40
+        despues = Repo.guardar({**VALIDOS, "envio_estimado": Decimal("7.00")}, None)
+        assert despues["tope_pruebas_dia"] == 40 and despues["envio_estimado"] == Decimal("7.00")
+
+    @pytest.mark.parametrize("valor", [0, -5, 1001])
+    def test_la_base_rechaza_un_tope_fuera_de_rango(self, valor):
+        with pytest.raises(AjustesInvalidosError):
+            Repo.guardar({**VALIDOS, "tope_pruebas_dia": valor}, None)
+
+
 class TestMinimosConCosto:
     def _sembrar(self, costo="10.00"):
         with get_connection() as conn:

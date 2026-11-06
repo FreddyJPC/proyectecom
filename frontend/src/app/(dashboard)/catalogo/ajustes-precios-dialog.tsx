@@ -24,6 +24,7 @@ type Formulario = {
   otrosCostosPct: string;
   terminado99: boolean;
   topeRedaccionesDia: string;
+  topePruebasDia: string;
 };
 
 function desdeAjustes(a: AjustesNegocio): Formulario {
@@ -35,6 +36,7 @@ function desdeAjustes(a: AjustesNegocio): Formulario {
     otrosCostosPct: a.otrosCostosPct,
     terminado99: a.redondeo === "terminado_99",
     topeRedaccionesDia: String(a.topeRedaccionesDia),
+    topePruebasDia: String(a.topePruebasDia ?? 100),
   };
 }
 
@@ -66,7 +68,11 @@ function revisar(f: Formulario): { cuerpo: GuardarAjustesInput | null; errores: 
   const tope = /^\d{1,3}$/.test(f.topeRedaccionesDia.trim()) ? Number(f.topeRedaccionesDia.trim()) : null;
   if (tope == null || tope < 1 || tope > 200) errores.topeRedaccionesDia = "Escribe un número entero entre 1 y 200.";
 
-  if (Object.keys(errores).length > 0 || envio == null || minimo == null || objetivo == null || fijos == null || otros == null || tope == null) {
+  // Entero de 1 a 1000 (mismo rango que el backend y la base).
+  const pruebas = /^\d{1,4}$/.test(f.topePruebasDia.trim()) ? Number(f.topePruebasDia.trim()) : null;
+  if (pruebas == null || pruebas < 1 || pruebas > 1000) errores.topePruebasDia = "Escribe un número entero entre 1 y 1000.";
+
+  if (Object.keys(errores).length > 0 || envio == null || minimo == null || objetivo == null || fijos == null || otros == null || tope == null || pruebas == null) {
     return { cuerpo: null, errores };
   }
   return {
@@ -78,6 +84,7 @@ function revisar(f: Formulario): { cuerpo: GuardarAjustesInput | null; errores: 
       otrosCostosPct: otros,
       redondeo: f.terminado99 ? "terminado_99" : "ninguno",
       topeRedaccionesDia: tope,
+      topePruebasDia: pruebas,
     },
     errores,
   };
@@ -98,7 +105,7 @@ export function AjustesPreciosDialog({ trigger, onGuardado }: { trigger: ReactNo
         <DialogHeader>
           <DialogTitle>Ajustes de precios</DialogTitle>
           <DialogDescription>
-            Son los números con los que la app recomienda precios (y el tope de borradores de IA). Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.
+            Son los números con los que la app recomienda precios (y los topes de uso de la IA). Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.
           </DialogDescription>
         </DialogHeader>
 
@@ -289,7 +296,7 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
         </label>
 
         <div className="grid gap-2 border-t pt-5">
-          <h3 className="text-sm font-semibold">Redacción con IA</h3>
+          <h3 className="text-sm font-semibold">Uso de la IA</h3>
           <Campo
             id="topeRedaccionesDia"
             label="Borradores de IA por día"
@@ -304,6 +311,23 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
               onChange={(e) => poner("topeRedaccionesDia", e.target.value)}
               aria-invalid={Boolean(errores.topeRedaccionesDia)}
               aria-describedby={descripcionDe("topeRedaccionesDia", true, errores.topeRedaccionesDia)}
+              className="tabular max-w-32"
+            />
+          </Campo>
+          <Campo
+            id="topePruebasDia"
+            label="Mensajes de prueba con Victoria por día"
+            error={errores.topePruebasDia}
+            ayuda="Cada mensaje que envías en «Probar con Victoria» llama a la IA igual que uno real, y eso tiene costo. Se reinicia a medianoche (hora de Ecuador)."
+          >
+            <Input
+              id="topePruebasDia"
+              inputMode="numeric"
+              autoComplete="off"
+              value={form.topePruebasDia}
+              onChange={(e) => poner("topePruebasDia", e.target.value)}
+              aria-invalid={Boolean(errores.topePruebasDia)}
+              aria-describedby={descripcionDe("topePruebasDia", true, errores.topePruebasDia)}
               className="tabular max-w-32"
             />
           </Campo>

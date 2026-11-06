@@ -44,3 +44,20 @@ class IANoDisponibleError(Exception):
 class IAFalloError(Exception):
     """No se pudo hablar con el proveedor de IA, o contestó algo inservible."""
 
+
+
+class TopeDePruebasAlcanzadoError(Exception):
+    """Ya se usaron todos los mensajes de prueba permitidos hoy."""
+
+    def __init__(self, usadas: int, tope: int):
+        super().__init__(
+            f"Ya usaste los {tope} mensajes de prueba de hoy. El contador se reinicia a medianoche "
+            "(hora de Ecuador); puedes subir el tope en Ajustes de precios."
+        )
+        self.usadas = usadas
+        self.tope = tope
+
+
+class PruebaInvalidaError(Exception):
+    """La prueba no puede seguir como viene (demasiado larga, o ya terminó). El
+    mensaje está en español, listo para mostrarlo."""
