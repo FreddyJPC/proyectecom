@@ -191,7 +191,7 @@ posible y rotarlos.
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
   conectado, **backend desplegado y sano** (2026-10-30; `/health` →
   `scheduler: true`). **Ojo:** el despliegue automático NO se ha podido comprobar (pendiente #48; no se
-  disparó en 9 fusiones seguidas hasta el 2026-11-06). Tras fusionar a `main` algo de `backend/`, reconectar la
+  disparó en 11 fusiones seguidas hasta el 2026-11-06). Tras fusionar a `main` algo de `backend/`, reconectar la
   fuente con `connect-service-source` y verificar el despliegue en los logs.
 - Vercel: `proyectecom-dashboard` **desplegado en producción**
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel
