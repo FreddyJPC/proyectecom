@@ -166,6 +166,15 @@ class AvisoSimuladoDTO:
 
 
 @dataclass
+class FotoSimuladaDTO:
+    """La foto que Victoria habría enviado por WhatsApp (no se envió nada)."""
+
+    mensaje: str
+    url: str
+    descripcion: str
+
+
+@dataclass
 class TurnoSimuladoDTO:
     """Un turno de la prueba. `estado` es la venta en curso: la app lo guarda y
     lo reenvía en el siguiente turno (el servidor no guarda nada de la prueba)."""
@@ -177,3 +186,4 @@ class TurnoSimuladoDTO:
     pedido: Optional[PedidoSimuladoDTO]
     avisos: List[AvisoSimuladoDTO]
     uso: UsoIADTO
+    fotos: List[FotoSimuladaDTO] = field(default_factory=list)

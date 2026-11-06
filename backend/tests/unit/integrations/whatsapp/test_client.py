@@ -132,3 +132,46 @@ class TestMarcarComoLeido:
             "status": "read",
             "message_id": "wamid.HBgLNTkzOTg3NjU0MzIxFQIAERgS",
         }
+
+
+class TestEnviarImagen:
+    @responses.activate
+    def test_manda_el_enlace_y_la_descripcion(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.IMG"}]}, status=200)
+
+        data = client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png", descripcion="Reloj deportivo")
+
+        assert data["messages"][0]["id"] == "wamid.IMG"
+        enviado = responses.calls[0].request
+        assert enviado.headers["Authorization"] == f"Bearer {TOKEN}"
+        assert json.loads(enviado.body) == {
+            "messaging_product": "whatsapp",
+            "to": "593987654321",
+            "type": "image",
+            "image": {"link": "https://cdn.ejemplo.com/reloj.png", "caption": "Reloj deportivo"},
+        }
+
+    @responses.activate
+    def test_sin_descripcion_no_manda_caption(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.IMG"}]}, status=200)
+        client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png")
+        assert json.loads(responses.calls[0].request.body)["image"] == {"link": "https://cdn.ejemplo.com/reloj.png"}
+
+    @responses.activate
+    def test_un_400_de_meta_es_error_de_negocio(self, client):
+        responses.add(responses.POST, URL, json={"error": {"message": "Media upload error", "code": 131053}}, status=400)
+        with pytest.raises(WhatsAppBusinessError):
+            client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png")
+
+    @responses.activate
+    def test_un_fallo_de_red_es_error_de_request(self, client):
+        responses.add(responses.POST, URL, body=RequestsConnectionError("boom"))
+        with pytest.raises(WhatsAppRequestError):
+            client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png")
+
+    @responses.activate
+    def test_no_reintenta_un_envio_para_no_duplicar_la_foto(self, client):
+        responses.add(responses.POST, URL, json={"error": {"message": "boom"}}, status=500)
+        with pytest.raises(WhatsAppRequestError):
+            client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png")
+        assert len(responses.calls) == 1

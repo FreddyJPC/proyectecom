@@ -325,6 +325,12 @@ class AvisoSimuladoSchema(Schema):
     texto = fields.Str()
 
 
+class FotoSimuladaSchema(Schema):
+    mensaje = fields.Str()
+    url = fields.Str()
+    descripcion = fields.Str()
+
+
 class TurnoSimuladoSchema(Schema):
     respuesta = fields.Str()
     herramientas = fields.List(fields.Nested(LlamadaHerramientaSchema))
@@ -333,6 +339,7 @@ class TurnoSimuladoSchema(Schema):
     pedido = fields.Nested(PedidoSimuladoSchema, allow_none=True)
     avisos = fields.List(fields.Nested(AvisoSimuladoSchema))
     uso = fields.Nested(UsoIASchema)
+    fotos = fields.List(fields.Nested(FotoSimuladaSchema))
 
 
 crear_input_schema = CrearProductoBotInputSchema()

@@ -315,3 +315,25 @@ class TestContextoDeProducto:
         assert "total" not in registrar["properties"]
         assert "cantidad" in registrar["properties"]
         assert registrar["required"] == ["producto_sku", "producto_nombre"]
+
+
+class TestHerramientasOfrecidasAlModelo:
+    """Fase G2: la foto solo se ofrece si BOT_ENVIAR_FOTOS está encendido."""
+
+    @staticmethod
+    def _nombres_ofrecidos(monkeypatch, valor):
+        if valor is None:
+            monkeypatch.delenv("BOT_ENVIAR_FOTOS", raising=False)
+        else:
+            monkeypatch.setenv("BOT_ENVIAR_FOTOS", valor)
+        llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
+        _servicio(llm, "Hola").procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
+        return [h.nombre for h in llm.llamadas[0]["herramientas"]]
+
+    def test_por_defecto_la_foto_se_ofrece_al_final_de_la_lista(self, monkeypatch):
+        nombres = self._nombres_ofrecidos(monkeypatch, None)
+        assert nombres[-1] == "enviar_foto_producto" and "cerrar_venta" in nombres
+
+    def test_apagada_no_se_ofrece_y_las_demas_siguen(self, monkeypatch):
+        nombres = self._nombres_ofrecidos(monkeypatch, "false")
+        assert "enviar_foto_producto" not in nombres and "cerrar_venta" in nombres and "escalar_a_humano" in nombres

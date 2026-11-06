@@ -90,6 +90,14 @@ const shot = async (page, name) => { await hide(page); await page.waitForTimeout
   await page.getByText("Pedido que se habría enviado a Rocketfy").waitFor();
   await page.getByText("Pedido que se habría enviado a Rocketfy").scrollIntoViewIfNeeded();
   await shot(page, "m-prueba-pedido");
+  // G2: la foto del producto (una sola vez por conversación)
+  await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+  await page.getByRole("button", { name: "Quiero ver una foto" }).click();
+  await page.getByText("Foto enviada: Audífonos Bluetooth Pro").waitFor();
+  await page.getByRole("button", { name: "Quiero ver una foto" }).click();
+  await page.getByText("Ya te la mandé arriba").waitFor();
+  await page.getByText("Foto enviada: Audífonos Bluetooth Pro").scrollIntoViewIfNeeded();
+  await shot(page, "m-prueba-foto");
   await ctx.close();
 }
 {

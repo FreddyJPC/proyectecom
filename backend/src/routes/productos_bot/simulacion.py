@@ -15,6 +15,8 @@ Qué es real y qué es de mentira:
               `PedidoService` real arma el payload verdadero y lo «manda» ahí.
             - Telegram: un grabador; el aviso de escalado queda a la vista pero
               no sale a ninguna parte.
+            - WhatsApp: un grabador; la foto que Victoria enviaría queda a la
+              vista, pero no se manda nada al cliente (que no existe).
             - Stock: lo último guardado en la ficha (no se consulta Rocketfy).
             - Catálogo: el producto de la prueba es el único disponible, aunque
               esté en borrador (se le fuerza `activo=True` solo en la copia).
@@ -179,21 +181,35 @@ class LeadsEnMemoria:
         self.lead.update(estado="despachado", id_pedido_local=id_pedido_local, id_pedido_rocketfy=id_pedido_rocketfy)
 
 
+PREFIJO_DE_FOTO = "📷 Foto de "
+
+
 class MensajesEnMemoria:
     """El historial que mandó la app más el mensaje nuevo del cliente como
     ÚLTIMA fila (así lo deja el webhook real antes de llamar a Victoria)."""
 
     def __init__(self, historial: List[Dict[str, str]], mensaje_nuevo: str):
-        self.filas = [{"rol": h["rol"], "contenido": h["contenido"]} for h in historial]
-        self.filas.append({"rol": "cliente", "contenido": mensaje_nuevo})
+        self.filas = [{"rol": h["rol"], "contenido": h["contenido"], "tipo": "texto"} for h in historial]
+        self.filas.append({"rol": "cliente", "contenido": mensaje_nuevo, "tipo": "texto"})
+        self.fotos_de_este_turno: List[str] = []
 
     def obtener_por_conversacion(self, conversacion_id: int) -> List[Dict[str, str]]:
         return list(self.filas)
 
     def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None) -> Dict[str, str]:
-        fila = {"rol": rol, "contenido": contenido}
+        fila = {"rol": rol, "contenido": contenido, "tipo": tipo}
         self.filas.append(fila)
+        if tipo == "imagen":
+            self.fotos_de_este_turno.append(contenido)
         return fila
+
+    def existe_foto(self, conversacion_id: int, sku: str) -> bool:
+        # El historial que manda la app no trae el tipo: una foto se reconoce por su texto,
+        # que lo escribe `tools.py` («📷 Foto de <nombre> (<sku>)»).
+        return any(
+            f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
+            for f in self.filas
+        )
 
 
 class ProductosEnEnsayo:
@@ -236,6 +252,17 @@ class TelegramGrabador:
 
     def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str) -> None:
         self.avisos.append({"canal": "telegram", "texto": f"Victoria escaló la conversación. Motivo: {motivo}"})
+
+
+class WhatsAppGrabador:
+    """No manda nada: anota la foto que se habría enviado al cliente."""
+
+    def __init__(self):
+        self.enviadas: List[Dict[str, str]] = []
+
+    def enviar_imagen(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
+        self.enviadas.append({"url": url, "descripcion": descripcion or ""})
+        return {"messages": [{"id": "wamid.ensayo"}]}
 
 
 class PedidosEnMemoria:
@@ -326,6 +353,7 @@ class ResultadoDelTurno:
     escalada: bool
     pedido: Optional[Dict[str, Any]]
     avisos: List[Dict[str, str]] = field(default_factory=list)
+    fotos: List[Dict[str, str]] = field(default_factory=list)
 
 
 def simular_turno(
@@ -346,6 +374,7 @@ def simular_turno(
     productos = ProductosEnEnsayo(producto)
     rocketfy = RocketfyDeEnsayo()
     telegram = TelegramGrabador()
+    whatsapp = WhatsAppGrabador()
 
     pedidos = PedidoService(client=rocketfy, repo=PedidosEnMemoria())
     herramientas = HerramientasConBitacora(
@@ -356,6 +385,8 @@ def simular_turno(
         telegram_notifier=telegram,
         stock_checker=StockEnEnsayo(producto.get("stock_ultimo")),
         minimo_repo=MinimosEnEnsayo(),
+        mensaje_repo=mensajes,
+        whatsapp_client=whatsapp,
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,
@@ -380,4 +411,8 @@ def simular_turno(
         escalada=conversaciones.escalada,
         pedido=pedido,
         avisos=telegram.avisos,
+        fotos=[
+            {"mensaje": mensaje_de_la_foto, "url": enviada["url"], "descripcion": enviada["descripcion"]}
+            for mensaje_de_la_foto, enviada in zip(mensajes.fotos_de_este_turno, whatsapp.enviadas)
+        ],
     )
