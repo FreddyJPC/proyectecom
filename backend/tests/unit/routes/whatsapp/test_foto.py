@@ -93,6 +93,18 @@ class TestEnviarFoto:
         ]
         assert "Foto enviada" in respuesta
 
+    def test_una_ruta_relativa_de_rocketfy_se_completa_con_el_sitio_de_la_api(self, monkeypatch):
+        monkeypatch.setenv("ROCKETFY_BASE_URL", "https://rocket-e.com/api")
+        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url="/storage/products/4193/foto.jpg")})
+        enviar(h)
+        assert whatsapp.enviadas[0]["url"] == "https://rocket-e.com/storage/products/4193/foto.jpg"
+
+    def test_si_el_sitio_de_la_api_no_es_https_la_ruta_relativa_no_se_envia(self, monkeypatch):
+        # Meta solo descarga enlaces https: mejor no enviar que enviar algo que no llegará.
+        monkeypatch.setenv("ROCKETFY_BASE_URL", "http://rocket-e.com/api")
+        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url="/storage/products/4193/foto.jpg")})
+        assert "no tiene una foto" in enviar(h) and whatsapp.enviadas == []
+
     def test_la_url_sale_de_la_base_no_de_lo_que_diga_el_modelo(self):
         h, _, whatsapp, _ = armar()
         h.ejecutar("enviar_foto_producto", 1, 7, {"producto_sku": "DEMO-1", "url": "https://malo.example/x.png"}, "t1")
@@ -170,7 +182,10 @@ class TestInterruptor:
         assert "enviar_foto_producto" not in [h.nombre for h in HERRAMIENTAS_VICTORIA]
         assert HERRAMIENTA_FOTO.parametros["required"] == ["producto_sku"]
 
-    @pytest.mark.parametrize("valor, esperado", [(None, True), ("true", True), ("TRUE", True), ("1", True), ("", True), ("false", False), ("False", False), ("0", False), ("no", False)])
+    @pytest.mark.parametrize(
+        "valor, esperado",
+        [(None, False), ("", False), ("false", False), ("False", False), ("0", False), ("no", False), ("true", True), ("TRUE", True), ("1", True), ("si", True)],
+    )
     def test_la_variable_de_entorno(self, monkeypatch, valor, esperado):
         from src.config.settings import load_settings
 

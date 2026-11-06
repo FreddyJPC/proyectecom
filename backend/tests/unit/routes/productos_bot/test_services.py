@@ -772,3 +772,23 @@ class TestListaConPedidosYMargen:
 
         servicio, _, _, _ = _servicio([_fila(estado="activo", activo=True)], ajustes=AjustesRotos())
         assert servicio.listar()[0].margen_en_riesgo is False
+
+
+class TestImagenDeRocketfy:
+    """La API real devuelve `/storage/...` (ruta relativa): hay que completarla para que sirva."""
+
+    def test_al_capturar_los_datos_de_rocketfy_la_ruta_relativa_se_completa(self, monkeypatch):
+        monkeypatch.setenv("ROCKETFY_BASE_URL", "https://rocket-e.com/api")
+        datos = ProductosBotService._datos_de_rocketfy({"id": 1, "image_url": "/storage/products/4193/foto.jpg"})
+        assert datos["imagen_url"] == "https://rocket-e.com/storage/products/4193/foto.jpg"
+
+    @pytest.mark.parametrize("valor, esperado", [(None, None), ("", None), ("https://cdn.x/a.png", "https://cdn.x/a.png"), ("javascript:alert(1)", None)])
+    def test_otros_valores(self, valor, esperado):
+        assert ProductosBotService._datos_de_rocketfy({"id": 1, "image_url": valor})["imagen_url"] == esperado
+
+    def test_una_ficha_que_aun_guarda_la_ruta_relativa_se_muestra_completa(self, monkeypatch):
+        # Lo guardado antes de este arreglo sigue sirviendo sin esperar a la próxima sincronización.
+        monkeypatch.setenv("ROCKETFY_BASE_URL", "https://rocket-e.com/api")
+        servicio, _, _, _ = _servicio([_fila(imagen_url="/storage/products/4193/foto.jpg")])
+        assert servicio.obtener_detalle("DEMO-1").imagen_url == "https://rocket-e.com/storage/products/4193/foto.jpg"
+        assert servicio.listar()[0].imagen_url == "https://rocket-e.com/storage/products/4193/foto.jpg"

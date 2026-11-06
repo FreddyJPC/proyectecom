@@ -16,7 +16,10 @@ Qué es real y qué es de mentira:
             - Telegram: un grabador; el aviso de escalado queda a la vista pero
               no sale a ninguna parte.
             - WhatsApp: un grabador; la foto que Victoria enviaría queda a la
-              vista, pero no se manda nada al cliente (que no existe).
+              vista, pero no se manda nada al cliente (que no existe). La
+              herramienta de la foto SIEMPRE está disponible aquí, aunque en
+              producción esté apagada (BOT_ENVIAR_FOTOS): es la única diferencia
+              deliberada con el cerebro real, para poder probarla antes de encenderla.
             - Stock: lo último guardado en la ficha (no se consulta Rocketfy).
             - Catálogo: el producto de la prueba es el único disponible, aunque
               esté en borrador (se le fuerza `activo=True` solo en la copia).
@@ -387,6 +390,7 @@ def simular_turno(
         minimo_repo=MinimosEnEnsayo(),
         mensaje_repo=mensajes,
         whatsapp_client=whatsapp,
+        enviar_fotos=True,
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,
@@ -395,6 +399,9 @@ def simular_turno(
         mensaje_repo=mensajes,
         producto_repo=productos,
         ejecutor_herramientas=herramientas,
+        # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
+        # (BOT_ENVIAR_FOTOS): así se puede ver cómo la usa Victoria antes de encenderla.
+        enviar_fotos=True,
     )
     respuesta = cerebro.procesar_turno(lead["conversacion_id"], mensaje)
 

@@ -996,7 +996,7 @@ lectura: si la consulta fallara, la lista se muestra igual (sin ese número).
 no ajusta precios y no mira otros cambios de Rocketfy (nombre, descripción).
 
 
-## 32. Mandar una foto por WhatsApp: un enlace, una sola vez y un interruptor
+## 32. Mandar una foto por WhatsApp: un enlace, una sola vez y un interruptor (apagado hasta verificar)
 
 **Para qué sirve.** Un cliente que va a pagar contra entrega quiere **ver** lo
 que compra. Poder mandarle la foto en la misma conversación reduce dudas y
@@ -1026,13 +1026,22 @@ la foto dos veces.
 
 **El interruptor (`BOT_ENVIAR_FOTOS`).** Una función nueva que toca conversaciones
 con clientes reales se despliega con un **interruptor**: una variable que la
-apaga sin tocar el código ni volver a una versión anterior. Mientras no se haya
-probado de verdad en un teléfono, es la salida de emergencia más rápida. Se llama
-*feature flag*.
+enciende o apaga sin tocar el código ni volver a una versión anterior. Se llama
+*feature flag*. Aquí **nace APAGADO**: no se enciende hasta comprobar con un
+teléfono que las imágenes llegan.
 
-**Y la simulación.** «Probar con Victoria» (§30) también la ejerce: el doble de
-WhatsApp solo anota la foto que se habría enviado, y el test de «cero efectos»
-ahora también prohíbe crear el cliente real de WhatsApp.
+**Un hallazgo que lo justificó.** La guía del proveedor decía que la imagen es una
+URL completa, pero la API real devuelve una **ruta relativa** (`/storage/…`). Una
+ruta relativa no sirve ni para el panel ni para Meta. Se completa con el dominio de
+la propia API, pero es una **suposición que no se pudo comprobar**, y si fallara el
+cliente no vería nada aunque Victoria dijera que mandó la foto. Lección: *probar
+con datos reales* antes de confiar en la documentación.
+
+**Y la simulación.** «Probar con Victoria» (§30) **siempre** incluye la foto, aunque en
+producción esté apagada (es la única diferencia deliberada con el cerebro real): el
+doble de WhatsApp solo anota la foto que se habría enviado y así puedes ver cómo la
+usa la IA antes de encenderla. El test de «cero efectos» prohíbe crear el cliente
+real de WhatsApp.
 
 **Lo que NO se pudo comprobar.** Nunca se mandó una foto real; el interruptor y
 las reglas están probados, pero **que Meta descargue la imagen del servidor de

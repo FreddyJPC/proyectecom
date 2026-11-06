@@ -330,10 +330,23 @@ class TestHerramientasOfrecidasAlModelo:
         _servicio(llm, "Hola").procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
         return [h.nombre for h in llm.llamadas[0]["herramientas"]]
 
-    def test_por_defecto_la_foto_se_ofrece_al_final_de_la_lista(self, monkeypatch):
+    def test_por_defecto_esta_apagada_y_el_resto_de_herramientas_sigue_igual(self, monkeypatch):
         nombres = self._nombres_ofrecidos(monkeypatch, None)
+        assert "enviar_foto_producto" not in nombres and "cerrar_venta" in nombres and "escalar_a_humano" in nombres
+
+    def test_encendida_se_ofrece_al_final_de_la_lista(self, monkeypatch):
+        nombres = self._nombres_ofrecidos(monkeypatch, "true")
         assert nombres[-1] == "enviar_foto_producto" and "cerrar_venta" in nombres
 
-    def test_apagada_no_se_ofrece_y_las_demas_siguen(self, monkeypatch):
-        nombres = self._nombres_ofrecidos(monkeypatch, "false")
-        assert "enviar_foto_producto" not in nombres and "cerrar_venta" in nombres and "escalar_a_humano" in nombres
+    def test_el_parametro_manda_sobre_la_variable_de_entorno(self, monkeypatch):
+        monkeypatch.delenv("BOT_ENVIAR_FOTOS", raising=False)
+        llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
+        servicio = VictoriaConversationService(
+            llm_client=llm, lead_repo=FakeLeadRepository(),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
+            producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorHerramientasFalso(),
+            max_turnos_herramientas=5, max_mensajes_historial=40, enviar_fotos=True,
+        )
+        servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
+        assert "enviar_foto_producto" in [h.nombre for h in llm.llamadas[0]["herramientas"]]
