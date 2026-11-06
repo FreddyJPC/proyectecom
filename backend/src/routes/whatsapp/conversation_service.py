@@ -61,6 +61,7 @@ class VictoriaConversationService:
         ejecutor_herramientas: Optional[HerramientasVictoria] = None,
         max_turnos_herramientas: Optional[int] = None,
         max_mensajes_historial: Optional[int] = None,
+        enviar_fotos: Optional[bool] = None,
     ):
         settings = load_settings()
         self._llm = llm_client or get_llm_client()
@@ -76,7 +77,7 @@ class VictoriaConversationService:
             max_mensajes_historial if max_mensajes_historial is not None else settings.bot_max_mensajes_historial
         )
         # Fase G2: la herramienta de la foto solo se ofrece si está encendida (BOT_ENVIAR_FOTOS).
-        self._herramientas = herramientas_de_victoria(settings.bot_enviar_fotos)
+        self._herramientas = herramientas_de_victoria(settings.bot_enviar_fotos if enviar_fotos is None else enviar_fotos)
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)

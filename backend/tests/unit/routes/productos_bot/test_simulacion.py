@@ -310,6 +310,12 @@ class TestFotoDelProducto:
         turno(llm, historial=historial)
         assert any("Foto de Audifonos Bluetooth" in (m.texto or "") for m in llm.llamadas[0]["mensajes"])
 
+    def test_la_simulacion_ofrece_la_foto_aunque_en_produccion_este_apagada(self, monkeypatch):
+        monkeypatch.delenv("BOT_ENVIAR_FOTOS", raising=False)
+        llm = LLMGuionado(texto("Hola"))
+        turno(llm)
+        assert "enviar_foto_producto" in [h.nombre for h in llm.llamadas[0]["herramientas"]]
+
     @responses.activate
     def test_cero_efectos_ni_siquiera_se_arma_el_cliente_real_de_whatsapp(self, monkeypatch):
         def prohibido(*args, **kwargs):

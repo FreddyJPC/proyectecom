@@ -309,9 +309,11 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
   tiene prohibido ofrecerlos).
 
 > **Estado de la Fase G (2026-11-06):** (entrada 0.0.98 de `PROGRESS.md`; 877 tests; sin migración)
-> - **G2 fotos por WhatsApp: implementada.** Usa la imagen que ya guarda la ficha (la de
->   Rocketfy; **no** hay subida de imágenes propias todavía), una vez por conversación, con
->   interruptor `BOT_ENVIAR_FOTOS`. **Nunca se envió una foto real** (pendiente #58).
+> - **G2 fotos por WhatsApp: implementada y APAGADA en producción** (`BOT_ENVIAR_FOTOS`).
+>   Usa la imagen que ya guarda la ficha (la de Rocketfy, que llega como ruta relativa y se
+>   completa con el dominio de la API; **no** hay subida de imágenes propias todavía), una vez
+>   por conversación. **Nunca se envió una foto real** y la URL no se pudo comprobar
+>   (pendiente #58); la simulación sí las incluye siempre.
 > - **G1 variantes reales: descubrimiento hecho, implementación pendiente.** La guía del
 >   proveedor confirma que una variante es otro producto con su propio SKU y `parent_id`;
 >   falta saber qué productos tuyos las usan (pendiente #55). Toca la ruta del dinero.

@@ -21,6 +21,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from src.integrations.rocketfy import get_rocketfy_client
+from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
@@ -412,7 +413,7 @@ class ProductosBotService:
             "precio_sugerido_rocketfy": _decimal(producto.get("suggested_price"), "0.01"),
             "stock_ultimo": _entero(producto.get("stock")),
             "peso_kg": _decimal(producto.get("weight"), "0.001"),
-            "imagen_url": (producto.get("image_url") or None),
+            "imagen_url": url_de_imagen(producto.get("image_url")),
         }
 
     @staticmethod
@@ -425,7 +426,7 @@ class ProductosBotService:
             costo_rocketfy=_dinero(fila.get("costo_rocketfy")),
             stock_ultimo=fila.get("stock_ultimo"),
             max_unidades_por_pedido=fila["max_unidades_por_pedido"],
-            imagen_url=fila.get("imagen_url"),
+            imagen_url=url_de_imagen(fila.get("imagen_url")),
             publicado_en=_iso(fila.get("publicado_en")),
             actualizado_en=_iso(fila.get("actualizado_en")),
             pedidos_30d=pedidos_30d,
@@ -491,7 +492,7 @@ class ProductosBotService:
             stock_ultimo=fila.get("stock_ultimo"),
             stock_actualizado_en=_iso(fila.get("stock_actualizado_en")),
             peso_kg=f"{peso:.3f}" if peso is not None else None,
-            imagen_url=fila.get("imagen_url"),
+            imagen_url=url_de_imagen(fila.get("imagen_url")),
             rocketfy_product_id=fila.get("rocketfy_product_id"),
             descripcion=fila["descripcion"],
             variantes=fila.get("variantes"),

@@ -30,6 +30,7 @@ from typing import List, Optional, Tuple
 from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
 from src.config.settings import load_settings
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
+from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.whatsapp import get_whatsapp_client
 from src.routes.pedidos.dto import CrearPedidoInputDTO, LineaPedidoDTO
@@ -339,7 +340,8 @@ class HerramientasVictoria:
         if not self._esta_activo(producto):
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
 
-        url = (producto.get("imagen_url") or "").strip()
+        # La base puede traer todavía la ruta relativa de Rocketfy (`/storage/...`): se completa.
+        url = url_de_imagen(producto.get("imagen_url")) or ""
         if not url.lower().startswith("https://"):
             # Meta solo descarga enlaces https públicos.
             return (

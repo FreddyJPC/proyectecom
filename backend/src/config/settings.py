@@ -57,7 +57,8 @@ class Settings:
     bot_max_turnos_herramientas: int
     bot_max_mensajes_historial: int
     # Fase G2: Victoria puede enviar la foto del producto por WhatsApp (herramienta
-    # `enviar_foto_producto`). Interruptor de seguridad: BOT_ENVIAR_FOTOS=false la apaga.
+    # `enviar_foto_producto`). APAGADO por defecto hasta comprobar con un teléfono que
+    # Meta descarga las imágenes de Rocketfy: BOT_ENVIAR_FOTOS=true la enciende.
     bot_enviar_fotos: bool
 
 
@@ -90,5 +91,5 @@ def load_settings() -> Settings:
         llm_model=os.getenv("LLM_MODEL", "claude-sonnet-5"),
         bot_max_turnos_herramientas=int(os.getenv("BOT_MAX_TURNOS_HERRAMIENTAS", "5")),
         bot_max_mensajes_historial=int(os.getenv("BOT_MAX_MENSAJES_HISTORIAL", "40")),
-        bot_enviar_fotos=os.getenv("BOT_ENVIAR_FOTOS", "true").strip().lower() not in ("0", "false", "no"),
+        bot_enviar_fotos=_env_bool("BOT_ENVIAR_FOTOS"),
     )
