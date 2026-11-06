@@ -27,12 +27,12 @@ def scheduler_falso():
 
 
 class TestStartScheduler:
-    def test_registra_los_tres_jobs_y_arranca(self, scheduler_falso):
+    def test_registra_los_cuatro_jobs_y_arranca(self, scheduler_falso):
         app_module.start_scheduler()
 
         instancia = scheduler_falso.return_value
         ids = {llamada.kwargs["id"] for llamada in instancia.add_job.call_args_list}
-        assert ids == {"reconciliacion_pedidos", "stock_watcher", "latido_db"}
+        assert ids == {"reconciliacion_pedidos", "stock_watcher", "sync_productos", "latido_db"}
         instancia.start.assert_called_once()
 
     def test_el_latido_corre_cada_6_horas_y_arranca_pronto(self, scheduler_falso):

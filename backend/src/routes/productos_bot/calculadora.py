@@ -21,7 +21,7 @@ promesa de ganancia.
 """
 from dataclasses import dataclass, field
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.routes.ajustes.dto import AjustesNegocio
 
@@ -102,6 +102,22 @@ def margen_pct(precio: Decimal, ganancia: Decimal) -> Decimal:
     if precio <= 0:
         return Decimal("0.0")
     return (ganancia / precio * CIEN).quantize(DECIMO, rounding=ROUND_HALF_UP)
+
+
+def margen_en_riesgo(
+    precio: Optional[Decimal], costo: Optional[Decimal], ajustes: AjustesNegocio
+) -> Optional[Tuple[Decimal, Decimal]]:
+    """`(ganancia, margen %)` si con este precio y costo el producto NO alcanza
+    el margen mínimo del dueño (o pierde dinero); `None` si alcanza o si no se
+    puede evaluar. No se evalúa con ajustes de partida (sin confirmar): sería
+    juzgar con un número que nadie revisó."""
+    if not ajustes.confirmado or precio is None or costo is None or precio <= 0:
+        return None
+    ganancia = ganancia_por_unidad(precio, costo, ajustes)
+    margen = margen_pct(precio, ganancia)
+    if ganancia <= 0 or (ganancia / precio * CIEN) < ajustes.margen_minimo_pct:
+        return ganancia, margen
+    return None
 
 
 def precio_para_margen(costo: Decimal, ajustes: AjustesNegocio, margen_objetivo_pct: Decimal) -> Optional[Decimal]:

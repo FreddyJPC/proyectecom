@@ -224,3 +224,96 @@ class TestUltimaFechaDe:
             Repo.registrar_historial(SKU, "editado", None, {})
         assert Repo.ultima_fecha_de(SKU, "simulacion_completa") is not None
         assert all(h["accion"] != "simulacion_completa" for h in Repo.listar_historial(SKU))  # el historial sí la «olvida»
+
+
+class TestPausarPorAgotado:
+    def _activar(self):
+        _crear()
+        Repo.cambiar_estado(SKU, "activo", "ana@ejemplo.com")
+
+    def test_un_activo_pasa_a_agotado_y_activo_queda_en_falso(self):
+        self._activar()
+        fila = Repo.pausar_por_agotado(SKU)
+        assert (fila["estado"], fila["activo"]) == ("agotado", False)
+        assert Repo.obtener(SKU)["estado"] == "agotado"
+
+    @pytest.mark.parametrize("estado", ["borrador", "listo", "pausado", "archivado", "agotado"])
+    def test_si_no_esta_activo_no_toca_nada(self, estado):
+        _crear()
+        Repo.cambiar_estado(SKU, estado, None)
+        assert Repo.pausar_por_agotado(SKU) is None
+        assert Repo.obtener(SKU)["estado"] == estado
+
+    def test_un_sku_que_no_existe_devuelve_none(self):
+        assert Repo.pausar_por_agotado("NO-EXISTE-FASE-F") is None
+
+    def test_no_cambia_publicado_en_ni_publicado_por(self):
+        self._activar()
+        antes = Repo.obtener(SKU)
+        despues = Repo.pausar_por_agotado(SKU)
+        assert (despues["publicado_en"], despues["publicado_por"]) == (antes["publicado_en"], antes["publicado_por"])
+
+
+class TestContarPedidosPorSku:
+    SKUS = ("TEST-F-PED-A", "TEST-F-PED-B")
+    IDS = (990001, 990002, 990003, 990004, 990005, 990006, 990007)
+
+    @pytest.fixture(autouse=True)
+    def limpio_pedidos(self):
+        self._borrar()
+        yield
+        self._borrar()
+
+    def _borrar(self):
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("delete from pedidos where id_local = any(%s)", (list(self.IDS),))
+
+    def _pedido(self, id_local, estado, lineas, hace="1 day", payload=None):
+        from psycopg2.extras import Json
+
+        cuerpo = payload if payload is not None else {"nombre_cliente": "x", "lineas": lineas}
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "insert into pedidos (id_local, estado_local, payload_creacion, creado_en) "
+                    "values (%s, %s, %s, now() - %s::interval)",
+                    (id_local, estado, Json(cuerpo), hace),
+                )
+
+    def _contar(self):
+        todos = Repo.contar_pedidos_por_sku(30)
+        return {sku: todos.get(sku, 0) for sku in self.SKUS}
+
+    def test_cuenta_pedidos_creados_y_confirmados_por_sku(self):
+        a, b = self.SKUS
+        self._pedido(990001, "confirmado", [{"sku": a, "nombre": "A", "cantidad": 1}])
+        self._pedido(990002, "creado", [{"sku": a, "nombre": "A", "cantidad": 2}, {"sku": b, "nombre": "B", "cantidad": 1}])
+        assert self._contar() == {a: 2, b: 1}
+
+    def test_no_cuentan_los_que_fallaron_ni_los_rechazados_ni_los_pendientes(self):
+        a, _ = self.SKUS
+        for i, estado in enumerate(["error", "rechazado", "pendiente_creacion", "incompleto"]):
+            self._pedido(990001 + i, estado, [{"sku": a, "nombre": "A", "cantidad": 1}])
+        assert self._contar()[a] == 0
+
+    def test_solo_los_ultimos_30_dias(self):
+        a, _ = self.SKUS
+        self._pedido(990001, "confirmado", [{"sku": a}], hace="29 days")
+        self._pedido(990002, "confirmado", [{"sku": a}], hace="31 days")
+        assert self._contar()[a] == 1
+
+    def test_el_sku_se_compara_sin_distinguir_mayusculas(self):
+        a, _ = self.SKUS
+        self._pedido(990001, "confirmado", [{"sku": a.lower()}])
+        assert self._contar()[a] == 1  # la clave sale en mayúsculas
+
+    def test_un_pedido_con_dos_lineas_del_mismo_sku_cuenta_una_vez(self):
+        a, _ = self.SKUS
+        self._pedido(990001, "confirmado", [{"sku": a, "cantidad": 1}, {"sku": a, "cantidad": 2}])
+        assert self._contar()[a] == 1
+
+    @pytest.mark.parametrize("payload", [None, {}, {"lineas": None}, {"lineas": "texto"}, {"lineas": [{"nombre": "sin sku"}]}, {"lineas": []}])
+    def test_un_payload_raro_no_rompe_ni_cuenta(self, payload):
+        self._pedido(990001, "confirmado", None, payload=payload if payload is not None else {})
+        assert self._contar() == {self.SKUS[0]: 0, self.SKUS[1]: 0}

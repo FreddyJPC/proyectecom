@@ -152,6 +152,8 @@ class ProductoBotResumenSchema(Schema):
     imagen_url = fields.Str(data_key="imagenUrl", allow_none=True)
     publicado_en = fields.Str(data_key="publicadoEn", allow_none=True)
     actualizado_en = fields.Str(data_key="actualizadoEn", allow_none=True)
+    pedidos_30d = fields.Int(data_key="pedidos30d")
+    margen_en_riesgo = fields.Bool(data_key="margenEnRiesgo")
 
 
 class ProductoBotDetalleSchema(Schema):

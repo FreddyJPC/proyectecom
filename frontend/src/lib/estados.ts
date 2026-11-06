@@ -49,6 +49,9 @@ export const ROCKETFY_STATUS: Record<number, EstadoInfo> = {
 export const TIPO_ALERTA_STOCK: Record<string, EstadoInfo> = {
   stock_bajo: { label: "Stock bajo", variant: "warning" },
   cambio_precio: { label: "Cambio de precio", variant: "info" },
+  // Fase F: los genera la sincronización de productos publicados (backend/.../productos_bot/sincronizacion.py).
+  producto_agotado: { label: "Se pausó: sin stock", variant: "danger" },
+  margen_en_riesgo: { label: "Margen en riesgo", variant: "warning" },
 };
 
 export function tipoAlertaStockInfo(tipo: string): EstadoInfo {
@@ -101,6 +104,7 @@ export const ACCIONES_HISTORIAL: Record<string, string> = {
   actualizado_rocketfy: "Datos de Rocketfy actualizados",
   redactado_ia: "Borrador redactado con IA",
   simulacion_completa: "Compra de prueba completada con Victoria",
+  agotado: "Se pausó solo: sin stock en Rocketfy",
 };
 
 /** De dónde sale un texto redactado con IA. «Sugerido por IA» es la señal de

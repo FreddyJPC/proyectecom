@@ -66,9 +66,11 @@ export function MisProductosTab({
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-prose text-sm text-muted-foreground">
-          Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados.
+          Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados. Cada hora se actualizan costo y stock desde Rocketfy, y un producto que se queda sin stock se pausa solo.
         </p>
         <AjustesPreciosDialog
+          // Los ajustes cambian qué productos tienen el margen en riesgo: se vuelve a pedir la lista.
+          onGuardado={recargar}
           trigger={
             <Button variant="outline" size="sm">
               <Settings2 /> Ajustes de precios
@@ -120,6 +122,7 @@ export function MisProductosTab({
                         {p.nombre}
                       </Link>
                       <StatusBadge label={estado.label} variant={estado.variant} className="h-5 px-2 text-[0.7rem]" />
+                      {p.margenEnRiesgo && <StatusBadge label="Margen en riesgo" variant="warning" className="h-5 px-2 text-[0.7rem]" />}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <span className="tabular">{p.sku}</span>
@@ -131,6 +134,10 @@ export function MisProductosTab({
                     <div className="w-20 sm:text-right">
                       <p className="text-xs text-muted-foreground">Precio</p>
                       <p className="tabular font-semibold">{formatMoney(p.precio)}</p>
+                    </div>
+                    <div className="w-20">
+                      <p className="text-xs text-muted-foreground">Pedidos (30 d)</p>
+                      <p className="tabular font-semibold">{p.pedidos30d ?? 0}</p>
                     </div>
                     <div className="w-28">
                       <p className="text-xs text-muted-foreground">Stock</p>

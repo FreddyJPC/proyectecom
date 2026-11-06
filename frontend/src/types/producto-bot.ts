@@ -14,6 +14,10 @@ export type ProductoBotResumen = {
   imagenUrl: string | null;
   publicadoEn: string | null;
   actualizadoEn: string | null;
+  /** Pedidos creados en Rocketfy con este producto en los últimos 30 días. */
+  pedidos30d: number;
+  /** Con el precio y el costo de hoy, el margen está bajo tu mínimo (solo con ajustes confirmados). */
+  margenEnRiesgo: boolean;
 };
 
 export type Verificacion = {

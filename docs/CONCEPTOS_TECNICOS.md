@@ -945,3 +945,52 @@ mereciendo ojos humanos (un pedido de prueba).
 **bloquea** (precio bajo el piso, falta un dato, sin stock…) y lo que solo
 **avisa** (margen bajo, no probaste una compra completa, se usó IA…). Lo que
 avisa se puede ignorar a conciencia; lo que bloquea, no.
+
+
+## 31. Operación continua: sincronizar, pausar solo y avisar sin pisar a nadie
+
+**Para qué sirve.** Un producto publicado cambia por fuera: el proveedor
+(Rocketfy) sube el costo o se queda sin unidades. Si nadie lo mira, Victoria
+sigue ofreciendo algo que no puede entregar o que ya no deja ganancia. Esta fase
+hace que la ficha se mantenga al día **sola**, sin que vigiles.
+
+**Un «job» es una tarea que corre sola cada cierto tiempo** (aquí, cada hora).
+Mira cada producto publicado, pregunta a Rocketfy cuánto cuesta y cuánto hay, y
+actúa según reglas fijas (código, no IA).
+
+**Qué hace y qué NO hace (y por qué).**
+- **Se queda sin stock → se pausa solo.** Es seguro hacerlo solo: dejar de
+  ofrecer algo que no hay no pierde ventas posibles. En cambio **reanudar es
+  manual**: que Victoria vuelva a ofrecerlo sin que lo veas es más arriesgado que
+  tardar un rato en reanudarlo.
+- **El margen cae bajo tu mínimo → te avisa, pero NO cambia el precio.** Subir o
+  bajar un precio afecta a tus clientes y a tu marca: esa decisión es tuya.
+  Además solo juzga con los ajustes que **tú ya confirmaste** (§28): con los
+  números de partida sería opinar con datos inventados.
+- **Avisa al cruzar el umbral, no en cada vuelta.** Si avisara cada hora mientras
+  el problema siga, dejarías de leer los avisos (esto se llama *fatiga de
+  alertas*). Se compara «cómo estaba» con «cómo está» y solo se avisa si cambió de
+  sano a en riesgo.
+
+**Fallar con calma (relacionado con §26).** Si Rocketfy no responde o no dice
+cuánto stock hay, **no se pausa nada**: no se tira abajo un producto por un fallo
+de red. Es el mismo criterio de «fallar abierto» del vigilante de stock.
+
+**No pisar una decisión humana (condición de carrera).** Mientras el job
+consulta a Rocketfy (toma unos segundos), tú podrías pausar o archivar ese mismo
+producto. Una *condición de carrera* es cuando dos cosas pasan casi a la vez y el
+resultado depende de quién llega primero. Para que el job no deshaga tu
+decisión, su pausa es **condicional**: «cámbialo a agotado **solo si sigue
+activo ahora mismo**». Si ya no lo está, no hace nada.
+
+**El candado (`job_locks`).** Si por error dos copias del backend corrieran a la
+vez, ambas harían el mismo trabajo y avisarían dos veces. Cada job toma un
+«candado» en la base antes de empezar y lo suelta al terminar; si ya está
+tomado, esa corrida se salta.
+
+**Pedidos por producto.** En la lista se cuentan los pedidos de los últimos 30
+días por SKU, leyéndolos del JSON guardado de cada pedido. Un dato extra de
+lectura: si la consulta fallara, la lista se muestra igual (sin ese número).
+
+**Qué todavía no hace.** No vuelve a ofrecer solo un producto que recuperó stock,
+no ajusta precios y no mira otros cambios de Rocketfy (nombre, descripción).

@@ -25,7 +25,7 @@ from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
 
-from .calculadora import envio_para_piso, ganancia_por_unidad, margen_pct, recomendar
+from .calculadora import envio_para_piso, ganancia_por_unidad, margen_en_riesgo, margen_pct, recomendar
 from .dto import (
     EvaluacionPrecioDTO,
     HistorialDTO,
@@ -48,6 +48,9 @@ from .verificacion import bloqueos_de_contenido, metodos_de_pago, verificar_prod
 logger = logging.getLogger(__name__)
 
 UMBRAL_STOCK_AL_PUBLICAR = 5
+# Ventana de «pedidos por producto» en la lista y estados que muestran la insignia de margen.
+DIAS_DE_PEDIDOS_EN_LA_LISTA = 30
+ESTADOS_CON_INSIGNIA_DE_MARGEN = ("listo", "activo", "pausado", "agotado")
 LARGO_MAXIMO_DESCRIPCION_ROCKETFY = 1500
 LARGO_MAXIMO_VALOR_EN_HISTORIAL = 300
 
@@ -126,7 +129,42 @@ class ProductosBotService:
     # Lectura
     # ------------------------------------------------------------------
     def listar(self, incluir_archivados: bool = False) -> List[ProductoBotResumenDTO]:
-        return [self._a_resumen(fila) for fila in self._repo.listar(incluir_archivados)]
+        filas = self._repo.listar(incluir_archivados)
+        pedidos = self._pedidos_por_sku()
+        ajustes = self._ajustes_para_el_margen()
+        return [
+            self._a_resumen(
+                fila,
+                pedidos_30d=pedidos.get(str(fila["sku"]).upper(), 0),
+                con_margen_en_riesgo=self._tiene_margen_en_riesgo(fila, ajustes),
+            )
+            for fila in filas
+        ]
+
+    def _pedidos_por_sku(self) -> Dict[str, int]:
+        """Un dato extra de la lista: si falla la consulta, la lista se muestra igual."""
+        try:
+            return self._repo.contar_pedidos_por_sku(DIAS_DE_PEDIDOS_EN_LA_LISTA)
+        except Exception:
+            logger.exception("No se pudieron contar los pedidos por producto (la lista sigue)")
+            return {}
+
+    def _ajustes_para_el_margen(self):
+        try:
+            return self._ajustes.obtener_ajustes()
+        except Exception:
+            logger.exception("No se pudieron leer los ajustes para el margen (la lista sigue)")
+            return None
+
+    @staticmethod
+    def _tiene_margen_en_riesgo(fila: dict, ajustes) -> bool:
+        """Solo para productos que ya se venden o se pueden reanudar: un borrador
+        todavía está en preparación (su margen sale en la lista de verificación)."""
+        if ajustes is None or fila["estado"] not in ESTADOS_CON_INSIGNIA_DE_MARGEN:
+            return False
+        precio = _decimal(fila.get("precio"), "0.01")
+        costo = _decimal(fila.get("costo_rocketfy"), "0.01")
+        return margen_en_riesgo(precio, costo, ajustes) is not None
 
     def obtener_detalle(self, sku: str) -> ProductoBotDetalleDTO:
         return self._a_detalle(self._obtener_o_error(sku))
@@ -378,7 +416,7 @@ class ProductosBotService:
         }
 
     @staticmethod
-    def _a_resumen(fila: dict) -> ProductoBotResumenDTO:
+    def _a_resumen(fila: dict, pedidos_30d: int = 0, con_margen_en_riesgo: bool = False) -> ProductoBotResumenDTO:
         return ProductoBotResumenDTO(
             sku=fila["sku"],
             nombre=fila["nombre"],
@@ -390,6 +428,8 @@ class ProductosBotService:
             imagen_url=fila.get("imagen_url"),
             publicado_en=_iso(fila.get("publicado_en")),
             actualizado_en=_iso(fila.get("actualizado_en")),
+            pedidos_30d=pedidos_30d,
+            margen_en_riesgo=con_margen_en_riesgo,
         )
 
     def _avisos_de_la_lista(self, fila: dict) -> List[str]:
