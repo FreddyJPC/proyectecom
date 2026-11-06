@@ -994,3 +994,58 @@ lectura: si la consulta fallara, la lista se muestra igual (sin ese número).
 
 **Qué todavía no hace.** No vuelve a ofrecer solo un producto que recuperó stock,
 no ajusta precios y no mira otros cambios de Rocketfy (nombre, descripción).
+
+
+## 32. Mandar una foto por WhatsApp: un enlace, una sola vez y un interruptor
+
+**Para qué sirve.** Un cliente que va a pagar contra entrega quiere **ver** lo
+que compra. Poder mandarle la foto en la misma conversación reduce dudas y
+devoluciones.
+
+**Cómo funciona.** WhatsApp no recibe la imagen de nosotros: le damos un **enlace
+público** (`https://…`) y los servidores de Meta **la descargan** y la entregan al
+cliente. Por eso solo se aceptan enlaces `https`, y por eso hay un límite que no
+controlamos: si Meta no puede bajar la imagen, **el fallo llega después** (por un
+aviso aparte) y nuestro envío ya figuró como «aceptado».
+
+**Las reglas (para que la IA no pueda hacer daño).** Victoria *pide* la foto con
+una herramienta, pero **el código decide qué se envía**:
+- la URL sale siempre **de la ficha guardada**, nunca de lo que escriba el modelo
+  (si el modelo inventara un enlace, no se usaría);
+- solo se envía la foto de un producto **activo** del catálogo;
+- **una vez por conversación**: la foto queda guardada como un mensaje («📷 Foto
+  de … (SKU)») y se mira antes de volver a enviar (esto se llama *idempotencia*:
+  repetir la orden no repite el efecto). Es la misma idea que protege los pedidos
+  de duplicarse;
+- si algo falla, se le **explica a Victoria** (que lo dice con naturalidad) y no se
+  pasa la conversación a una persona: no tener foto no es una emergencia.
+
+**Sin reintento automático.** Igual que al enviar un texto, no se reintenta solo:
+si el primer intento *sí* llegó pero la respuesta se perdió, reintentar mandaría
+la foto dos veces.
+
+**El interruptor (`BOT_ENVIAR_FOTOS`).** Una función nueva que toca conversaciones
+con clientes reales se despliega con un **interruptor**: una variable que la
+apaga sin tocar el código ni volver a una versión anterior. Mientras no se haya
+probado de verdad en un teléfono, es la salida de emergencia más rápida. Se llama
+*feature flag*.
+
+**Y la simulación.** «Probar con Victoria» (§30) también la ejerce: el doble de
+WhatsApp solo anota la foto que se habría enviado, y el test de «cero efectos»
+ahora también prohíbe crear el cliente real de WhatsApp.
+
+**Lo que NO se pudo comprobar.** Nunca se mandó una foto real; el interruptor y
+las reglas están probados, pero **que Meta descargue la imagen del servidor de
+Rocketfy y que el modelo real use bien la herramienta son preguntas abiertas**
+hasta que alguien lo pruebe desde un teléfono.
+
+## 33. Variantes: por qué no es solo «un texto más»
+
+Rocketfy modela una variante (talla, color) como **otro producto con su propio
+SKU, su propio stock y un `parent_id` que apunta al producto padre**. Hoy, en
+este sistema, las variantes son solo un **texto** («Negro, blanco») y el pedido
+lleva el SKU del producto padre: la variante viaja en el *nombre* de la línea.
+Para una persona que lee el pedido sirve; para **Rocketfy no**: despacha por SKU,
+así que no sabría cuál variante enviar, ni descontaría su stock. Arreglarlo
+cambia qué se le manda a Rocketfy (la ruta del dinero), por eso se hace con
+decisiones y pruebas reales (pendiente #55) y no a ciegas.

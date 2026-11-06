@@ -152,6 +152,7 @@ const fichaBase = (sku, nombre, estado, precio, costo, sugerido, stock, extra = 
 });
 const productosBot = [
   fichaBase("AUD-BT-001", "Audífonos Bluetooth Pro", "activo", "34.90", "18.50", "34.90", 4, {
+    imagenUrl: "https://cdn.rocketfy.example/aud-bt-001.png",
     descripcion: "Audífonos inalámbricos con cancelación de ruido, hasta 30 horas de batería y estuche de carga.", tiempoEntrega: "2 a 4 días hábiles",
     variantes: "Negro, blanco", preguntasFrecuentes: "¿Trae cargador? Sí, cable USB-C incluido.", publicadoEn: ago(4000), publicadoPor: "freddy@azoshop.ec", actualizadoEn: ago(35),
     historial: [
@@ -307,7 +308,7 @@ const MAX_MENSAJES_PRUEBA = 20;
 function turnoVictoria(f, b) {
   const msg = String(b.mensaje || ""), bajo = msg.toLowerCase();
   const e = { nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}) };
-  const herramientas = [], avisos = [];
+  const herramientas = [], avisos = [], fotos = [];
   let escalada = false, pedido = null, respuesta = "";
   const usar = (nombre, entrada, resultado) => herramientas.push({ nombre, entrada, resultado });
   const registrar = (n) => {
@@ -323,6 +324,12 @@ function turnoVictoria(f, b) {
   };
   if (/garant|cuotas|tarjeta|factura/.test(bajo)) { escalar("El cliente pregunta algo que no está en la ficha del producto"); respuesta = "Eso no lo tengo confirmado, así que te paso con un asesor que te lo aclara enseguida 🙋"; }
   else if (/persona|asesor|humano/.test(bajo)) { escalar("El cliente pidió hablar con una persona"); respuesta = "¡Claro! Ya te conecto con un asesor humano 🙋"; }
+  else if (/foto|imagen|c[oó]mo se ve/.test(bajo)) {
+    const yaEnviada = (b.historial || []).some((h) => h.rol === "bot" && h.contenido.includes(`(${f.sku})`) && h.contenido.startsWith("📷"));
+    if (yaEnviada) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Ya le enviaste la foto de este producto a este cliente: no la repitas."); respuesta = "¡Ya te la mandé arriba! Si quieres otro detalle, dime 😊"; }
+    else if (!f.imagenUrl) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Este producto no tiene una foto disponible para enviar. Descríbeselo al cliente con la información de su ficha y no le prometas fotos."); respuesta = `Por ahora no tengo foto de este producto, pero te lo describo: ${f.descripcion}`; }
+    else { fotos.push({ mensaje: `📷 Foto de ${f.nombre} (${f.sku})`, url: f.imagenUrl, descripcion: f.nombre }); usar("enviar_foto_producto", { producto_sku: f.sku }, "Foto enviada al cliente. Puedes decirle que ya se la mandaste."); respuesta = "¡Claro! Te acabo de enviar la foto 📷 ¿Te gustaría pedirlo?"; }
+  }
   else if (/env[ií]o|demora|llega/.test(bajo) && !/soy\s/.test(bajo)) { respuesta = `La entrega es en ${f.tiempoEntrega || "el plazo que acordemos"}. Sobre el costo del envío no tengo información confirmada, ¿quieres que lo consulte con un asesor?`; }
   else if (/transferencia/.test(bajo)) {
     if (!f.metodosPago.includes("transferencia")) respuesta = "Por ahora este producto solo se paga contra entrega: pagas al recibirlo 😊";
@@ -350,7 +357,7 @@ function turnoVictoria(f, b) {
       respuesta = `¡Pedido confirmado, ${e.nombreCliente}! Llega en ${f.tiempoEntrega}. Total a pagar al recibir: $${e.total}. ¡Gracias por tu compra!`;
     }
   } else { respuesta = `¡Hola! Soy Victoria de AzoShop 😊 Te cuento sobre ${f.nombre}: ${f.descripcion} ¿Te gustaría pedirlo?`; }
-  return { respuesta, herramientas, estado: e, escalada, pedido, avisos };
+  return { respuesta, herramientas, estado: e, escalada, pedido, avisos, fotos };
 }
 
 function manejarProductosBot(req, res, p, q, send) {

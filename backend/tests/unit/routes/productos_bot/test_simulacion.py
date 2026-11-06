@@ -29,7 +29,7 @@ def ficha(**cambios):
         "precio": Decimal("24.99"), "variantes": "Negro, blanco", "tiempo_entrega": "2 a 4 dias habiles",
         "metodos_pago_aceptados": "contraentrega, transferencia", "preguntas_frecuentes": "Incluye estuche? Si.",
         "temas_no_responder": "Garantia", "max_unidades_por_pedido": 2, "estado": "borrador", "activo": False,
-        "stock_ultimo": 50,
+        "stock_ultimo": 50, "imagen_url": "https://cdn.rocketfy.example/audifonos.png",
     }
     datos.update(cambios)
     return datos
@@ -275,3 +275,47 @@ class TestCeroEfectosReales:
         monkeypatch.setattr("src.config.database._get_pool", lambda: (_ for _ in ()).throw(AssertionError("base")))
         r = turno(compra_completa(), producto=ficha(precio=Decimal("5.00")))
         assert r.pedido is None and len(responses.calls) == 0
+
+
+FOTO = ("enviar_foto_producto", {"producto_sku": SKU})
+
+
+class TestFotoDelProducto:
+    def test_la_foto_queda_a_la_vista_y_no_se_envia_nada(self):
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), mensaje="Tienes fotos?")
+        assert [h["nombre"] for h in r.herramientas] == ["enviar_foto_producto"]
+        assert "Foto enviada" in r.herramientas[0]["resultado"]
+        assert r.fotos == [{
+            "mensaje": f"📷 Foto de Audifonos Bluetooth ({SKU})",
+            "url": "https://cdn.rocketfy.example/audifonos.png",
+            "descripcion": "Audifonos Bluetooth",
+        }]
+
+    def test_sin_imagen_en_la_ficha_no_hay_foto_y_victoria_lo_sabe(self):
+        r = turno(LLMGuionado(herramientas(FOTO), texto("No tengo foto.")), producto=ficha(imagen_url=None))
+        assert r.fotos == [] and "no tiene una foto" in r.herramientas[0]["resultado"]
+
+    def test_no_repite_la_foto_si_ya_esta_en_el_historial_de_la_prueba(self):
+        historial = [
+            {"rol": "cliente", "contenido": "Tienes fotos?"},
+            {"rol": "bot", "contenido": f"📷 Foto de Audifonos Bluetooth ({SKU})"},
+            {"rol": "bot", "contenido": "Te la mande."},
+        ]
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Ya te la mande.")), mensaje="Otra vez?", historial=historial)
+        assert r.fotos == [] and "no la repitas" in r.herramientas[0]["resultado"]
+
+    def test_la_foto_se_ve_en_el_historial_que_recibe_el_modelo(self):
+        llm = LLMGuionado(texto("ok"))
+        historial = [{"rol": "bot", "contenido": f"📷 Foto de Audifonos Bluetooth ({SKU})"}]
+        turno(llm, historial=historial)
+        assert any("Foto de Audifonos Bluetooth" in (m.texto or "") for m in llm.llamadas[0]["mensajes"])
+
+    @responses.activate
+    def test_cero_efectos_ni_siquiera_se_arma_el_cliente_real_de_whatsapp(self, monkeypatch):
+        def prohibido(*args, **kwargs):
+            raise AssertionError("La simulación intentó usar WhatsApp o la base de datos")
+
+        monkeypatch.setattr("src.config.database._get_pool", prohibido)
+        monkeypatch.setattr("src.routes.whatsapp.tools.get_whatsapp_client", prohibido)
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")))
+        assert len(r.fotos) == 1 and len(responses.calls) == 0

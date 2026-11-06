@@ -78,6 +78,23 @@ class WhatsAppClient:
         }
         return self._post(payload)
 
+    def enviar_imagen(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
+        """POST .../messages, type=image con un enlace público (`link`): Meta
+        descarga la imagen de esa URL. Dentro de la ventana de 24 h de una
+        conversación en curso no necesita plantilla. Un 200 solo dice que Meta
+        ACEPTÓ el envío: si no puede bajar la imagen, el fallo llega después por
+        el webhook de estados (no se ve aquí)."""
+        imagen = {"link": url}
+        if descripcion:
+            imagen["caption"] = descripcion
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": telefono,
+            "type": "image",
+            "image": imagen,
+        }
+        return self._post(payload)
+
     def enviar_plantilla(self, telefono: str, nombre_plantilla: str, variables: Optional[List[str]] = None) -> dict:
         """POST .../messages, type=template. Única forma permitida de
         escribirle primero a un cliente, o de reabrir la conversación tras

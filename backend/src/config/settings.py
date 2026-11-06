@@ -56,6 +56,9 @@ class Settings:
     llm_model: str
     bot_max_turnos_herramientas: int
     bot_max_mensajes_historial: int
+    # Fase G2: Victoria puede enviar la foto del producto por WhatsApp (herramienta
+    # `enviar_foto_producto`). Interruptor de seguridad: BOT_ENVIAR_FOTOS=false la apaga.
+    bot_enviar_fotos: bool
 
 
 def _env_bool(nombre: str) -> bool:
@@ -87,4 +90,5 @@ def load_settings() -> Settings:
         llm_model=os.getenv("LLM_MODEL", "claude-sonnet-5"),
         bot_max_turnos_herramientas=int(os.getenv("BOT_MAX_TURNOS_HERRAMIENTAS", "5")),
         bot_max_mensajes_historial=int(os.getenv("BOT_MAX_MENSAJES_HISTORIAL", "40")),
+        bot_enviar_fotos=os.getenv("BOT_ENVIAR_FOTOS", "true").strip().lower() not in ("0", "false", "no"),
     )

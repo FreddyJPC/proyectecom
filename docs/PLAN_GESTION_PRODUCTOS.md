@@ -1,7 +1,7 @@
 # Plan: gestión de productos desde la app
 
 > **Estado: APROBADO por Freddy el 2026-11-05 (ADR-010).** Fases A, B, C, D y E desplegadas
-> (2026-11-05 y 2026-11-06); Fase F implementada (entrada 0.0.96 de `PROGRESS.md`); la G, sin empezar. Escrito por Claude a partir de `PROGRESS.md`,
+> (2026-11-05 y 2026-11-06); Fase F desplegada (2026-11-06); Fase G: G2 implementada (entrada 0.0.98 de `PROGRESS.md`), G1, G3 y G4 a la espera de decisiones. Escrito por Claude a partir de `PROGRESS.md`,
 > `backend/src/routes/whatsapp/*`, `backend/src/routes/productos/*` y el dashboard
 > (`frontend/src/app/(dashboard)/catalogo`), leídos el 2026-11-05.
 
@@ -280,8 +280,8 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
   insignia y aviso; **no cambia el precio solo**.
 - En la lista: pedidos creados por producto (últimos 30 días) e historial.
 
-> **Estado de la Fase F (2026-11-06):** implementada (entrada 0.0.96 de `PROGRESS.md`;
-> 827 tests; **sin migración**). Cambios respecto a lo escrito arriba: (1) la
+> **Estado de la Fase F (2026-11-06):** desplegada (entradas 0.0.96 y 0.0.97 de `PROGRESS.md`;
+> 827 tests; **sin migración**; la primera sincronización real corrió bien). Cambios respecto a lo escrito arriba: (1) la
 > sincronización es un job propio (`sync_productos`, cada 60 min, con su candado) en
 > vez de ir dentro del vigilante, para que sus fallos no se mezclen con los del
 > vigilante; (2) sincroniza los productos **activos y agotados**; (3) **no hay
@@ -307,6 +307,15 @@ teléfono, y la siguiente conversación de Victoria lo refleja.
   diferir.
 - **G4 Descuentos o combos**, si algún día decides ofrecerlos (hoy Victoria
   tiene prohibido ofrecerlos).
+
+> **Estado de la Fase G (2026-11-06):** (entrada 0.0.98 de `PROGRESS.md`; 877 tests; sin migración)
+> - **G2 fotos por WhatsApp: implementada.** Usa la imagen que ya guarda la ficha (la de
+>   Rocketfy; **no** hay subida de imágenes propias todavía), una vez por conversación, con
+>   interruptor `BOT_ENVIAR_FOTOS`. **Nunca se envió una foto real** (pendiente #58).
+> - **G1 variantes reales: descubrimiento hecho, implementación pendiente.** La guía del
+>   proveedor confirma que una variante es otro producto con su propio SKU y `parent_id`;
+>   falta saber qué productos tuyos las usan (pendiente #55). Toca la ruta del dinero.
+> - **G3 tienda web y G4 descuentos: sin hacer, dependen de decisiones tuyas** (#56 y #57).
 
 ### Fuera de este plan: automatización de anuncios (versión siguiente)
 

@@ -268,6 +268,14 @@ export type AvisoSimulado = {
   texto: string;
 };
 
+/** La foto que Victoria habría enviado por WhatsApp (no se envió nada). */
+export type FotoSimulada = {
+  /** Cómo queda en la conversación («📷 Foto de … (SKU)»): se reenvía en el historial para no repetirla. */
+  mensaje: string;
+  url: string;
+  descripcion: string;
+};
+
 export type TurnoSimulado = {
   respuesta: string;
   herramientas: LlamadaHerramienta[];
@@ -276,6 +284,7 @@ export type TurnoSimulado = {
   pedido: PedidoSimulado | null;
   avisos: AvisoSimulado[];
   uso: UsoIA;
+  fotos: FotoSimulada[];
 };
 
 export type ProbarInput = {

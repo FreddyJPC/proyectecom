@@ -25,11 +25,13 @@ import logging
 import time
 import unicodedata
 from decimal import Decimal, InvalidOperation
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
+from src.config.settings import load_settings
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
+from src.integrations.whatsapp import get_whatsapp_client
 from src.routes.pedidos.dto import CrearPedidoInputDTO, LineaPedidoDTO
 from src.routes.pedidos.exceptions import (
     PedidoEnEstadoAmbiguoError,
@@ -41,7 +43,7 @@ from src.routes.pedidos.services import PedidoService
 
 from .ficha import formatear_ficha_producto
 from .minimos import extraer_minimo_rocketfy
-from .repository import ConversacionRepository, LeadRepository, MinimoObservadoRepository, ProductoBotRepository
+from .repository import ConversacionRepository, LeadRepository, MensajeRepository, MinimoObservadoRepository, ProductoBotRepository
 from .stock import StockChecker
 
 logger = logging.getLogger(__name__)
@@ -229,6 +231,35 @@ HERRAMIENTAS_VICTORIA = [
     ),
 ]
 
+# Fase G2: no va en HERRAMIENTAS_VICTORIA porque se puede apagar (BOT_ENVIAR_FOTOS=false):
+# ver `herramientas_de_victoria()`.
+HERRAMIENTA_FOTO = HerramientaLLM(
+    nombre="enviar_foto_producto",
+    descripcion=(
+        "Envía al cliente, por este mismo WhatsApp, la foto del producto. Úsala "
+        "SOLO cuando el cliente pida ver fotos o imágenes, o dude de cómo luce el "
+        "producto. No la uses para otra cosa y no la repitas: si ya se la enviaste, "
+        "el sistema te lo dirá. producto_sku debe ser el SKU exacto del producto "
+        "que aparece en tu información. Si el producto no tiene foto, no prometas "
+        "una: descríbelo con lo que dice su ficha."
+    ),
+    parametros={
+        "type": "object",
+        "properties": {
+            "producto_sku": {
+                "type": "string",
+                "description": "SKU exacto del producto, tal como aparece en tu información.",
+            },
+        },
+        "required": ["producto_sku"],
+    },
+)
+
+
+def herramientas_de_victoria(enviar_fotos: bool) -> List[HerramientaLLM]:
+    """Las herramientas que se le ofrecen al modelo en cada turno."""
+    return [*HERRAMIENTAS_VICTORIA, HERRAMIENTA_FOTO] if enviar_fotos else list(HERRAMIENTAS_VICTORIA)
+
 
 class HerramientasVictoria:
     def __init__(
@@ -240,6 +271,9 @@ class HerramientasVictoria:
         telegram_notifier: Optional[TelegramNotifier] = None,
         stock_checker: Optional[StockChecker] = None,
         minimo_repo: Optional[MinimoObservadoRepository] = None,
+        mensaje_repo: Optional[MensajeRepository] = None,
+        whatsapp_client=None,
+        enviar_fotos: Optional[bool] = None,
     ):
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
@@ -248,6 +282,10 @@ class HerramientasVictoria:
         self._telegram = telegram_notifier or get_telegram_notifier()
         self._stock = stock_checker or StockChecker()
         self._minimos = minimo_repo or MinimoObservadoRepository()
+        self._mensajes = mensaje_repo or MensajeRepository()
+        # Perezoso: el cliente de WhatsApp solo se arma si de verdad se envía una foto.
+        self._whatsapp = whatsapp_client
+        self._enviar_fotos = load_settings().bot_enviar_fotos if enviar_fotos is None else enviar_fotos
         self._manejadores = {
             "guardar_datos_cliente": self._handle_guardar_datos_cliente,
             "ver_ficha_producto": self._handle_ver_ficha_producto,
@@ -256,6 +294,8 @@ class HerramientasVictoria:
             "cerrar_venta": self._handle_cerrar_venta,
             "escalar_a_humano": self._handle_escalar_a_humano,
         }
+        if self._enviar_fotos:
+            self._manejadores["enviar_foto_producto"] = self._handle_enviar_foto_producto
 
     def ejecutar(self, nombre: str, lead_id: int, conversacion_id: int, entrada: dict, id_llamada: str) -> ResultadoHerramienta:
         manejador = self._manejadores.get(nombre)
@@ -286,6 +326,54 @@ class HerramientasVictoria:
         if not self._esta_activo(producto):
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
         return formatear_ficha_producto(producto)
+
+    def _handle_enviar_foto_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        """Fase G2. Solo se envía la foto de un producto ACTIVO del catálogo (la URL
+        sale de la base, nunca de lo que escriba el modelo), una sola vez por
+        conversación. Cualquier fallo se le explica a Victoria y no escala: no tener
+        foto no es motivo para pasar a una persona."""
+        consulta = (entrada.get("producto_sku") or "").strip()
+        producto = self._productos.obtener_por_sku(consulta) if consulta else None
+        if producto is None and consulta:
+            producto = self._buscar_producto_activo_por_nombre(consulta)
+        if not self._esta_activo(producto):
+            return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
+
+        url = (producto.get("imagen_url") or "").strip()
+        if not url.lower().startswith("https://"):
+            # Meta solo descarga enlaces https públicos.
+            return (
+                "Este producto no tiene una foto disponible para enviar. Descríbeselo al cliente con la "
+                "información de su ficha y no le prometas fotos."
+            )
+        if self._mensajes.existe_foto(conversacion_id, producto["sku"]):
+            return "Ya le enviaste la foto de este producto a este cliente: no la repitas."
+
+        lead = self._leads.obtener_por_id(lead_id)
+        try:
+            self._cliente_whatsapp().enviar_imagen(telefono=lead["telefono"], url=url, descripcion=producto["nombre"])
+        except Exception:
+            logger.warning(
+                "No se pudo enviar la foto de '%s'", producto["sku"],
+                exc_info=True, extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+            )
+            return (
+                "No se pudo enviar la foto en este momento. Díselo con naturalidad al cliente y descríbele el "
+                "producto con la información de su ficha."
+            )
+        self._mensajes.crear(
+            conversacion_id=conversacion_id,
+            rol="bot",
+            contenido=f"📷 Foto de {producto['nombre']} ({producto['sku']})",
+            tipo="imagen",
+            wamid=None,
+        )
+        return "Foto enviada al cliente. Puedes decirle que ya se la mandaste."
+
+    def _cliente_whatsapp(self):
+        if self._whatsapp is None:
+            self._whatsapp = get_whatsapp_client()
+        return self._whatsapp
 
     def _handle_registrar_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         # El LLM no siempre copia el SKU exacto tal como aparece en el

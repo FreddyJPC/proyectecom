@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, FlaskConical, Info, Loader2, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-react";
+import { CircleCheck, FlaskConical, Image as ImageIcon, Info, Loader2, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { SectionCard } from "@/components/app/section-card";
@@ -13,7 +13,7 @@ import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AvisoSimulado, EstadoPrueba, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoIA } from "@/types/producto-bot";
+import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoIA } from "@/types/producto-bot";
 
 // Mismos límites que el backend (schemas.py y pruebas.py).
 const MAX_MENSAJE = 1000;
@@ -28,6 +28,7 @@ const ESCENARIOS = [
   { id: "fuera", label: "Pregunta fuera de la ficha", texto: "¿Tiene garantía de 5 años y puedo pagarlo en 12 cuotas con tarjeta de crédito?", esperado: "Debe pasar la conversación a una persona en vez de inventar una respuesta." },
   { id: "dos", label: "Quiero 2 unidades", texto: "Quiero 2 unidades", esperado: "Debe respetar el máximo de unidades por pedido: si pasa del máximo, se lo explica al cliente." },
   { id: "persona", label: "Quiero hablar con una persona", texto: "Prefiero hablar con una persona, por favor", esperado: "Debe pasar la conversación a una persona enseguida." },
+  { id: "foto", label: "Quiero ver una foto", texto: "¿Tienes fotos? Quiero ver cómo se ve", esperado: "Si la ficha tiene imagen, Victoria envía la foto una sola vez; si no la tiene, lo dice sin prometerla." },
 ] as const;
 
 const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
@@ -37,6 +38,7 @@ const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   registrar_metodo_pago: "Registró el método de pago",
   cerrar_venta: "Intentó cerrar la venta",
   escalar_a_humano: "Pasó la conversación a una persona",
+  enviar_foto_producto: "Envió la foto del producto",
 };
 
 type Turno = {
@@ -44,11 +46,15 @@ type Turno = {
   bot: string;
   herramientas: LlamadaHerramienta[];
   avisos: AvisoSimulado[];
+  fotos: FotoSimulada[];
 };
 
 function aHistorial(turnos: Turno[]): MensajePrueba[] {
+  // Una foto queda en la conversación como un mensaje del bot, igual que en la vida real:
+  // así Victoria sabe que ya la mandó y no la repite.
   return turnos.flatMap((t) => [
     { rol: "cliente" as const, contenido: t.cliente },
+    ...t.fotos.map((f) => ({ rol: "bot" as const, contenido: f.mensaje })),
     { rol: "bot" as const, contenido: t.bot },
   ]);
 }
@@ -211,7 +217,7 @@ export function ProbarConVictoria({
         method: "POST",
         body: JSON.stringify(cuerpo),
       });
-      setTurnos((previos) => [...previos, { cliente: mensaje, bot: res.respuesta, herramientas: res.herramientas, avisos: res.avisos }]);
+      setTurnos((previos) => [...previos, { cliente: mensaje, bot: res.respuesta, herramientas: res.herramientas, avisos: res.avisos, fotos: res.fotos ?? [] }]);
       setEstado(res.estado);
       setEscalada(res.escalada);
       if (res.pedido) setPedido(res.pedido);
@@ -279,8 +285,8 @@ export function ProbarConVictoria({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
-              <div className="grid min-w-0 content-start gap-3">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
                 <label htmlFor="prueba-anuncio" className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
                   <Checkbox id="prueba-anuncio" checked={desdeAnuncio} disabled={hayPrueba || enviando} onCheckedChange={(c) => setDesdeAnuncio(c === true)} className="mt-0.5" />
                   <span className="min-w-0">
@@ -293,7 +299,12 @@ export function ProbarConVictoria({
                   <p id="prueba-escenarios" className="mb-1.5 text-xs font-medium text-muted-foreground">
                     Escenarios rápidos
                   </p>
-                  <div role="group" aria-labelledby="prueba-escenarios" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+                  <div
+                    role="group"
+                    aria-labelledby="prueba-escenarios"
+                    // Con todos los botones deshabilitados, la fila con scroll no tendría nada enfocable: se enfoca ella misma.
+                    tabIndex={enviando || bloqueada ? 0 : undefined}
+                    className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
                     {ESCENARIOS.map((e) => (
                       <Button
                         key={e.id}
@@ -339,6 +350,21 @@ export function ProbarConVictoria({
                           {t.cliente}
                         </p>
                       </div>
+                      {t.fotos.map((foto, j) => (
+                        <div key={j} className="flex flex-col items-start">
+                          <p className="flex max-w-[90%] items-start gap-2 rounded-2xl rounded-bl-sm border bg-card px-3.5 py-2 text-sm">
+                            <ImageIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="min-w-0">
+                              <span className="sr-only">Victoria: </span>
+                              Foto enviada: {foto.descripcion}{" "}
+                              <a href={foto.url} target="_blank" rel="noopener noreferrer" className="rounded-sm text-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+                                ver imagen
+                              </a>
+                              <span className="block text-xs text-muted-foreground">No se envió nada: así se vería en WhatsApp.</span>
+                            </span>
+                          </p>
+                        </div>
+                      ))}
                       <div className="flex flex-col items-start">
                         <div className="max-w-[90%] rounded-2xl rounded-bl-sm border bg-card px-3.5 py-2 text-sm">
                           <p className="whitespace-pre-wrap break-words">
@@ -430,7 +456,7 @@ export function ProbarConVictoria({
                 </p>
               </div>
 
-              <div className="grid min-w-0 content-start gap-3">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
                 <VentaEnCurso estado={estado} />
                 {pedido && <PedidoQueSeHabriaEnviado pedido={pedido} />}
                 {avisos.length > 0 && (

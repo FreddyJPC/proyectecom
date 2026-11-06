@@ -21,6 +21,7 @@ from src.routes.ajustes.services import AjustesService
 
 from .dto import (
     AvisoSimuladoDTO,
+    FotoSimuladaDTO,
     LlamadaHerramientaDTO,
     PedidoSimuladoDTO,
     TurnoSimuladoDTO,
@@ -164,6 +165,7 @@ class PruebasService:
             if turno.pedido
             else None,
             avisos=[AvisoSimuladoDTO(canal=a["canal"], texto=a["texto"]) for a in turno.avisos],
+            fotos=[FotoSimuladaDTO(mensaje=f["mensaje"], url=f["url"], descripcion=f["descripcion"]) for f in turno.fotos],
             uso=UsoIADTO(tope=uso.tope, usadas=uso.usadas + 1, restantes=max(0, uso.restantes - 1)),
         )
 

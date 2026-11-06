@@ -33,6 +33,17 @@ for (const theme of ["light", "dark"]) {
           arr.push(`${theme}/${vn} ${etiqueta} (${nodos.length}) ${nodos[0].target.join(" ").slice(0, 90)}`);
           resumen.set(k, arr);
         }
+        // Desborde horizontal: nada debe quedar fuera de pantalla (ni la página ni un cuadro abierto).
+        const desborde = await page.evaluate(() => {
+          const cuadros = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].filter((d) => d.scrollWidth > d.clientWidth + 1);
+          return { pagina: document.documentElement.scrollWidth > window.innerWidth + 1, cuadro: cuadros.length > 0 };
+        });
+        if (desborde.pagina || desborde.cuadro) {
+          const k = "desborde-horizontal [serious] Hay contenido fuera de pantalla (scroll horizontal)";
+          const arr = resumen.get(k) ?? [];
+          arr.push(`${theme}/${vn} ${etiqueta} (${desborde.cuadro ? "cuadro" : "página"})`);
+          resumen.set(k, arr);
+        }
       };
       await auditar(r);
       // Fase F: alertas nuevas de Incidencias y la insignia de margen en la lista (necesita ajustes confirmados).
@@ -93,6 +104,11 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Avisos que se habrían enviado a Telegram").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [prueba escalada]");
+        await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+        await page.getByRole("button", { name: "Quiero ver una foto" }).click();
+        await page.getByText("Foto enviada: Audífonos Bluetooth Pro").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba foto]");
         await page.keyboard.press("Escape");
       }
     }

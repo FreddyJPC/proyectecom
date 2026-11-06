@@ -10,7 +10,7 @@ _COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en
 _COLUMNAS_PRODUCTO_BOT = (
     "id, sku, nombre, descripcion, precio, variantes, tiempo_entrega, "
     "metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder, "
-    "max_unidades_por_pedido, activo, creado_en, actualizado_en"
+    "max_unidades_por_pedido, activo, imagen_url, creado_en, actualizado_en"
 )
 _COLUMNAS_LEAD = (
     "id, conversacion_id, nombre_cliente, telefono, direccion, canton, provincia, "
@@ -216,6 +216,24 @@ class MensajeRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("select 1 from mensajes where wamid = %s", (wamid,))
+                return cur.fetchone() is not None
+
+    @staticmethod
+    def existe_foto(conversacion_id: int, sku: str) -> bool:
+        """¿Ya se le mandó a este cliente la foto de este producto? Las fotos
+        quedan como mensajes del bot con tipo 'imagen' y el SKU entre paréntesis
+        (lo escribe `tools.py`): así no hace falta una tabla aparte. `strpos` y no
+        `like`, para que un SKU con `%` o `_` no se interprete como comodín."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select 1 from mensajes
+                    where conversacion_id = %s and rol = 'bot' and tipo = 'imagen' and strpos(contenido, %s) > 0
+                    limit 1
+                    """,
+                    (conversacion_id, f"({sku})"),
+                )
                 return cur.fetchone() is not None
 
     @staticmethod

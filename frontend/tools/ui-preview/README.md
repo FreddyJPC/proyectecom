@@ -12,7 +12,7 @@ Rocketfy ni WhatsApp**.
 | `server.mjs` | Servidor falso que simula el login de Supabase y la API del backend con datos realistas (pedidos, conversaciones, alertas, catálogo, métricas). |
 | `shots.mjs` | Inicia sesión y saca capturas de cada pantalla (escritorio 1440 px y móvil 390 px). |
 | `interact.mjs` | Capturas de interacciones: menú "Más", diálogos, panel de datos, estados de error y vacío, tablet. |
-| `axe.mjs` | Auditoría de accesibilidad (WCAG 2.1 AA + buenas prácticas) en todas las pantallas, claro y oscuro. Debe dar `SIN VIOLACIONES`. |
+| `axe.mjs` | Auditoría de accesibilidad (WCAG 2.1 AA + buenas prácticas) en todas las pantallas y en los cuadros abiertos, claro y oscuro, **y comprobación de desborde horizontal** (nada fuera de pantalla en el móvil). Debe dar `SIN VIOLACIONES`. |
 
 ## Cómo usarlas
 ```bash

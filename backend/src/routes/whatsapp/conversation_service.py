@@ -25,7 +25,7 @@ from src.integrations.llm.factory import get_llm_client
 
 from .ficha import formatear_ficha_producto
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
-from .tools import HERRAMIENTAS_VICTORIA, HerramientasVictoria
+from .tools import HerramientasVictoria, herramientas_de_victoria
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,8 @@ class VictoriaConversationService:
         self._max_historial = (
             max_mensajes_historial if max_mensajes_historial is not None else settings.bot_max_mensajes_historial
         )
+        # Fase G2: la herramienta de la foto solo se ofrece si está encendida (BOT_ENVIAR_FOTOS).
+        self._herramientas = herramientas_de_victoria(settings.bot_enviar_fotos)
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
@@ -96,7 +98,7 @@ class VictoriaConversationService:
 
         for _ in range(self._max_turnos):
             respuesta = self._llm.generar_respuesta(
-                system=system_prompt, mensajes=mensajes, herramientas=HERRAMIENTAS_VICTORIA
+                system=system_prompt, mensajes=mensajes, herramientas=self._herramientas
             )
             texto_final += respuesta.texto
 
@@ -129,7 +131,7 @@ class VictoriaConversationService:
                 # esa, se corta pase lo que pase (no es criterio del
                 # modelo seguir la conversación tras escalar).
                 despedida = self._llm.generar_respuesta(
-                    system=system_prompt, mensajes=mensajes, herramientas=HERRAMIENTAS_VICTORIA
+                    system=system_prompt, mensajes=mensajes, herramientas=self._herramientas
                 )
                 texto_final += despedida.texto
                 break
