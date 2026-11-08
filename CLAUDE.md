@@ -105,7 +105,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **1428 tests pasando**.
+   desde `backend/`. Estado actual: **1487 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -236,6 +236,10 @@ posible y rotarlos.
   había siguen siendo de Rocketfy. **Aún no se ha probado una venta propia real** (pendiente
   #61); las fotos por WhatsApp siguen apagadas (pendiente #58). Hay una sola cuenta en
   Supabase Auth: no abrir el registro de usuarios (pendiente #65).
+- **Cancelar y cobrar ventas propias (ADR-012, entrada 0.0.106): implementado, SIN desplegar.**
+  La migración 022 (`ventas.cobrada_*`, `cancelada_*`, `ventas_lineas.stock_descontado`) está
+  aplicada solo en la base local; **en producción no**. Al desplegarla: migración primero,
+  código después (el código nuevo lee columnas que el anterior no usa).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

@@ -53,6 +53,7 @@
 38. [Ventas medibles: una «foto» de cada venta y la ganancia real](#38-ventas-medibles-una-foto-de-cada-venta-y-la-ganancia-real)
 39. [«Por gestionar» y la conversación «en gestión»: que ningún cliente se pierda](#39-por-gestionar-y-la-conversación-en-gestión-que-ningún-cliente-se-pierda)
 40. [Fotos propias: el bucket de Supabase y por qué se suben desde la app](#40-fotos-propias-el-bucket-de-supabase-y-por-qué-se-suben-desde-la-app)
+41. [Después de vender: cobrar y cancelar una venta propia](#41-después-de-vender-cobrar-y-cancelar-una-venta-propia)
 
 ---
 
@@ -1318,4 +1319,40 @@ foto y la convierte a JPG** (una foto de celular pesa varios MB y WhatsApp la co
 
 **Qué NO se pudo probar sin producción.** Que Meta descargue de verdad una foto del bucket y la entregue en un
 WhatsApp real: se prueba cuando enciendas ese interruptor (pendiente #58).
+
+
+---
+
+## 41. Después de vender: cobrar y cancelar una venta propia
+
+**Para qué sirve.** Cerrar una venta no es el final: el cliente puede arrepentirse, y «atendida» no quiere decir que
+el dinero ya llegó. Hay dos acciones que el dueño hace *después* del cierre, desde la tarjeta de «Por gestionar».
+
+**Cobrada: «¿ya me pagaron?».** Es una marca aparte del estado de la gestión. Guarda **cuándo** y **quién** la marcó y una
+nota opcional (por ejemplo, «transferencia verificada»). Se puede **deshacer** por si se tocó por error. Sirve para que
+la ganancia de los reportes sea la de lo que de verdad se cobró y para saber qué te falta cobrar.
+
+**Cancelada: «se cayó la venta».** Es **una sola operación todo-o-nada** (si algo falla, no cambia nada):
+- la venta pasa a «cancelada» (con quién, cuándo y el motivo) y deja de contar como venta;
+- **devuelve el stock exacto que se descontó al cerrar**. Cada línea de la venta recuerda cuántas unidades se
+  descontaron *de verdad* (`stock_descontado`), así que si después cambias el control de stock del producto no se
+  devuelven unidades que nunca salieron, ni se pierden las que sí;
+- la solicitud pendiente de esa venta se da por atendida y, si el chat estaba en tus manos, **vuelve a «activa»**
+  (Victoria vuelve a responder);
+- el producto **no se reactiva solo** si había quedado «Agotado»: reanudarlo es manual (igual que al agotarse) y la
+  pantalla te lo avisa.
+
+**Reglas que protegen el dinero.**
+- Una venta **cobrada no se cancela**: primero se deshace el cobro. Es una fricción a propósito para que no se te
+  olvide **devolver el dinero** al cliente.
+- Solo las ventas de **productos propios** (cierre manual). Una venta de Rocketfy tiene su pedido real en Rocketfy, que
+  es quien cobra y quien cancela.
+- **Dos toques a la vez no devuelven el stock dos veces**: la fila de la venta se bloquea mientras se decide (un candado
+  de base de datos, `for update`); la segunda acción espera y ya ve la venta cancelada.
+- Quién puede hacer qué lo decide el **servidor** (la pantalla solo muestra los botones que el servidor dice que
+  corresponden).
+
+**Si el cliente cancelado quiere volver a comprar.** Cada conversación tiene un solo «lead» y cada lead una sola venta.
+Por eso, si en ese mismo chat el cliente pide otro pedido, Victoria **no cierra una segunda venta**: te avisa («Otra
+gestión», queda en «Por gestionar») y el chat pasa a ti. Así no se pierde el cliente.
 

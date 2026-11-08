@@ -28,4 +28,29 @@ export type Solicitud = {
   total: string | null;
   proveedor: string | null;
   tienePedido: boolean;
+  /** La venta ligada (solo si ya hay un pedido cerrado) y lo que se puede hacer con ella; lo decide el servidor. */
+  ventaId: number | null;
+  /** por_gestionar | gestionada | cancelada | despachada */
+  ventaEstado: string | null;
+  ventaCobradaEn: string | null;
+  ventaCobradaPor: string | null;
+  ventaNotaCobro: string | null;
+  ventaCanceladaEn: string | null;
+  ventaCanceladaPor: string | null;
+  ventaMotivoCancelacion: string | null;
+  puedeCobrar: boolean;
+  puedeDeshacerCobro: boolean;
+  puedeCancelar: boolean;
+};
+
+/** Respuesta de POST /ventas/<id>/cobrar, /deshacer-cobro y /cancelar. */
+export type VentaAccionada = {
+  id: number;
+  estado: string;
+  total: string | null;
+  cobrada: boolean;
+  /** Unidades que volvieron al stock al cancelar (0 si el producto no lleva control de stock). */
+  stockDevuelto: number;
+  /** Al cancelar, el producto recuperó unidades pero sigue en «Agotado»: reanudarlo es manual. */
+  productoSigueAgotado: boolean;
 };

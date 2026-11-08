@@ -95,6 +95,17 @@ export function tipoSolicitudInfo(tipo: string): EstadoInfo {
 }
 
 /**
+ * En qué quedó el dinero de una venta de un producto propio (ADR-012): «atendida» solo quiere decir que
+ * el dueño gestionó el pedido; el cobro es otra cosa. Devuelve null si la solicitud no tiene venta.
+ */
+export function estadoDeCobro(s: { tienePedido: boolean; ventaEstado: string | null; ventaCobradaEn: string | null }): EstadoInfo | null {
+  if (!s.tienePedido) return null;
+  if (s.ventaEstado === "cancelada") return { label: "Venta cancelada", variant: "danger" };
+  if (s.ventaCobradaEn) return { label: "Cobrada", variant: "success" };
+  return { label: "Por cobrar", variant: "warning" };
+}
+
+/**
  * Estados de `productos_bot.estado` (Fase B de la gestión de productos).
  * Espejo de `backend/src/routes/productos_bot/services.py`. Solo "activo"
  * (aquí "A la venta") es lo que Victoria ofrece; el resto son productos que

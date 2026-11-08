@@ -779,12 +779,21 @@ function manejarProductosBot(req, res, p, q, send) {
 const ETIQUETAS_SOLICITUD = { quiere_comprar: "Quiere comprar", quiere_pagar: "Quiere pagar", pide_envio: "Pide envío", quiere_ver_producto: "Quiere ver el producto", quiere_negociar: "Quiere negociar", sin_cobertura: "Sin cobertura de envío", pedido_cerrado: "Pedido cerrado, gestionar envío", otro: "Otro" };
 const solicitud = (id, conversacionId, tipo, detalle, min, extra = {}) => ({
   id, conversacionId, tipo, tipoEtiqueta: ETIQUETAS_SOLICITUD[tipo], detalle, estado: "pendiente", notaAtencion: null, atendidaPor: null, creadaEn: ago(min), atendidaEn: null,
-  telefono: null, nombreCliente: null, direccion: null, canton: null, provincia: null, producto: null, variante: null, cantidad: null, metodoPago: null, entrega: null, total: null, proveedor: "propio", tienePedido: false, ...extra,
+  telefono: null, nombreCliente: null, direccion: null, canton: null, provincia: null, producto: null, variante: null, cantidad: null, metodoPago: null, entrega: null, total: null, proveedor: "propio", tienePedido: false,
+  // La venta ligada: cobro y cancelación (migración 022). Las acciones disponibles las calcula `conAcciones`.
+  ventaId: null, ventaEstado: null, ventaCobradaEn: null, ventaCobradaPor: null, ventaNotaCobro: null, ventaCanceladaEn: null, ventaCanceladaPor: null, ventaMotivoCancelacion: null,
+  puedeCobrar: false, puedeDeshacerCobro: false, puedeCancelar: false, ...extra,
 });
+// Espejo de backend/src/routes/ventas/reglas.py (todas las ventas de este servidor falso son de productos propios).
+const conAcciones = (x) => {
+  if (x.ventaId == null) return { ...x, puedeCobrar: false, puedeDeshacerCobro: false, puedeCancelar: false };
+  const cancelada = x.ventaEstado === "cancelada", cobrada = !!x.ventaCobradaEn;
+  return { ...x, puedeCobrar: !cancelada && !cobrada, puedeDeshacerCobro: !cancelada && cobrada, puedeCancelar: !cancelada && !cobrada };
+};
 const solicitudesGestion = [
   solicitud(6, 292, "pedido_cerrado", "Pedido completo: solo falta coordinar la entrega y el pago.", 9, {
     telefono: "593955667788", nombreCliente: "Marcelo Ortiz", direccion: "Av. Remigio Crespo 3-45", canton: "Cuenca", provincia: "Azuay", producto: "Zapatos de cuero", variante: "Talla 41, negro",
-    cantidad: 1, metodoPago: "contraentrega", entrega: "Envío dentro de Cuenca", total: "47.00", tienePedido: true,
+    cantidad: 1, metodoPago: "contraentrega", entrega: "Envío dentro de Cuenca", total: "47.00", tienePedido: true, ventaId: 61, ventaEstado: "por_gestionar",
   }),
   solicitud(5, 298, "quiere_ver_producto", "Quiere probarse los zapatos antes de comprarlos.", 32, { telefono: "593961234567", nombreCliente: "Lucía Mendoza", producto: "Zapatos de cuero", canton: "Cuenca", provincia: "Azuay" }),
   solicitud(4, 299, "quiere_negociar", "Pide una rebaja si lleva dos pares.", 75, { telefono: "593976543210", nombreCliente: null, producto: "Zapatos de cuero", cantidad: 2 }),
@@ -792,6 +801,19 @@ const solicitudesGestion = [
   solicitud(2, 300, "pedido_cerrado", "Pedido completo.", 60 * 20, {
     estado: "atendida", notaAtencion: "Se coordinó el envío por Servientrega; pagó contra entrega.", atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 18), telefono: "593998877665", nombreCliente: "Carlos Andrade",
     direccion: "Calle Los Pinos N45-12", canton: "Quito", provincia: "Pichincha", producto: "Camiseta de algodón", variante: "M", cantidad: 2, metodoPago: "transferencia", entrega: "Envío al resto del país", total: "29.00", tienePedido: true,
+    ventaId: 62, ventaEstado: "gestionada",
+  }),
+  // Atendida y ya cobrada (muestra «Cobrada» y deja deshacer el cobro).
+  solicitud(7, 295, "pedido_cerrado", "Pedido completo.", 60 * 40, {
+    estado: "atendida", notaAtencion: "Entregado en mano.", atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 38), telefono: "593972233445", nombreCliente: "Gabriela Núñez",
+    direccion: "Av. Universitaria s/n", canton: "Portoviejo", provincia: "Manabí", producto: "Zapatos de cuero", variante: "Talla 38, café", cantidad: 1, metodoPago: "contraentrega", entrega: "Envío al resto del país", total: "50.00", tienePedido: true,
+    ventaId: 63, ventaEstado: "gestionada", ventaCobradaEn: ago(60 * 36), ventaCobradaPor: "freddy@azoshop.ec", ventaNotaCobro: "Cobrado al entregar",
+  }),
+  // Venta cancelada (muestra el motivo y no deja hacer nada más).
+  solicitud(8, 294, "pedido_cerrado", "Pedido completo.", 60 * 60, {
+    estado: "atendida", notaAtencion: "Venta cancelada: el cliente se arrepintió", atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 58), telefono: "593983344556", nombreCliente: "Esteban Ruiz",
+    direccion: "Av. de los Shyris N36-12", canton: "Quito", provincia: "Pichincha", producto: "Zapatos de cuero", variante: "Talla 42, negro", cantidad: 2, metodoPago: "transferencia", entrega: "Envío al resto del país", total: "95.00", tienePedido: true,
+    ventaId: 64, ventaEstado: "cancelada", ventaCanceladaEn: ago(60 * 57), ventaCanceladaPor: "freddy@azoshop.ec", ventaMotivoCancelacion: "El cliente se arrepintió",
   }),
   solicitud(1, 297, "quiere_pagar", "Preguntó cómo pagar.", 60 * 30, { estado: "atendida", notaAtencion: null, atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 29), telefono: "593984455667", nombreCliente: "Daniela Vera", producto: "Zapatos de cuero" }),
 ];
@@ -801,7 +823,7 @@ function manejarGestion(req, res, p, q, send) {
   req.on("end", () => {
     if (p === "/gestion" && req.method === "GET") {
       const estado = q.get("estado") || "pendiente";
-      return send(solicitudesGestion.filter((x) => x.estado === estado).sort((a, b) => new Date(b.creadaEn) - new Date(a.creadaEn)));
+      return send(solicitudesGestion.filter((x) => x.estado === estado).sort((a, b) => new Date(b.creadaEn) - new Date(a.creadaEn)).map(conAcciones));
     }
     if (p === "/gestion/resumen") return send({ pendientes: solicitudesGestion.filter((x) => x.estado === "pendiente").length });
     const m = p.match(/^\/gestion\/(\d+)\/atender$/);
@@ -811,9 +833,45 @@ function manejarGestion(req, res, p, q, send) {
       if (x.estado === "atendida") return send({ error: "Esa solicitud ya estaba atendida." }, 409);
       const nota = raw ? JSON.parse(raw).nota : null;
       Object.assign(x, { estado: "atendida", notaAtencion: nota || null, atendidaPor: "freddy@azoshop.ec", atendidaEn: new Date().toISOString() });
-      return send(x);
+      if (x.ventaEstado === "por_gestionar") x.ventaEstado = "gestionada";
+      return send(conAcciones(x));
     }
     send({ error: "mock: ruta no implementada " + p }, 404);
+  });
+}
+// Cobrar, deshacer el cobro y cancelar una venta (espejo de backend/src/routes/ventas/controllers.py).
+function manejarVentas(req, res, p, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const m = p.match(/^\/ventas\/(\d+)\/(cobrar|deshacer-cobro|cancelar)$/);
+    if (!m || req.method !== "POST") return send({ error: "mock: ruta no implementada " + p }, 404);
+    const x = solicitudesGestion.find((y) => y.ventaId === Number(m[1]));
+    if (!x) return send({ error: `No existe la venta ${m[1]}.` }, 404);
+    const cuerpo = raw ? JSON.parse(raw) : {};
+    const usuario = "freddy@azoshop.ec", ahoraIso = new Date().toISOString();
+    const cancelada = x.ventaEstado === "cancelada", cobrada = !!x.ventaCobradaEn;
+    const respuesta = (extra = {}) => ({ id: x.ventaId, estado: x.ventaEstado, total: x.total, cobrada: !!x.ventaCobradaEn, stockDevuelto: 0, productoSigueAgotado: false, ...extra });
+    if (m[2] === "cobrar") {
+      if (cancelada) return send({ error: "Esa venta está cancelada: no se puede cobrar." }, 409);
+      if (cobrada) return send({ error: "Esa venta ya estaba marcada como cobrada." }, 409);
+      Object.assign(x, { ventaCobradaEn: ahoraIso, ventaCobradaPor: usuario, ventaNotaCobro: String(cuerpo.nota || "").trim() || null });
+      return send(respuesta());
+    }
+    if (m[2] === "deshacer-cobro") {
+      if (!cobrada) return send({ error: "Esa venta no estaba marcada como cobrada." }, 409);
+      Object.assign(x, { ventaCobradaEn: null, ventaCobradaPor: null, ventaNotaCobro: null });
+      return send(respuesta());
+    }
+    if (cancelada) return send({ error: "Esa venta ya estaba cancelada." }, 409);
+    if (cobrada) return send({ error: "Esa venta está marcada como cobrada. Si vas a devolver el dinero, deshaz primero el cobro y luego cancélala." }, 409);
+    const motivo = String(cuerpo.motivo || "").trim() || null;
+    Object.assign(x, { ventaEstado: "cancelada", ventaCanceladaEn: ahoraIso, ventaCanceladaPor: usuario, ventaMotivoCancelacion: motivo });
+    if (x.estado === "pendiente") Object.assign(x, { estado: "atendida", atendidaPor: usuario, atendidaEn: ahoraIso, notaAtencion: "Venta cancelada" + (motivo ? ": " + motivo : ".") });
+    // Devuelve el stock de los zapatos de ejemplo (la camiseta no lleva control de stock).
+    const devuelto = x.producto === "Zapatos de cuero" ? x.cantidad || 1 : 0;
+    if (devuelto) zapatos.stockUltimo += devuelto;
+    return send(respuesta({ stockDevuelto: devuelto }));
   });
 }
 function manejarCategorias(req, res, p, send) {
@@ -893,6 +951,7 @@ const server = http.createServer((req, res) => {
     if (p === "/instrucciones-victoria" || p.startsWith("/instrucciones-victoria/")) return manejarInstrucciones(req, res, p, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     if (p === "/gestion" || p.startsWith("/gestion/")) return manejarGestion(req, res, p, q, send);
+    if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
