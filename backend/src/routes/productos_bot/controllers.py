@@ -35,6 +35,7 @@ from .schemas import (
     resumen_lista_schema,
     turno_simulado_schema,
     uso_ia_schema,
+    uso_pruebas_schema,
 )
 from .services import ProductosBotService
 
@@ -121,7 +122,7 @@ def uso_de_la_ia():
 def uso_de_las_pruebas():
     """Cuántos mensajes de prueba con Victoria quedan hoy."""
     try:
-        return jsonify(uso_ia_schema.dump(asdict(_build_pruebas_service().uso()))), 200
+        return jsonify(uso_pruebas_schema.dump(asdict(_build_pruebas_service().uso()))), 200
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
 

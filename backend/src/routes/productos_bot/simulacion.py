@@ -18,7 +18,7 @@ Qué es real y qué es de mentira:
             - WhatsApp: un grabador; la foto que Victoria enviaría queda a la
               vista, pero no se manda nada al cliente (que no existe). La
               herramienta de la foto SIEMPRE está disponible aquí, aunque en
-              producción esté apagada (BOT_ENVIAR_FOTOS): es la única diferencia
+              producción esté apagada (parámetro «Enviar fotos»): es la única diferencia
               deliberada con el cerebro real, para poder probarla antes de encenderla.
             - Stock: lo último guardado en la ficha (no se consulta Rocketfy).
             - Catálogo: el producto de la prueba es el único disponible, aunque
@@ -400,7 +400,7 @@ def simular_turno(
         producto_repo=productos,
         ejecutor_herramientas=herramientas,
         # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
-        # (BOT_ENVIAR_FOTOS): así se puede ver cómo la usa Victoria antes de encenderla.
+        # (parámetro «Enviar fotos»): así se puede ver cómo la usa Victoria antes de encenderla.
         enviar_fotos=True,
     )
     respuesta = cerebro.procesar_turno(lead["conversacion_id"], mensaje)

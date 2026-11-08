@@ -131,6 +131,15 @@ class UsoIADTO:
 
 
 @dataclass
+class UsoPruebasDTO(UsoIADTO):
+    """El uso de «Probar con Victoria»: además del tope diario, cuántos mensajes admite cada
+    prueba (parámetro `pruebas.max_mensajes`). La pantalla lo necesita para avisar cuándo
+    hay que reiniciar, sin repetir el número en el frontend."""
+
+    max_mensajes: int
+
+
+@dataclass
 class BorradorContenidoDTO:
     """Un borrador de la IA. NO está guardado en ninguna parte: la persona lo
     acepta, lo edita o lo descarta, y recién entonces pasa a la ficha."""
@@ -185,5 +194,5 @@ class TurnoSimuladoDTO:
     escalada: bool
     pedido: Optional[PedidoSimuladoDTO]
     avisos: List[AvisoSimuladoDTO]
-    uso: UsoIADTO
+    uso: "UsoPruebasDTO"
     fotos: List[FotoSimuladaDTO] = field(default_factory=list)

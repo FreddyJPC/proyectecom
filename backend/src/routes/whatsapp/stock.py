@@ -9,24 +9,26 @@ escala a una persona. Bloquear ventas por un fallo de red del proveedor
 costaría más que el riesgo que evita. (Lo contrario, "fallar cerrado", es lo
 que hace el webhook de WhatsApp con la firma: ahí sí es mejor no procesar.)
 
-Caché corta (5 minutos) para no llamar a Rocketfy en cada mensaje; al cerrar
+Caché corta para no llamar a Rocketfy en cada mensaje (por defecto 5 minutos; es el
+parámetro «Cuánto se recuerda el stock consultado», `stock.cache_segundos`); al cerrar
 la venta se pide el dato fresco (`fresco=True`).
 """
 import logging
 import time
 from typing import Callable, Dict, Optional, Tuple
 
+from src.config.parametros import parametros
 from src.integrations.rocketfy import get_rocketfy_client
 
 logger = logging.getLogger(__name__)
 
-TTL_SEGUNDOS_POR_DEFECTO = 300
-
 
 class StockChecker:
-    def __init__(self, client=None, ttl_segundos: int = TTL_SEGUNDOS_POR_DEFECTO, reloj: Callable[[], float] = time.monotonic):
+    def __init__(self, client=None, ttl_segundos: Optional[int] = None, reloj: Callable[[], float] = time.monotonic):
         self._client = client
-        self._ttl = ttl_segundos
+        # None = lo decide el parámetro `stock.cache_segundos` en cada consulta (se cambia desde
+        # la app, sin reiniciar); un número lo fija a la fuerza (los tests).
+        self._ttl_fijo = ttl_segundos
         self._reloj = reloj
         self._cache: Dict[str, Tuple[float, int]] = {}
 
@@ -44,7 +46,8 @@ class StockChecker:
 
         if not fresco:
             guardado = self._cache.get(clave)
-            if guardado is not None and ahora - guardado[0] < self._ttl:
+            ttl = self._ttl_fijo if self._ttl_fijo is not None else parametros.valor("stock.cache_segundos")
+            if guardado is not None and ahora - guardado[0] < ttl:
                 return guardado[1]
 
         try:

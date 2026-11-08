@@ -27,8 +27,8 @@ import unicodedata
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional, Tuple
 
+from src.config.parametros import parametros
 from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
-from src.config.settings import load_settings
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
 from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
@@ -232,8 +232,8 @@ HERRAMIENTAS_VICTORIA = [
     ),
 ]
 
-# Fase G2: no va en HERRAMIENTAS_VICTORIA porque se puede apagar (BOT_ENVIAR_FOTOS=false):
-# ver `herramientas_de_victoria()`.
+# Fase G2: no va en HERRAMIENTAS_VICTORIA porque se puede apagar (parámetro «Enviar fotos»,
+# `bot.enviar_fotos`): ver `herramientas_de_victoria()`.
 HERRAMIENTA_FOTO = HerramientaLLM(
     nombre="enviar_foto_producto",
     descripcion=(
@@ -286,7 +286,9 @@ class HerramientasVictoria:
         self._mensajes = mensaje_repo or MensajeRepository()
         # Perezoso: el cliente de WhatsApp solo se arma si de verdad se envía una foto.
         self._whatsapp = whatsapp_client
-        self._enviar_fotos = load_settings().bot_enviar_fotos if enviar_fotos is None else enviar_fotos
+        # None = lo decide el parámetro «Enviar fotos» en cada llamada (se cambia desde la
+        # app, sin reiniciar); True/False lo fija a la fuerza («Probar con Victoria» y los tests).
+        self._enviar_fotos_fijo = enviar_fotos
         self._manejadores = {
             "guardar_datos_cliente": self._handle_guardar_datos_cliente,
             "ver_ficha_producto": self._handle_ver_ficha_producto,
@@ -294,12 +296,16 @@ class HerramientasVictoria:
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
             "cerrar_venta": self._handle_cerrar_venta,
             "escalar_a_humano": self._handle_escalar_a_humano,
+            "enviar_foto_producto": self._handle_enviar_foto_producto,
         }
-        if self._enviar_fotos:
-            self._manejadores["enviar_foto_producto"] = self._handle_enviar_foto_producto
+
+    def _fotos_activas(self) -> bool:
+        return self._enviar_fotos_fijo if self._enviar_fotos_fijo is not None else parametros.valor("bot.enviar_fotos")
 
     def ejecutar(self, nombre: str, lead_id: int, conversacion_id: int, entrada: dict, id_llamada: str) -> ResultadoHerramienta:
         manejador = self._manejadores.get(nombre)
+        if nombre == "enviar_foto_producto" and not self._fotos_activas():
+            manejador = None  # apagada: no se le ofrece a la IA, y si la pide igual, es una herramienta que no existe
         if manejador is None:
             contenido = f"Herramienta desconocida: {nombre}."
         else:

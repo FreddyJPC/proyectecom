@@ -23,10 +23,11 @@ from src.routes.productos_bot.exceptions import (
 from src.routes.productos_bot.generaciones import TIPO_SIMULACION
 from src.routes.productos_bot.pruebas import (
     ACCION_SIMULACION_COMPLETA,
-    MAX_MENSAJES_POR_PRUEBA,
     PruebasService,
     faltantes_para_probar,
 )
+from src.config.parametros import definicion
+from src.routes.productos_bot import pruebas as pruebas_modulo
 from tests.unit.routes.productos_bot.test_simulacion import (
     CERRAR,
     CONTRAENTREGA,
@@ -40,6 +41,9 @@ from tests.unit.routes.productos_bot.test_simulacion import (
 )
 
 SKU = "SIM-1"
+
+# Mensajes que admite una prueba por defecto (parámetro `pruebas.max_mensajes`).
+MAX_MENSAJES_POR_PRUEBA = definicion("pruebas.max_mensajes").defecto
 
 
 class RepoFalso:
@@ -170,6 +174,20 @@ class TestTopes:
         with pytest.raises(PruebaInvalidaError, match="20 mensajes"):
             probar(s, historial=historial)
         assert llm.llamadas == []
+
+    def test_el_uso_informa_cuantos_mensajes_admite_cada_prueba(self):
+        s, _, _ = servicio(LLMGuionado(texto("ok")))
+        assert s.uso().max_mensajes == MAX_MENSAJES_POR_PRUEBA
+
+    def test_el_maximo_de_mensajes_es_el_parametro_y_se_nota_al_cambiarlo(self, monkeypatch):
+        historial = [{"rol": "cliente", "contenido": "hola"}] * 6
+        s, _, _ = servicio(LLMGuionado(texto("ok")))
+        assert probar(s, historial=historial).respuesta == "ok"  # con 20 todavía cabe
+
+        monkeypatch.setattr(pruebas_modulo.parametros, "valor", lambda clave: 5 if clave == "pruebas.max_mensajes" else None)
+        s, _, _ = servicio(LLMGuionado(texto("no debe llegar")))
+        with pytest.raises(PruebaInvalidaError, match="5 mensajes"):
+            probar(s, historial=historial)
 
     def test_los_mensajes_del_bot_no_cuentan_para_el_maximo(self):
         historial = [{"rol": "bot", "contenido": "hola"}] * 50 + [{"rol": "cliente", "contenido": "hola"}] * (MAX_MENSAJES_POR_PRUEBA - 1)

@@ -186,14 +186,23 @@ class TestInterruptor:
         "valor, esperado",
         [(None, False), ("", False), ("false", False), ("False", False), ("0", False), ("no", False), ("true", True), ("TRUE", True), ("1", True), ("si", True)],
     )
-    def test_la_variable_de_entorno(self, monkeypatch, valor, esperado):
-        from src.config.settings import load_settings
+    def test_la_variable_de_entorno_sigue_valiendo_como_respaldo(self, monkeypatch, valor, esperado):
+        from src.config.parametros import parametros
 
         if valor is None:
             monkeypatch.delenv("BOT_ENVIAR_FOTOS", raising=False)
         else:
             monkeypatch.setenv("BOT_ENVIAR_FOTOS", valor)
-        assert load_settings().bot_enviar_fotos is esperado
+        assert parametros.valor("bot.enviar_fotos") is esperado
+
+    def test_sin_fijarla_la_herramienta_obedece_al_parametro_en_cada_llamada(self, monkeypatch):
+        """Encender las fotos desde la app se nota en la siguiente llamada, sin reiniciar."""
+        h, _, whatsapp, _ = armar(enviar_fotos=None)
+        monkeypatch.delenv("BOT_ENVIAR_FOTOS", raising=False)
+        assert "Herramienta desconocida" in enviar(h) and whatsapp.enviadas == []
+
+        monkeypatch.setenv("BOT_ENVIAR_FOTOS", "true")  # equivale a encenderla en Parámetros
+        assert "Foto enviada" in enviar(h) and len(whatsapp.enviadas) == 1
 
 
 # ----------------------------------------------------------------------

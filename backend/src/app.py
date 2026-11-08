@@ -5,6 +5,7 @@ from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 
 from src.config.logging_config import configure_logging
+from src.config.parametros import parametros
 from src.config.settings import load_settings
 from src.config.supabase_auth import verificar_token
 from src.integrations.rocketfy import get_rocketfy_client
@@ -16,6 +17,7 @@ from src.routes.catalogos import catalogos_bp
 from src.routes.conversaciones import conversaciones_bp
 from src.routes.incidencias import incidencias_bp
 from src.routes.metricas import metricas_bp
+from src.routes.parametros import parametros_bp
 from src.routes.pedidos import pedidos_bp
 from src.routes.productos import productos_bp
 from src.routes.productos_bot import productos_bot_bp
@@ -65,6 +67,7 @@ def create_app() -> Flask:
     app.register_blueprint(catalogos_bp)
     app.register_blueprint(conversaciones_bp)
     app.register_blueprint(incidencias_bp)
+    app.register_blueprint(parametros_bp)
     app.register_blueprint(pedidos_bp)
     app.register_blueprint(productos_bp)
     app.register_blueprint(productos_bot_bp)
@@ -134,6 +137,30 @@ def _job_latido() -> None:
         logging.getLogger(__name__).exception("Fallo no controlado en job de latido")
 
 
+# Tarea automática -> parámetro con cada cuántos minutos corre (se cambia desde la app,
+# pantalla Parámetros; ver _reprogramar). El latido de la base NO está acá a propósito:
+# evita que Supabase pause el proyecto y no es un ajuste del negocio.
+_INTERVALOS_DE_JOBS = {
+    "reconciliacion_pedidos": "jobs.minutos_reconciliacion",
+    "stock_watcher": "jobs.minutos_stock_watcher",
+    "sync_productos": "jobs.minutos_sync_productos",
+}
+
+
+def _reprogramar(clave: str) -> None:
+    """Se llama cuando alguien guarda o restaura un parámetro `jobs.*`: el reloj de esa
+    tarea se reprograma ya, sin reiniciar el servidor. La próxima corrida cae a los
+    minutos nuevos contados desde este momento."""
+    scheduler = _scheduler
+    if scheduler is None:
+        return  # el scheduler está apagado (ENABLE_SCHEDULER=false): al encenderlo leerá el valor nuevo
+    for id_job, clave_del_job in _INTERVALOS_DE_JOBS.items():
+        if clave_del_job == clave:
+            minutos = parametros.valor(clave)
+            scheduler.reschedule_job(id_job, trigger="interval", minutes=minutos)
+            logging.getLogger("src.scheduler").info("Tarea '%s' reprogramada: ahora corre cada %d min", id_job, minutos)
+
+
 # Cada cuánto se escribe el latido. Supabase Free pide "unas pocas consultas
 # por día" (sin garantía): 4 al día da margen sin costo apreciable.
 HORAS_ENTRE_LATIDOS = 6
@@ -146,8 +173,9 @@ MINUTOS_HASTA_PRIMERA_SINCRONIZACION = 5
 
 
 def start_scheduler():
-    """Arranca APScheduler (reconciliación cada 45 min, stock watcher y
-    sincronización de productos cada 60 min, latido de la DB cada 6 h). Idempotente: create_app() puede ejecutarse más de una vez en
+    """Arranca APScheduler (reconciliación, stock watcher y sincronización de productos
+    con los minutos de sus parámetros —por defecto 45, 60 y 60—, y latido de la DB cada 6 h).
+    Idempotente: create_app() puede ejecutarse más de una vez en
     el mismo proceso (import del módulo + factory de Flask) y el bloque
     `__main__` también lo llama -- nunca debe haber dos schedulers.
 
@@ -161,13 +189,14 @@ def start_scheduler():
 
     from apscheduler.schedulers.background import BackgroundScheduler
 
+    minutos = {id_job: parametros.valor(clave) for id_job, clave in _INTERVALOS_DE_JOBS.items()}
     scheduler = BackgroundScheduler()
-    scheduler.add_job(_job_reconciliacion, "interval", minutes=45, id="reconciliacion_pedidos")
-    scheduler.add_job(_job_stock_watcher, "interval", minutes=60, id="stock_watcher")
+    scheduler.add_job(_job_reconciliacion, "interval", minutes=minutos["reconciliacion_pedidos"], id="reconciliacion_pedidos")
+    scheduler.add_job(_job_stock_watcher, "interval", minutes=minutos["stock_watcher"], id="stock_watcher")
     scheduler.add_job(
         _job_sync_productos,
         "interval",
-        minutes=60,
+        minutes=minutos["sync_productos"],
         id="sync_productos",
         next_run_time=datetime.now().astimezone() + timedelta(minutes=MINUTOS_HASTA_PRIMERA_SINCRONIZACION),
     )
@@ -180,11 +209,13 @@ def start_scheduler():
     )
     scheduler.start()
     _scheduler = scheduler
+    # Cambiar un intervalo desde la app reprograma el reloj al instante.
+    parametros.suscribir("jobs.", _reprogramar)
     # Logger propio: el de Flask se llama igual que este módulo ("src.app")
     # y tiene su propio handler, así que un mensaje de __name__ salía doble.
     logging.getLogger("src.scheduler").info(
-        "Scheduler iniciado (reconciliación 45 min, stock watcher 60 min, sincronización de productos 60 min, latido DB %d h)",
-        HORAS_ENTRE_LATIDOS,
+        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, latido DB %d h)",
+        minutos["reconciliacion_pedidos"], minutos["stock_watcher"], minutos["sync_productos"], HORAS_ENTRE_LATIDOS,
     )
     return scheduler
 

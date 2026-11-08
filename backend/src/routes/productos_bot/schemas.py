@@ -209,6 +209,10 @@ class UsoIASchema(Schema):
     restantes = fields.Int()
 
 
+class UsoPruebasSchema(UsoIASchema):
+    max_mensajes = fields.Int(data_key="maxMensajes")
+
+
 class BorradorContenidoSchema(Schema):
     campos = fields.Nested(CamposContenidoSchema)
     fuentes = fields.Nested(CamposContenidoSchema)
@@ -338,7 +342,7 @@ class TurnoSimuladoSchema(Schema):
     escalada = fields.Bool()
     pedido = fields.Nested(PedidoSimuladoSchema, allow_none=True)
     avisos = fields.List(fields.Nested(AvisoSimuladoSchema))
-    uso = fields.Nested(UsoIASchema)
+    uso = fields.Nested(UsoPruebasSchema)
     fotos = fields.List(fields.Nested(FotoSimuladaSchema))
 
 
@@ -352,3 +356,4 @@ probar_input_schema = ProbarInputSchema()
 turno_simulado_schema = TurnoSimuladoSchema()
 borrador_contenido_schema = BorradorContenidoSchema()
 uso_ia_schema = UsoIASchema()
+uso_pruebas_schema = UsoPruebasSchema()

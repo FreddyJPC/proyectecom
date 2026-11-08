@@ -26,6 +26,7 @@ from src.routes.productos_bot.dto import (
     RecomendacionPrecioDTO,
     TurnoSimuladoDTO,
     UsoIADTO,
+    UsoPruebasDTO,
     VerificacionDTO,
 )
 from src.routes.productos_bot.exceptions import (
@@ -534,7 +535,7 @@ def _turno(**cambios):
         escalada=False,
         pedido=PedidoSimuladoDTO(payload={"name": "Ana", "total": "24.99", "not_COD": 0}, confirmado=True),
         avisos=[AvisoSimuladoDTO(canal="telegram", texto="Victoria escaló la conversación. Motivo: x")],
-        uso=UsoIADTO(tope=100, usadas=1, restantes=99),
+        uso=UsoPruebasDTO(tope=100, usadas=1, restantes=99, max_mensajes=20),
     )
     datos.update(cambios)
     return TurnoSimuladoDTO(**datos)
@@ -560,7 +561,7 @@ class TestProbarConVictoria:
         assert cuerpo["estado"]["nombreCliente"] == "Ana" and cuerpo["escalada"] is False
         assert cuerpo["pedido"] == {"payload": {"name": "Ana", "total": "24.99", "not_COD": 0}, "confirmado": True}
         assert cuerpo["avisos"] == [{"canal": "telegram", "texto": "Victoria escaló la conversación. Motivo: x"}]
-        assert cuerpo["uso"] == {"tope": 100, "usadas": 1, "restantes": 99}
+        assert cuerpo["uso"] == {"tope": 100, "usadas": 1, "restantes": 99, "maxMensajes": 20}
 
     @responses.activate
     def test_sin_pedido_va_null(self):
@@ -654,6 +655,6 @@ class TestProbarConVictoria:
     def test_uso_de_las_pruebas(self):
         mock_login_ok()
         with patch(SERVICIO_PRUEBAS) as Servicio:
-            Servicio.return_value.uso.return_value = UsoIADTO(tope=100, usadas=12, restantes=88)
+            Servicio.return_value.uso.return_value = UsoPruebasDTO(tope=100, usadas=12, restantes=88, max_mensajes=20)
             resp = _client().get("/productos-bot/pruebas/uso", headers=AUTH_HEADER)
-        assert resp.status_code == 200 and resp.get_json() == {"tope": 100, "usadas": 12, "restantes": 88}
+        assert resp.status_code == 200 and resp.get_json() == {"tope": 100, "usadas": 12, "restantes": 88, "maxMensajes": 20}

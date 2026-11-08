@@ -1,5 +1,6 @@
 import os
 
+import pytest
 import responses
 
 import src.config.settings  # noqa: F401  (side effect: load_dotenv() antes de leer os.environ)
@@ -19,3 +20,14 @@ def mock_login_ok(email: str = "freddyjavier556@gmail.com") -> None:
         json={"id": "00000000-0000-0000-0000-000000000000", "email": email},
         status=200,
     )
+
+
+@pytest.fixture(autouse=True)
+def _parametros_sin_memoria():
+    """Los parámetros del sistema se recuerdan 30 s en memoria (ver src/config/parametros):
+    cada test empieza y termina sin recordar nada, para que lo que uno guarde no se filtre al siguiente."""
+    from src.config.parametros import parametros
+
+    parametros.invalidar()
+    yield
+    parametros.invalidar()

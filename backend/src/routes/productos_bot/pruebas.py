@@ -16,6 +16,7 @@ verificación al publicar). Ninguna conversación, mensaje, lead ni pedido.
 import logging
 from typing import Any, Dict, List, Optional
 
+from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError
 from src.routes.ajustes.services import AjustesService
 
@@ -25,7 +26,7 @@ from .dto import (
     LlamadaHerramientaDTO,
     PedidoSimuladoDTO,
     TurnoSimuladoDTO,
-    UsoIADTO,
+    UsoPruebasDTO,
 )
 from .exceptions import (
     IAFalloError,
@@ -42,10 +43,6 @@ from .simulacion import simular_turno
 from .verificacion import metodos_de_pago
 
 logger = logging.getLogger(__name__)
-
-# Mensajes del cliente en una misma prueba. Pasado esto la conversación ya no
-# enseña nada nuevo y cada mensaje sigue costando (el historial viaja completo).
-MAX_MENSAJES_POR_PRUEBA = 20
 
 _A_CAMEL = {
     "nombre_cliente": "nombreCliente",
@@ -90,10 +87,12 @@ class PruebasService:
         self._modelo = modelo
 
     # ------------------------------------------------------------------
-    def uso(self) -> UsoIADTO:
+    def uso(self) -> UsoPruebasDTO:
         tope = self._ajustes.obtener_ajustes().tope_pruebas_dia
         usadas = self._generaciones.contar_hoy(TIPO_SIMULACION)
-        return UsoIADTO(tope=tope, usadas=usadas, restantes=max(0, tope - usadas))
+        return UsoPruebasDTO(
+            tope=tope, usadas=usadas, restantes=max(0, tope - usadas), max_mensajes=parametros.valor("pruebas.max_mensajes")
+        )
 
     def probar(
         self,
@@ -166,7 +165,9 @@ class PruebasService:
             else None,
             avisos=[AvisoSimuladoDTO(canal=a["canal"], texto=a["texto"]) for a in turno.avisos],
             fotos=[FotoSimuladaDTO(mensaje=f["mensaje"], url=f["url"], descripcion=f["descripcion"]) for f in turno.fotos],
-            uso=UsoIADTO(tope=uso.tope, usadas=uso.usadas + 1, restantes=max(0, uso.restantes - 1)),
+            uso=UsoPruebasDTO(
+                tope=uso.tope, usadas=uso.usadas + 1, restantes=max(0, uso.restantes - 1), max_mensajes=uso.max_mensajes
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -182,11 +183,12 @@ class PruebasService:
                 "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende "
                 "una persona. Reinicia la prueba para empezar otra."
             )
+        # Parámetro «Mensajes por prueba»: pasado esto la conversación ya no enseña nada nuevo y
+        # cada mensaje sigue costando (el historial viaja completo).
+        maximo = parametros.valor("pruebas.max_mensajes")
         del_cliente = sum(1 for h in historial if h.get("rol") == "cliente")
-        if del_cliente >= MAX_MENSAJES_POR_PRUEBA:
-            raise PruebaInvalidaError(
-                f"La prueba llegó a {MAX_MENSAJES_POR_PRUEBA} mensajes. Reiníciala para empezar de nuevo."
-            )
+        if del_cliente >= maximo:
+            raise PruebaInvalidaError(f"La prueba llegó a {maximo} mensajes. Reiníciala para empezar de nuevo.")
 
     def _anotar_simulacion_completa(self, sku: str, usuario: Optional[str]) -> None:
         """Es un registro de auditoría: si falla, la prueba ya se hizo y no debe tumbar la respuesta."""
@@ -196,22 +198,19 @@ class PruebasService:
             logger.exception("No se pudo anotar la simulación completa de '%s' en el historial", sku)
 
     def _cliente_llm(self):
-        if self._llm is None:
-            from src.integrations.llm import get_llm_client
+        if self._llm is not None:
+            return self._llm  # inyectado (tests)
+        from src.integrations.llm import get_llm_client
 
-            try:
-                self._llm = get_llm_client()
-            except ValueError as exc:
-                # Falta ANTHROPIC_API_KEY (o el proveedor no está soportado).
-                raise IANoDisponibleError("Probar con Victoria no está configurado en el servidor (falta la clave de la IA).") from exc
-        return self._llm
+        try:
+            # En cada uso, no una vez: así un cambio del parámetro «Modelo de IA» se nota enseguida.
+            return get_llm_client()
+        except ValueError as exc:
+            # Falta ANTHROPIC_API_KEY (o el proveedor no está soportado).
+            raise IANoDisponibleError("Probar con Victoria no está configurado en el servidor (falta la clave de la IA).") from exc
 
     def _nombre_del_modelo(self) -> Optional[str]:
-        if self._modelo is None:
-            from src.config.settings import load_settings
-
-            self._modelo = load_settings().llm_model
-        return self._modelo
+        return self._modelo if self._modelo is not None else parametros.valor("llm.modelo")
 
     def _registrar(self, sku: str, usuario: Optional[str], modelo: Optional[str], resultado: str) -> None:
         """Auditoría y tope; si falla no debe tumbar la respuesta."""

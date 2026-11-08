@@ -1,14 +1,24 @@
 from functools import lru_cache
 
+from src.config.parametros import parametros
 from src.config.settings import load_settings
 
 from .contratos import LLMProvider
 from .providers.anthropic_provider import AnthropicProvider
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=8)
+def _proveedor_anthropic(api_key: str, modelo: str) -> AnthropicProvider:
+    """Un proveedor por modelo: crear el cliente HTTP cada vez perdería la conexión
+    abierta, y así cambiar el modelo desde la app no obliga a reiniciar nada."""
+    return AnthropicProvider(api_key=api_key, modelo=modelo)
+
+
 def get_llm_client() -> LLMProvider:
-    """Devuelve el proveedor de LLM activo, seleccionado por LLM_PROVIDER.
+    """Devuelve el proveedor de LLM activo, seleccionado por LLM_PROVIDER, con el modelo
+    que rige AHORA (parámetro `llm.modelo`, que se cambia desde la app). Se pide en cada
+    uso, no una vez al arrancar: por eso un cambio de modelo se nota en el siguiente mensaje.
+
     Agregar un proveedor nuevo en el futuro es: escribir su adapter en
     providers/ implementando LLMProvider, y sumar una rama acá -- nada
     más del proyecto cambia (ver contratos.py).
@@ -26,12 +36,13 @@ def get_llm_client() -> LLMProvider:
     if proveedor == "anthropic":
         if not settings.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY es requerida cuando LLM_PROVIDER=anthropic")
-        return AnthropicProvider(api_key=settings.anthropic_api_key, modelo=settings.llm_model)
+        return _proveedor_anthropic(settings.anthropic_api_key, parametros.valor("llm.modelo"))
 
     # Cuando se agregue un proveedor nuevo en el futuro, se suma acá:
     # elif proveedor == "openai":
-    #     return OpenAIProvider(api_key=settings.openai_api_key, modelo=settings.llm_model)
+    #     return OpenAIProvider(api_key=settings.openai_api_key, modelo=parametros.valor("llm.modelo"))
     # elif proveedor == "gemini":
-    #     return GeminiProvider(api_key=settings.gemini_api_key, modelo=settings.llm_model)
+    #     return GeminiProvider(api_key=settings.gemini_api_key, modelo=parametros.valor("llm.modelo"))
+    # (el catálogo de modelos de src/config/parametros/catalogo.py tendría que ofrecer los de ese proveedor)
 
     raise ValueError(f"Proveedor de LLM no soportado: {proveedor}")

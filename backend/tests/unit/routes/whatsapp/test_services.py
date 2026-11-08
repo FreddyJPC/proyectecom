@@ -209,6 +209,27 @@ class TestReglasDeterministasDeEscalado:
         assert kwargs["modo"] == "fijo"
         assert "comprobante" in kwargs["texto_fijo"].lower()
 
+    def test_los_textos_fijos_son_parametros_que_se_cambian_desde_la_app(self, monkeypatch):
+        from src.config.parametros import parametros
+
+        real = parametros.valor
+        editados = {"bot.texto_postventa": "Texto de postventa editado", "bot.texto_comprobante_recibido": "Comprobante editado"}
+        monkeypatch.setattr(parametros, "valor", lambda clave: editados[clave] if clave in editados else real(clave))
+
+        postventa = MagicMock()
+        _service(
+            conv_repo=FakeConversacionRepository(existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}),
+            lead_repo=FakeLeadRepository(despachados_por_telefono={"593987654321"}), bot_worker=postventa,
+        ).procesar_mensaje_entrante(_dto())
+        assert postventa.encolar.call_args.kwargs["texto_fijo"] == "Texto de postventa editado"
+
+        comprobante = MagicMock()
+        _service(
+            conv_repo=FakeConversacionRepository(existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}),
+            lead_repo=FakeLeadRepository(leads_por_conversacion={1: {"estado": "esperando_pago"}}), bot_worker=comprobante,
+        ).procesar_mensaje_entrante(_dto(wamid="wamid.2", tipo="imagen", contenido="[imagen]"))
+        assert comprobante.encolar.call_args.kwargs["texto_fijo"] == "Comprobante editado"
+
     def test_imagen_sin_lead_esperando_pago_no_escala_pasa_a_victoria(self):
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
