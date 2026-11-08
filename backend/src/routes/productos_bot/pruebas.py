@@ -20,6 +20,7 @@ from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError
 from src.routes.ajustes.services import AjustesService
 from src.routes.entregas.repository import EntregaRepository
+from src.routes.imagenes.repository import ImagenRepository
 from src.routes.whatsapp.instrucciones import InstruccionesInvalidas, ensamblar, validar
 from src.routes.whatsapp.instrucciones_repository import InstruccionesRepository
 
@@ -87,10 +88,12 @@ def faltantes_para_probar(ficha: dict) -> List[str]:
 
 class PruebasService:
     def __init__(
-        self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None, instrucciones_repo=None, entregas_repo=None
+        self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None, instrucciones_repo=None, entregas_repo=None,
+        imagenes_repo=None,
     ):
         self._instrucciones = instrucciones_repo or InstruccionesRepository()
         self._entregas = entregas_repo or EntregaRepository()
+        self._imagenes = imagenes_repo or ImagenRepository()
         self._repo = repo or ProductoBotGestionRepository()
         self._generaciones = generaciones or GeneracionesIARepository()
         self._ajustes = ajustes_service or AjustesService()
@@ -138,6 +141,7 @@ class PruebasService:
         llm = self._cliente_llm()
         modelo = self._nombre_del_modelo()
         entregas = self._entregas.listar(ficha["sku"], solo_activas=True)
+        imagenes = self._imagenes.listar(ficha["sku"])
         try:
             turno = simular_turno(
                 producto=ficha,
@@ -149,6 +153,7 @@ class PruebasService:
                 plantilla=plantilla,
                 # Se leen ANTES de la simulación (que no abre la base): son las opciones de envío guardadas.
                 entregas=entregas,
+                imagenes=imagenes,
             )
         except LLMAuthError as exc:
             self._registrar(ficha["sku"], usuario, modelo, "fallo")

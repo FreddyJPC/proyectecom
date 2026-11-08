@@ -286,9 +286,24 @@ class EntregaSchema(Schema):
 class ImagenSchema(Schema):
     id = fields.Int()
     url = fields.Str()
-    principal = fields.Bool()
+    storage_path = fields.Str(data_key="storagePath")
     orden = fields.Int()
-    origen = fields.Str()
+
+
+class RegistrarImagenInputSchema(Schema):
+    """POST .../imagenes: la app ya subió el archivo al bucket; solo informa la ruta (la URL la arma el servidor)."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    storage_path = fields.Str(data_key="storagePath", required=True, validate=validate.Length(min=3, max=300))
+
+
+class OrdenarImagenesInputSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    ids = fields.List(fields.Int(), required=True, validate=validate.Length(min=1, max=20))
 
 
 class ProductoBotDetalleSchema(Schema):
@@ -538,3 +553,5 @@ crear_propio_input_schema = CrearProductoPropioInputSchema()
 guardar_entregas_input_schema = GuardarEntregasInputSchema()
 copiar_entregas_input_schema = CopiarEntregasInputSchema()
 entrega_schema = EntregaSchema()
+registrar_imagen_input_schema = RegistrarImagenInputSchema()
+ordenar_imagenes_input_schema = OrdenarImagenesInputSchema()

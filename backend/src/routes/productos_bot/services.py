@@ -26,12 +26,15 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from src.config.parametros import parametros
+from src.config.settings import load_settings
 from src.integrations.rocketfy import RECAUDO_MINIMO_CONTRAENTREGA, get_rocketfy_client
 from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.routes.ajustes.services import AjustesService
 from src.routes.categorias.repository import CategoriaRepository
 from src.routes.entregas.logica import limpiar_y_validar
 from src.routes.entregas.repository import EntregaRepository
+from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, url_publica, validar_ruta
+from src.routes.imagenes.repository import ImagenRepository, ImagenYaRegistradaError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
 from src.routes.ventas.origen import controla_su_stock, costo_unitario, es_de_cierre_manual, flete_estimado
@@ -124,7 +127,8 @@ def _valor_para_historial(valor):
 
 class ProductosBotService:
     def __init__(
-        self, client=None, repo=None, monitoreo_repo=None, ajustes_service=None, entregas_repo=None, categorias_repo=None
+        self, client=None, repo=None, monitoreo_repo=None, ajustes_service=None, entregas_repo=None, categorias_repo=None,
+        imagenes_repo=None,
     ):
         self._client = client
         self._repo = repo or ProductoBotGestionRepository()
@@ -132,6 +136,7 @@ class ProductosBotService:
         self._ajustes = ajustes_service or AjustesService()
         self._entregas = entregas_repo or EntregaRepository()
         self._categorias = categorias_repo or CategoriaRepository()
+        self._imagenes = imagenes_repo or ImagenRepository()
 
     @property
     def _rocketfy(self):
@@ -404,6 +409,44 @@ class ProductosBotService:
         self._repo.registrar_historial(actual["sku"], "editado", usuario, {"entregas": [len(limpias), "opciones"]})
         return self._a_detalle(self._repo.obtener(actual["sku"]))
 
+    # ------------------------------------------------------------------
+    # Fotos (ADR-012, entrega 2)
+    # ------------------------------------------------------------------
+    def registrar_imagen(self, sku: str, ruta: str, usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """La app ya subió el archivo al bucket; aquí se anota en la galería del producto. La URL la arma el
+        servidor a partir de la ruta: no se acepta una escrita por el cliente."""
+        actual = self._obtener_o_error(sku)
+        if actual["estado"] == "archivado":
+            raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
+        try:
+            ruta = validar_ruta(actual["sku"], ruta)
+        except RutaDeImagenInvalida as exc:
+            raise DatosDeProductoInvalidosError([str(exc)]) from exc
+        if len(self._imagenes.listar(actual["sku"])) >= MAXIMO_POR_PRODUCTO:
+            raise DatosDeProductoInvalidosError([f"Máximo {MAXIMO_POR_PRODUCTO} fotos por producto: quita alguna antes de subir otra."])
+        try:
+            self._imagenes.agregar(actual["sku"], url_publica(load_settings().supabase_url, ruta), ruta, usuario)
+        except ImagenYaRegistradaError as exc:
+            raise DatosDeProductoInvalidosError([str(exc)]) from exc
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": ["+1"]})
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    def quitar_imagen(self, sku: str, imagen_id: int, usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        actual = self._obtener_o_error(sku)
+        if self._imagenes.quitar(actual["sku"], imagen_id) is None:
+            raise ProductoBotNoEncontradoError("Esa foto no existe en este producto.")
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": ["-1"]})
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    def ordenar_imagenes(self, sku: str, ids: List[int], usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """Deja las fotos en este orden (la primera es la principal). Tiene que incluir EXACTAMENTE las que hay."""
+        actual = self._obtener_o_error(sku)
+        existentes = {i["id"] for i in self._imagenes.listar(actual["sku"])}
+        if len(ids) != len(set(ids)) or set(ids) != existentes:
+            raise DatosDeProductoInvalidosError(["El orden debe incluir todas las fotos del producto, una sola vez cada una."])
+        self._imagenes.reordenar(actual["sku"], ids)
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
     def copiar_entregas(self, sku: str, desde_sku: str, usuario: Optional[str]) -> ProductoBotDetalleDTO:
         """Copia el envío de otro producto (para no repetir los mismos datos en cada ficha)."""
         origen = self._obtener_o_error(desde_sku)
@@ -644,6 +687,10 @@ class ProductosBotService:
             envio_incluido=bool(fila.get("envio_incluido", True)),
             costo_flete_estimado=_dinero(fila.get("costo_flete_estimado")),
             entregas=[self._entrega_a_dto(e) for e in entregas],
+            imagenes=[
+                {"id": i["id"], "url": i["url"], "storage_path": i["storage_path"], "orden": i["orden"]}
+                for i in self._imagenes.listar(fila["sku"])
+            ],
         )
 
     @staticmethod

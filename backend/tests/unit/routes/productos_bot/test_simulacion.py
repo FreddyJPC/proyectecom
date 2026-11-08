@@ -284,7 +284,7 @@ class TestFotoDelProducto:
     def test_la_foto_queda_a_la_vista_y_no_se_envia_nada(self):
         r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), mensaje="Tienes fotos?")
         assert [h["nombre"] for h in r.herramientas] == ["enviar_foto_producto"]
-        assert "Foto enviada" in r.herramientas[0]["resultado"]
+        assert "Ya le enviaste la foto" in r.herramientas[0]["resultado"]
         assert r.fotos == [{
             "mensaje": f"📷 Foto de Audifonos Bluetooth ({SKU})",
             "url": "https://cdn.rocketfy.example/audifonos.png",
@@ -293,7 +293,7 @@ class TestFotoDelProducto:
 
     def test_sin_imagen_en_la_ficha_no_hay_foto_y_victoria_lo_sabe(self):
         r = turno(LLMGuionado(herramientas(FOTO), texto("No tengo foto.")), producto=ficha(imagen_url=None))
-        assert r.fotos == [] and "no tiene una foto" in r.herramientas[0]["resultado"]
+        assert r.fotos == [] and "todavía no tiene fotos" in r.herramientas[0]["resultado"]
 
     def test_no_repite_la_foto_si_ya_esta_en_el_historial_de_la_prueba(self):
         historial = [

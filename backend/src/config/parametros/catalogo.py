@@ -208,6 +208,22 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="bot.max_fotos_por_envio",
+        grupo="victoria",
+        nombre="Fotos por envío",
+        para_que_sirve=(
+            "Cuántas fotos manda Victoria de una vez cuando el cliente pide ver el producto. Si el cliente quiere "
+            "más, Victoria manda las siguientes de la galería (sin repetir). Muchas fotos juntas pueden ser "
+            "abrumadoras en WhatsApp; con una sola, el cliente ve poco."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=8,
+        unidad="fotos",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
         clave="bot.max_turnos_herramientas",
         grupo="victoria",
         nombre="Vueltas máximas con herramientas",
@@ -231,9 +247,10 @@ CATALOGO: Tuple[Parametro, ...] = (
         grupo="victoria",
         nombre="Enviar fotos del producto",
         para_que_sirve=(
-            "Si está encendido, Victoria puede mandar por WhatsApp la foto del producto cuando el cliente la pide. "
-            "La foto sale de Rocketfy y Meta tiene que poder descargarla. «Probar con Victoria» siempre simula la "
-            "foto, esté o no encendido."
+            "Si está encendido, Victoria puede mandar por WhatsApp las fotos del producto cuando el cliente las pide. "
+            "Salen de la galería del producto (las que subes en su ficha) o, si no subiste ninguna, de la foto de "
+            "Rocketfy; Meta tiene que poder descargarlas. Si el producto no tiene fotos, Victoria le dice al cliente "
+            "que por ahora no hay imágenes. «Probar con Victoria» siempre simula las fotos, esté o no encendido."
         ),
         tipo=TIPO_BOOLEANO,
         defecto=False,

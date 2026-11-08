@@ -45,6 +45,8 @@ from src.routes.entregas.logica import describir, elegir_opcion, opciones_aplica
 from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.services import GestionService
 from src.routes.gestion.tipos import TIPOS_QUE_PIDE_VICTORIA
+from src.routes.imagenes.logica import galeria_para_enviar
+from src.routes.imagenes.repository import ImagenRepository
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
 from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
 from src.routes.ventas.servicio import VentasService
@@ -290,12 +292,12 @@ HERRAMIENTAS_VICTORIA = [
 HERRAMIENTA_FOTO = HerramientaLLM(
     nombre="enviar_foto_producto",
     descripcion=(
-        "Envía al cliente, por este mismo WhatsApp, la foto del producto. Úsala "
+        "Envía al cliente, por este mismo WhatsApp, las fotos del producto (unas pocas a la vez). Úsala "
         "SOLO cuando el cliente pida ver fotos o imágenes, o dude de cómo luce el "
-        "producto. No la uses para otra cosa y no la repitas: si ya se la enviaste, "
-        "el sistema te lo dirá. producto_sku debe ser el SKU exacto del producto "
-        "que aparece en tu información. Si el producto no tiene foto, no prometas "
-        "una: descríbelo con lo que dice su ficha."
+        "producto. No la uses para otra cosa. Si el cliente pide más, vuelve a llamarla: manda las "
+        "siguientes sin repetir, y cuando ya no quedan el sistema te lo dirá. producto_sku debe ser el SKU "
+        "exacto del producto que aparece en tu información. Si el producto no tiene fotos, no prometas "
+        "una: dile con naturalidad que por el momento no hay imágenes y descríbelo con lo que dice su ficha."
     ),
     parametros={
         "type": "object",
@@ -331,6 +333,7 @@ class HerramientasVictoria:
         entrega_repo: Optional[EntregaRepository] = None,
         gestion_service: Optional[GestionService] = None,
         ventas_service: Optional[VentasService] = None,
+        imagen_repo: Optional[ImagenRepository] = None,
     ):
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
@@ -344,6 +347,7 @@ class HerramientasVictoria:
         self._entregas = entrega_repo or EntregaRepository()
         self._gestion = gestion_service or GestionService(telegram=self._telegram)
         self._ventas = ventas_service or VentasService()
+        self._imagenes = imagen_repo or ImagenRepository()
         # Perezoso: el cliente de WhatsApp solo se arma si de verdad se envía una foto.
         self._whatsapp = whatsapp_client
         # None = lo decide el parámetro «Enviar fotos» en cada llamada (se cambia desde la
@@ -418,10 +422,11 @@ class HerramientasVictoria:
         return formatear_ficha_producto(producto, self._entregas.listar(producto["sku"], solo_activas=True))
 
     def _handle_enviar_foto_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
-        """Fase G2. Solo se envía la foto de un producto ACTIVO del catálogo (la URL
-        sale de la base, nunca de lo que escriba el modelo), una sola vez por
-        conversación. Cualquier fallo se le explica a Victoria y no escala: no tener
-        foto no es motivo para pasar a una persona."""
+        """Fase G2 + ADR-012. Solo se envían fotos de un producto ACTIVO del catálogo (las URLs salen de la
+        base, nunca de lo que escriba el modelo), en tandas de «Fotos por envío» (parámetro
+        `bot.max_fotos_por_envio`) y sin repetir las que ya se mandaron en esta conversación. La galería
+        son las fotos que el dueño subió a la ficha o, si no subió ninguna, la de Rocketfy. Cualquier fallo
+        se le explica a Victoria y no escala: no tener fotos no es motivo para pasar a una persona."""
         consulta = (entrada.get("producto_sku") or "").strip()
         producto = self._productos.obtener_por_sku(consulta) if consulta else None
         if producto is None and consulta:
@@ -430,36 +435,57 @@ class HerramientasVictoria:
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
 
         # La base puede traer todavía la ruta relativa de Rocketfy (`/storage/...`): se completa.
-        url = url_de_imagen(producto.get("imagen_url")) or ""
-        if not url.lower().startswith("https://"):
+        galeria = galeria_para_enviar(
+            self._imagenes.listar(producto["sku"]), url_de_imagen(producto.get("imagen_url"))
+        )
+        if not galeria:
             # Meta solo descarga enlaces https públicos.
             return (
-                "Este producto no tiene una foto disponible para enviar. Descríbeselo al cliente con la "
-                "información de su ficha y no le prometas fotos."
+                "Este producto todavía no tiene fotos para enviar. Dile al cliente con naturalidad que por el momento "
+                "no hay imágenes disponibles, descríbele el producto con la información de su ficha y no le prometas fotos."
             )
-        if self._mensajes.existe_foto(conversacion_id, producto["sku"]):
-            return "Ya le enviaste la foto de este producto a este cliente: no la repitas."
+        ya_enviadas = self._mensajes.contar_fotos(conversacion_id, producto["sku"])
+        pendientes = galeria[ya_enviadas:]
+        if not pendientes:
+            if len(galeria) == 1:
+                return "Ya le enviaste la foto de este producto a este cliente: no la repitas. Descríbeselo con su ficha."
+            return (
+                f"Ya le enviaste las {len(galeria)} fotos de este producto a este cliente: no las repitas. "
+                "Descríbeselo con su ficha."
+            )
 
         lead = self._leads.obtener_por_id(lead_id)
-        try:
-            self._cliente_whatsapp().enviar_imagen(telefono=lead["telefono"], url=url, descripcion=producto["nombre"])
-        except Exception:
-            logger.warning(
-                "No se pudo enviar la foto de '%s'", producto["sku"],
-                exc_info=True, extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+        tanda = pendientes[: parametros.valor("bot.max_fotos_por_envio")]
+        enviadas = 0
+        for posicion, url in enumerate(tanda):
+            try:
+                self._cliente_whatsapp().enviar_imagen(
+                    telefono=lead["telefono"], url=url, descripcion=producto["nombre"] if ya_enviadas + posicion == 0 else None
+                )
+            except Exception:
+                logger.warning(
+                    "No se pudo enviar la foto %s de '%s'", ya_enviadas + posicion + 1, producto["sku"],
+                    exc_info=True, extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+                )
+                break
+            self._mensajes.crear(
+                conversacion_id=conversacion_id,
+                rol="bot",
+                contenido=f"📷 Foto de {producto['nombre']} ({producto['sku']})",
+                tipo="imagen",
+                wamid=None,
             )
+            enviadas += 1
+        if enviadas == 0:
             return (
-                "No se pudo enviar la foto en este momento. Díselo con naturalidad al cliente y descríbele el "
+                "No se pudieron enviar las fotos en este momento. Díselo con naturalidad al cliente y descríbele el "
                 "producto con la información de su ficha."
             )
-        self._mensajes.crear(
-            conversacion_id=conversacion_id,
-            rol="bot",
-            contenido=f"📷 Foto de {producto['nombre']} ({producto['sku']})",
-            tipo="imagen",
-            wamid=None,
-        )
-        return "Foto enviada al cliente. Puedes decirle que ya se la mandaste."
+        quedan = len(galeria) - ya_enviadas - enviadas
+        resto = f" Quedan {quedan} más: si el cliente quiere ver más, vuelve a usar esta herramienta." if quedan > 0 else ""
+        parcial = " (solo se pudieron enviar algunas)" if enviadas < len(tanda) else ""
+        unidad = "la foto" if enviadas == 1 else f"{enviadas} fotos"
+        return f"Ya le enviaste {unidad}{parcial}. Puedes decirle que se las mandaste.{resto}"
 
     def _cliente_whatsapp(self):
         if self._whatsapp is None:

@@ -34,8 +34,10 @@ from .schemas import (
     editar_input_schema,
     generar_contenido_input_schema,
     guardar_entregas_input_schema,
+    ordenar_imagenes_input_schema,
     probar_input_schema,
     recomendacion_precio_schema,
+    registrar_imagen_input_schema,
     resumen_lista_schema,
     turno_simulado_schema,
     uso_ia_schema,
@@ -195,6 +197,42 @@ def copiar_entregas(sku: str):
 
     try:
         return _detalle(_build_service().copiar_entregas(sku, data["desde_sku"], _usuario()))
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.post("/<sku>/imagenes")
+def registrar_imagen(sku: str):
+    """Anota en la galería una foto que la app ya subió al bucket (solo se informa la ruta del archivo)."""
+    try:
+        data = registrar_imagen_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        return _detalle(_build_service().registrar_imagen(sku, data["storage_path"], _usuario()), 201)
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.put("/<sku>/imagenes/orden")
+def ordenar_imagenes(sku: str):
+    try:
+        data = ordenar_imagenes_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        return _detalle(_build_service().ordenar_imagenes(sku, data["ids"], _usuario()))
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.delete("/<sku>/imagenes/<int:imagen_id>")
+def quitar_imagen(sku: str, imagen_id: int):
+    """Quita la foto de la galería. El archivo del bucket lo borra la app (con su sesión)."""
+    try:
+        return _detalle(_build_service().quitar_imagen(sku, imagen_id, _usuario()))
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
 

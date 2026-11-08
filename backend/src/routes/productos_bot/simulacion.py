@@ -244,12 +244,13 @@ class MensajesEnMemoria:
             self.fotos_de_este_turno.append(contenido)
         return fila
 
-    def existe_foto(self, conversacion_id: int, sku: str) -> bool:
+    def contar_fotos(self, conversacion_id: int, sku: str) -> int:
         # El historial que manda la app no trae el tipo: una foto se reconoce por su texto,
         # que lo escribe `tools.py` («📷 Foto de <nombre> (<sku>)»).
-        return any(
-            f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
+        return sum(
+            1
             for f in self.filas
+            if f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
         )
 
 
@@ -282,6 +283,16 @@ class EntregasEnEnsayo:
 
     def obtener(self, opcion_id: int) -> Optional[Dict[str, Any]]:
         return next((dict(e) for e in self._entregas if e.get("id") == opcion_id), None)
+
+
+class ImagenesEnEnsayo:
+    """La galería del producto, tal como está guardada (se lee ANTES de la simulación, no durante)."""
+
+    def __init__(self, imagenes: Optional[List[Dict[str, Any]]]):
+        self._imagenes = [dict(i) for i in (imagenes or [])]
+
+    def listar(self, sku: str) -> List[Dict[str, Any]]:
+        return [dict(i) for i in self._imagenes]
 
 
 class GestionEnEnsayo:
@@ -492,6 +503,7 @@ def simular_turno(
     llm: LLMProvider,
     plantilla: Optional[str] = None,
     entregas: Optional[List[Dict[str, Any]]] = None,
+    imagenes: Optional[List[Dict[str, Any]]] = None,
 ) -> ResultadoDelTurno:
     """Procesa UN mensaje del cliente de mentira y devuelve lo que Victoria
     respondió, qué herramientas usó y cómo quedó la venta. `producto` es la
@@ -522,6 +534,7 @@ def simular_turno(
         entrega_repo=EntregasEnEnsayo(entregas),
         gestion_service=gestion,
         ventas_service=ventas,
+        imagen_repo=ImagenesEnEnsayo(imagenes),
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,

@@ -142,3 +142,28 @@ class TestPruebasService:
         s, *_ = servicio(llm=LLMGuionado(), fila=ficha_propia(), entregas=ENTREGAS)
         with pytest.raises(PruebaInvalidaError):
             probar(s, "Hola otra vez", estado={"estado": "por_gestionar"}, sku=SKU)
+
+
+class TestGaleriaEnLaPrueba:
+    def test_la_prueba_muestra_las_fotos_de_la_galeria_y_no_envia_nada(self):
+        galeria = [
+            {"id": 1, "url": "https://proyecto.supabase.co/storage/v1/object/public/productos/PROP-0001/a.jpg", "orden": 0},
+            {"id": 2, "url": "https://proyecto.supabase.co/storage/v1/object/public/productos/PROP-0001/b.jpg", "orden": 1},
+        ]
+        llm = LLMGuionado(herramientas(("enviar_foto_producto", {"producto_sku": SKU})), texto("Te las mando."))
+
+        r = simular_turno(
+            producto=ficha_propia(imagen_url=None), mensaje="¿Tienes fotos?", historial=[], estado=None, desde_anuncio=False,
+            llm=llm, entregas=ENTREGAS, imagenes=galeria,
+        )
+
+        assert [f["url"] for f in r.fotos] == [g["url"] for g in galeria]
+        assert "Ya le enviaste 2 fotos" in r.herramientas[0]["resultado"]
+
+    def test_sin_ninguna_foto_victoria_dice_que_por_ahora_no_hay(self):
+        llm = LLMGuionado(herramientas(("enviar_foto_producto", {"producto_sku": SKU})), texto("Por ahora no tengo fotos."))
+        r = simular_turno(
+            producto=ficha_propia(imagen_url=None), mensaje="¿Tienes fotos?", historial=[], estado=None, desde_anuncio=False,
+            llm=llm, entregas=ENTREGAS, imagenes=[],
+        )
+        assert r.fotos == [] and "por el momento no hay imágenes" in r.herramientas[0]["resultado"]
