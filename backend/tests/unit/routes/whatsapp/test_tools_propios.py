@@ -325,6 +325,23 @@ class TestCerrarVentaPropia:
         e.usar("cerrar_venta")
         assert "ya quedó registrado" in e.usar("cerrar_venta")
 
+    def test_tras_cancelar_la_venta_un_pedido_nuevo_lo_gestiona_el_dueno_y_no_se_cierra_otra_venta(self):
+        # El dueño canceló el pedido anterior de esta conversación (el lead quedó «cancelado»). Cada lead tiene una
+        # sola venta, así que si el cliente quiere comprar otra vez no se cierra una segunda: se avisa al dueño.
+        e = Escena()
+        _listo_para_cerrar(e)
+        e.lead["estado"] = "cancelado"
+        e.ventas.venta = None
+
+        mensaje = e.usar("cerrar_venta")
+
+        assert "se canceló" in mensaje and "dueño" in mensaje and "último mensaje" in mensaje
+        assert e.ventas.venta is None  # no se cerró otra venta
+        e.pedidos.crear_y_confirmar.assert_not_called()
+        assert e.pedidos.method_calls == []
+        assert e.gestion.solicitudes[-1]["tipo"] == "otro" and "nuevo pedido" in e.gestion.solicitudes[-1]["detalle"]
+        assert e.conversaciones.en_gestion  # la conversación pasa al dueño: no se pierde el cliente
+
     def test_si_el_precio_cambio_se_escala_y_no_se_cierra(self):
         e = Escena()
         _listo_para_cerrar(e)

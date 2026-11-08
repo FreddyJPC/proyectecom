@@ -74,7 +74,10 @@ _SELECT_LISTA = """
            l.nombre_cliente, l.direccion, l.canton, l.provincia, l.producto_nombre, l.producto_variante,
            l.cantidad, l.metodo_pago, l.entrega_nombre, l.entrega_tipo, l.costo_envio,
            v.id as venta_id, v.total as venta_total, v.estado as venta_estado,
-           pr.nombre as proveedor_nombre
+           v.cobrada_en as venta_cobrada_en, v.cobrada_por as venta_cobrada_por, v.nota_cobro as venta_nota_cobro,
+           v.cancelada_en as venta_cancelada_en, v.cancelada_por as venta_cancelada_por,
+           v.motivo_cancelacion as venta_motivo_cancelacion,
+           pr.nombre as proveedor_nombre, pr.cierre as proveedor_cierre
       from solicitudes_gestion s
       join conversaciones c on c.id = s.conversacion_id
       left join leads l on l.id = s.lead_id

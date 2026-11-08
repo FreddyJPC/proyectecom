@@ -117,6 +117,30 @@ class TestLeerYAtender:
         assert item["total"] == "62.00" and item["producto"] == "Zapatos" and item["tiene_pedido"] is True
         assert item["creada_en"] == AHORA.isoformat()
 
+    def test_una_venta_propia_abierta_deja_cobrar_y_cancelar(self):
+        item = GestionService._a_dto(_fila(proveedor_cierre="manual", venta_estado="gestionada"))
+        assert item["venta_id"] == 5 and item["venta_estado"] == "gestionada"
+        assert (item["puede_cobrar"], item["puede_deshacer_cobro"], item["puede_cancelar"]) == (True, False, True)
+
+    def test_una_venta_cobrada_solo_deja_deshacer_el_cobro(self):
+        item = GestionService._a_dto(
+            _fila(proveedor_cierre="manual", venta_estado="gestionada", venta_cobrada_en=AHORA, venta_cobrada_por="ana@ejemplo.com", venta_nota_cobro="Transferencia")
+        )
+        assert item["venta_cobrada_en"] == AHORA.isoformat() and item["venta_cobrada_por"] == "ana@ejemplo.com"
+        assert (item["puede_cobrar"], item["puede_deshacer_cobro"], item["puede_cancelar"]) == (False, True, False)
+
+    def test_una_venta_cancelada_no_deja_hacer_nada_y_muestra_el_motivo(self):
+        item = GestionService._a_dto(
+            _fila(proveedor_cierre="manual", venta_estado="cancelada", venta_cancelada_en=AHORA, venta_motivo_cancelacion="Se arrepintió")
+        )
+        assert item["venta_cancelada_en"] == AHORA.isoformat() and item["venta_motivo_cancelacion"] == "Se arrepintió"
+        assert (item["puede_cobrar"], item["puede_deshacer_cobro"], item["puede_cancelar"]) == (False, False, False)
+
+    def test_sin_venta_no_hay_acciones(self):
+        item = GestionService._a_dto(_fila(venta_id=None, venta_estado=None, venta_total=None, tipo="quiere_ver_producto"))
+        assert item["tiene_pedido"] is False and item["venta_id"] is None
+        assert (item["puede_cobrar"], item["puede_deshacer_cobro"], item["puede_cancelar"]) == (False, False, False)
+
     def test_estado_invalido(self):
         with pytest.raises(EstadoInvalidoError):
             GestionService(RepoFalso(), TelegramFalso()).listar("cualquiera")

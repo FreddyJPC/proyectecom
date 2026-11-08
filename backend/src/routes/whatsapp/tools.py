@@ -101,6 +101,9 @@ def _telefono_formato_rocketfy(telefono_whatsapp: str) -> str:
 
 # Estados de un lead que ya cerró su venta: no se cierra de nuevo.
 ESTADOS_DE_LEAD_CERRADO = ("despachado", "por_gestionar")
+# El dueño canceló la venta de este lead (ADR-012). Cada conversación tiene un solo lead y cada lead una sola
+# venta, así que un pedido nuevo en esa conversación lo cierra el dueño, no Victoria.
+ESTADO_LEAD_CANCELADO = "cancelado"
 
 _CAMPOS_REQUERIDOS_CIERRE = (
     "nombre_cliente",
@@ -697,6 +700,9 @@ class HerramientasVictoria:
             # Nunca se cierra dos veces: un segundo cierre duplicaría un pedido real (Rocketfy) o un aviso al dueño.
             return "Este pedido ya quedó registrado: no lo cierres otra vez. Despídete cordialmente."
 
+        if lead.get("estado") == ESTADO_LEAD_CANCELADO:
+            return self._pasar_nuevo_pedido_al_dueno(lead, conversacion_id)
+
         producto = self._productos.obtener_por_sku(lead["producto_sku"])
         manual = es_de_cierre_manual(producto)
 
@@ -779,6 +785,21 @@ class HerramientasVictoria:
         )
         self._registrar_venta_de_rocketfy(lead_id, conversacion_id, producto)
         return f"¡Pedido confirmado! Llega en {tiempo_entrega}. Comunícaselo al cliente y agradécele."
+
+    def _pasar_nuevo_pedido_al_dueno(self, lead: dict, conversacion_id: int) -> str:
+        """El pedido anterior de esta conversación se canceló y el cliente quiere comprar otra vez. No se cierra
+        una segunda venta sobre el mismo lead: se avisa al dueño (queda en «Por gestionar») y la conversación
+        pasa a él, para que no se pierda el cliente."""
+        resultado = self._pedir_gestion(
+            lead, conversacion_id, "otro", "Quiere hacer un nuevo pedido; el anterior de esta conversación se canceló."
+        )
+        if resultado.traspasa:
+            self._conversaciones.marcar_en_gestion(conversacion_id)
+        return (
+            "El pedido anterior de este cliente se canceló, y un pedido nuevo lo gestiona el dueño: ya se le avisó y la "
+            "conversación pasa a él. Despídete con naturalidad diciéndole al cliente que el dueño lo va a contactar muy "
+            "pronto; no prometas fechas ni cierres nada tú. Este es tu último mensaje."
+        )
 
     def _registrar_venta_de_rocketfy(self, lead_id: int, conversacion_id: int, producto: dict) -> None:
         """Deja la «foto» de la venta (precio y costo congelados) para los reportes. El pedido real YA se creó:

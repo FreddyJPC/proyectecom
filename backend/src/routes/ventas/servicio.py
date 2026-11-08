@@ -13,10 +13,21 @@ from typing import Any, Dict, Optional
 
 from src.routes.ajustes.services import AjustesService
 
+from .reglas import acciones_disponibles
 from .repository import VentasRepository
 from .snapshot import armar_venta
 
 logger = logging.getLogger(__name__)
+
+LARGO_MAXIMO_TEXTO = 500
+
+
+def _texto(valor: Optional[str]) -> Optional[str]:
+    return (valor or "").strip()[:LARGO_MAXIMO_TEXTO] or None
+
+
+def _iso(valor) -> Optional[str]:
+    return valor.isoformat() if valor else None
 
 
 class VentasService:
@@ -56,3 +67,32 @@ class VentasService:
         return self._repo.cerrar_manual(
             venta, lineas, producto["sku"], int(lead.get("cantidad") or 1), controla_stock, detalle_solicitud
         )
+
+    # -- Lo que hace el dueño después de cerrar (ver `reglas.py`) -------------------------------
+    def cobrar(self, venta_id: int, usuario: Optional[str], nota: Optional[str]) -> Dict[str, Any]:
+        return self._a_dto(self._repo.cobrar(venta_id, usuario, _texto(nota)))
+
+    def deshacer_cobro(self, venta_id: int) -> Dict[str, Any]:
+        return self._a_dto(self._repo.deshacer_cobro(venta_id))
+
+    def cancelar(self, venta_id: int, usuario: Optional[str], motivo: Optional[str]) -> Dict[str, Any]:
+        return self._a_dto(self._repo.cancelar(venta_id, usuario, _texto(motivo)))
+
+    @staticmethod
+    def _a_dto(venta: Dict[str, Any]) -> Dict[str, Any]:
+        total = venta.get("total")
+        return {
+            "id": venta["id"],
+            "estado": venta["estado"],
+            "total": f"{total:.2f}" if total is not None else None,
+            "cobrada": venta.get("cobrada_en") is not None,
+            "cobrada_en": _iso(venta.get("cobrada_en")),
+            "cobrada_por": venta.get("cobrada_por"),
+            "nota_cobro": venta.get("nota_cobro"),
+            "cancelada_en": _iso(venta.get("cancelada_en")),
+            "cancelada_por": venta.get("cancelada_por"),
+            "motivo_cancelacion": venta.get("motivo_cancelacion"),
+            "stock_devuelto": venta.get("stock_devuelto", 0),
+            "producto_sigue_agotado": bool(venta.get("producto_sigue_agotado", False)),
+            **acciones_disponibles(venta),
+        }
