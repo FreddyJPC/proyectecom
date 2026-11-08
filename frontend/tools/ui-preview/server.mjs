@@ -1,6 +1,7 @@
 // Servidor de prueba local: simula Supabase Auth y el backend Flask con datos
 // realistas, SOLO para ver y capturar la UI. No toca nada real.
 // Ver README.md de esta carpeta.
+import fs from "node:fs";
 import http from "node:http";
 
 const PORT = Number(process.env.PORT || 5050);
@@ -271,6 +272,74 @@ function manejarAjustes(req, res, send) {
 }
 
 
+// ---------- Parámetros del sistema (ADR-011) ----------
+// El catálogo sale del propio backend (parametros-catalogo.json, generado desde
+// src/config/parametros): así las explicaciones y los rangos son los reales. Para
+// regenerarlo, ver el README de esta carpeta.
+const catalogoParametros = JSON.parse(fs.readFileSync(new URL("./parametros-catalogo.json", import.meta.url), "utf8"));
+const parametrosBase = catalogoParametros.grupos.flatMap((g) => g.parametros);
+// Estado inicial de demostración: uno guardado en la app, uno que viene del servidor y uno con aviso.
+const guardadosEnLaApp = new Map([["stock.umbral_bajo", { valor: 8, por: "freddy@azoshop.ec", en: ago(95) }]]);
+const delServidor = new Map([["bot.max_mensajes_historial", 30]]);
+const avisosDemo = new Map([["bot.max_turnos_herramientas", ["La variable BOT_MAX_TURNOS_HERRAMIENTAS del servidor tiene un valor no válido y se ignora (Debe ser un número entero entre 2 y 10 vueltas.)."]]]);
+let historialParametros = [
+  { clave: "stock.umbral_bajo", nombre: "Qué cuenta como «stock bajo»", valorAnterior: null, valorNuevo: "8", usuario: "freddy@azoshop.ec", creadoEn: ago(95) },
+];
+function parametroActual(base) {
+  const app = guardadosEnLaApp.get(base.clave);
+  const servidor = delServidor.has(base.clave) ? delServidor.get(base.clave) : null;
+  const valorOriginal = servidor ?? base.valorOriginal;
+  return {
+    ...base,
+    valor: app ? app.valor : valorOriginal,
+    origen: app ? "app" : servidor !== null ? "servidor" : "original",
+    valorOriginal,
+    valorApp: app ? app.valor : null,
+    valorServidor: servidor,
+    avisos: avisosDemo.get(base.clave) ?? [],
+    actualizadoPor: app ? app.por : null,
+    actualizadoEn: app ? new Date(app.en).toISOString() : null,
+  };
+}
+function maxMensajesPrueba() {
+  return parametroActual(parametrosBase.find((x) => x.clave === "pruebas.max_mensajes")).valor;
+}
+function manejarParametros(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    if (p === "/parametros" && req.method === "GET") {
+      return send({ grupos: catalogoParametros.grupos.map((g) => ({ ...g, parametros: g.parametros.map(parametroActual) })) });
+    }
+    if (p === "/parametros/historial") return send(historialParametros.slice(0, Number(q.get("limite") || 50)));
+    const m = p.match(/^\/parametros\/(.+)$/);
+    const base = m && parametrosBase.find((x) => x.clave === decodeURIComponent(m[1]));
+    if (!base) return send({ error: "No existe ese parámetro." }, 404);
+    const registrar = (anterior, nuevo) => historialParametros.unshift({ clave: base.clave, nombre: base.nombre, valorAnterior: anterior, valorNuevo: nuevo, usuario: "freddy@azoshop.ec", creadoEn: new Date().toISOString() });
+    if (req.method === "PUT") {
+      const { valor } = raw ? JSON.parse(raw) : {};
+      const invalido = (mensaje) => send({ error: mensaje, detalle: { valor: [mensaje] } }, 422);
+      if (base.tipo === "entero") {
+        if (!Number.isInteger(valor) || valor < base.minimo || valor > base.maximo) return invalido(`Debe ser un número entero entre ${base.minimo} y ${base.maximo} ${base.unidad}.`);
+      } else if (base.tipo === "booleano") {
+        if (typeof valor !== "boolean") return invalido("Debe ser sí o no.");
+      } else if (base.tipo === "opcion") {
+        if (!base.opciones.some((o) => o.valor === valor)) return invalido("Elige una de las opciones de la lista.");
+      } else if (typeof valor !== "string" || !valor.trim() || valor.trim().length > base.largoMaximo) return invalido(`Debe tener entre 1 y ${base.largoMaximo} caracteres.`);
+      const antes = parametroActual(base);
+      guardadosEnLaApp.set(base.clave, { valor: typeof valor === "string" ? valor.trim() : valor, por: "freddy@azoshop.ec", en: Date.now() });
+      registrar(antes.origen === "app" ? String(antes.valor) : null, String(valor));
+      return send(parametroActual(base));
+    }
+    if (req.method === "DELETE") {
+      const antes = guardadosEnLaApp.get(base.clave);
+      if (antes) { guardadosEnLaApp.delete(base.clave); registrar(String(antes.valor), null); }
+      return send(parametroActual(base));
+    }
+    send({ error: "mock: método no implementado" }, 405);
+  });
+}
+
 // ---------- Redactar con IA (Fase D) ----------
 // Borrador de mentira, pero con la forma de la API real: fuentes por campo, alertas
 // generales y por campo, y una cifra "inventada" (30) para ver cómo se marca.
@@ -304,7 +373,6 @@ function borradorIA(f, b) {
 // Victoria de mentira (reglas por palabras clave), pero con la forma de la API real:
 // herramientas usadas, estado de la venta en curso, pedido simulado y avisos.
 let usadasPruebas = 7;
-const MAX_MENSAJES_PRUEBA = 20;
 function turnoVictoria(f, b) {
   const msg = String(b.mensaje || ""), bajo = msg.toLowerCase();
   const e = { nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}) };
@@ -378,7 +446,7 @@ function manejarProductosBot(req, res, p, q, send) {
       return send(detalleBot(f), 201);
     }
     if (p === "/productos-bot/contenido/uso") { const tope = ajustes.topeRedaccionesDia; return send({ tope, usadas: usadasIA, restantes: Math.max(0, tope - usadasIA) }); }
-    if (p === "/productos-bot/pruebas/uso") { const tope = ajustes.topePruebasDia; return send({ tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas) }); }
+    if (p === "/productos-bot/pruebas/uso") { const tope = ajustes.topePruebasDia; return send({ tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas), maxMensajes: maxMensajesPrueba() }); }
     const pr = p.match(/^\/productos-bot\/([^/]+)\/probar$/);
     if (pr && req.method === "POST") {
       const f = productosBot.find((x) => x.sku === decodeURIComponent(pr[1]));
@@ -395,14 +463,14 @@ function manejarProductosBot(req, res, p, q, send) {
       if (!mensaje || mensaje.length > 1000) return send({ error: "Datos inválidos.", detalle: { mensaje: ["Escribe un mensaje de hasta 1000 caracteres."] } }, 422);
       if (body.escalada) return send({ error: "Victoria ya pasó esta conversación a una persona: en la vida real no seguiría respondiendo. Reinicia la prueba para empezar otra." }, 409);
       if (body.estado?.estado === "despachado") return send({ error: "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende una persona. Reinicia la prueba para empezar otra." }, 409);
-      if ((body.historial || []).filter((h) => h.rol === "cliente").length >= MAX_MENSAJES_PRUEBA) return send({ error: `La prueba llegó a ${MAX_MENSAJES_PRUEBA} mensajes. Reiníciala para empezar de nuevo.` }, 409);
+      if ((body.historial || []).filter((h) => h.rol === "cliente").length >= maxMensajesPrueba()) return send({ error: `La prueba llegó a ${maxMensajesPrueba()} mensajes. Reiníciala para empezar de nuevo.` }, 409);
       const tope = ajustes.topePruebasDia;
       if (usadasPruebas >= tope) return send({ error: `Ya usaste los ${tope} mensajes de prueba de hoy. El contador se reinicia a medianoche (hora de Ecuador); puedes subir el tope en Ajustes de precios.`, uso: { tope, usadas: usadasPruebas, restantes: 0 } }, 429);
       if (mensaje.includes("SIN_IA")) return send({ error: "Probar con Victoria no está configurado en el servidor (falta la clave de la IA)." }, 503);
       usadasPruebas += 1;
       const turno = turnoVictoria(f, { ...body, mensaje });
       if (turno.pedido) hist(f, "simulacion_completa", null);
-      return setTimeout(() => send({ ...turno, uso: { tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas) } }), Number(process.env.DELAY_IA || 600));
+      return setTimeout(() => send({ ...turno, uso: { tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas), maxMensajes: maxMensajesPrueba() } }), Number(process.env.DELAY_IA || 600));
     }
     const g = p.match(/^\/productos-bot\/([^/]+)\/contenido\/generar$/);
     if (g && req.method === "POST") {
@@ -502,6 +570,7 @@ const server = http.createServer((req, res) => {
     if (p === "/catalogos/ubicaciones") return send({ provincias });
     if ((m = p.match(/^\/catalogos\/ubicaciones\/(.+)\/cantones$/))) return send({ cantones: cantones[decodeURIComponent(m[1])] || [] });
     if (p === "/ajustes/negocio") return manejarAjustes(req, res, send);
+    if (p === "/parametros" || p.startsWith("/parametros/")) return manejarParametros(req, res, p, q, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     send({ error: "mock: ruta no implementada " + p }, 404);
   };

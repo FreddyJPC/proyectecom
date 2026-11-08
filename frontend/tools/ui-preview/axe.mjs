@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/metricas"];
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/metricas", "/parametros"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 for (const theme of ["light", "dark"]) {
@@ -85,6 +85,44 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Escribe como lo haría un cliente").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [prueba vacia]");
+        await page.keyboard.press("Escape");
+      }
+      // Parámetros del sistema: error de validación, confirmación de un cambio sensible y el cuadro de ajustes de precios.
+      if (r === "/parametros") {
+        const fila = (nombre) => page.locator("li", { has: page.getByRole("heading", { name: nombre, exact: true }) });
+        await fila("Memoria de la conversación").getByRole("textbox").fill("5");
+        await fila("Memoria de la conversación").getByRole("textbox").blur();
+        await page.getByText("Escribe un número entero entre 10 y 100 mensajes.").waitFor();
+        await auditar(r + " [error de validacion]");
+
+        await fila("Modelo de IA").getByRole("combobox").click();
+        await page.getByRole("option", { name: "Haiku 5.5 (más barato)" }).click();
+        await page.waitForTimeout(200);
+        await auditar(r + " [modelo elegido]");
+        await fila("Modelo de IA").getByRole("button", { name: "Guardar" }).click();
+        await page.getByRole("alertdialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [confirmacion]");
+        await page.getByRole("button", { name: "Sí, cambiar" }).click();
+        await page.getByRole("alertdialog").waitFor({ state: "detached" });
+        await page.getByText("Haiku 5.5 (más barato)").first().waitFor();
+        await page.waitForTimeout(400);
+        await auditar(r + " [tras guardar]");
+
+        // Restaurar el valor original (deja el servidor falso como estaba para la siguiente pasada).
+        await fila("Modelo de IA").getByRole("button", { name: "Restaurar original" }).click();
+        await page.getByRole("alertdialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [confirmacion restaurar]");
+        await page.getByRole("button", { name: "Sí, restaurar" }).click();
+        await page.getByRole("alertdialog").waitFor({ state: "detached" });
+        await fila("Modelo de IA").getByText("Valor original", { exact: true }).first().waitFor();
+        await page.waitForTimeout(300);
+
+        await page.getByRole("button", { name: "Abrir ajustes" }).click();
+        await page.getByLabel("Costo de envío estimado (USD)").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [ajustes de precios]");
         await page.keyboard.press("Escape");
       }
       if (r === "/catalogo/producto/AUD-BT-001") {

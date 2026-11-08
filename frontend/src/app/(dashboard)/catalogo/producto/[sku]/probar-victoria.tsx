@@ -13,11 +13,10 @@ import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoIA } from "@/types/producto-bot";
+import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoPruebas } from "@/types/producto-bot";
 
-// Mismos límites que el backend (schemas.py y pruebas.py).
+// Mismo límite que el backend (schemas.py).
 const MAX_MENSAJE = 1000;
-const MAX_MENSAJES_POR_PRUEBA = 20;
 
 /** Escenarios para probar con un toque. `esperado` dice qué debería pasar, para
  * que se pueda juzgar si Victoria lo hizo bien. */
@@ -185,17 +184,19 @@ export function ProbarConVictoria({
   const [borrador, setBorrador] = useState("");
   const [pendiente, setPendiente] = useState<string | null>(null);
   const [error, setError] = useState<{ mensaje: string; motivos: string[] } | null>(null);
-  const [usoLocal, setUsoLocal] = useState<UsoIA | null>(null);
+  const [usoLocal, setUsoLocal] = useState<UsoPruebas | null>(null);
   const [escenario, setEscenario] = useState<(typeof ESCENARIOS)[number] | null>(null);
   const registro = useRef<HTMLDivElement>(null);
 
-  const usoApi = useApi<UsoIA>(abierto ? "/productos-bot/pruebas/uso" : null);
+  const usoApi = useApi<UsoPruebas>(abierto ? "/productos-bot/pruebas/uso" : null);
   const uso = usoLocal ?? usoApi.data;
   const sinUsos = uso != null && uso.restantes <= 0;
 
   const enviando = pendiente !== null;
   const despachado = estado?.estado === "despachado";
-  const llegoAlMaximo = turnos.length >= MAX_MENSAJES_POR_PRUEBA;
+  // El máximo es un parámetro del sistema (Parámetros → «Mensajes por prueba»): llega del servidor.
+  const maxMensajes = uso?.maxMensajes ?? null;
+  const llegoAlMaximo = maxMensajes !== null && turnos.length >= maxMensajes;
   const terminada = escalada || despachado || llegoAlMaximo;
   const bloqueada = terminada || sinUsos;
 
@@ -406,7 +407,7 @@ export function ProbarConVictoria({
                 {llegoAlMaximo && !escalada && !despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-info-soft p-3 text-sm text-status-info-ink">
                     <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    La prueba llegó a {MAX_MENSAJES_POR_PRUEBA} mensajes. Reiníciala para empezar de nuevo.
+                    La prueba llegó a {maxMensajes} mensajes. Reiníciala para empezar de nuevo.
                   </p>
                 )}
 

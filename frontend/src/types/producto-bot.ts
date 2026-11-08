@@ -199,6 +199,12 @@ export type UsoIA = {
   restantes: number;
 };
 
+/** El uso de «Probar con Victoria»: además del tope diario, cuántos mensajes admite
+ * cada prueba (parámetro «Mensajes por prueba»). */
+export type UsoPruebas = UsoIA & {
+  maxMensajes: number;
+};
+
 export type BorradorContenido = {
   /** Solo vienen los campos que se pidieron. */
   campos: Partial<Record<CampoRedactable, string>>;
@@ -283,7 +289,7 @@ export type TurnoSimulado = {
   escalada: boolean;
   pedido: PedidoSimulado | null;
   avisos: AvisoSimulado[];
-  uso: UsoIA;
+  uso: UsoPruebas;
   fotos: FotoSimulada[];
 };
 
