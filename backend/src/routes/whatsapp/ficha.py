@@ -9,10 +9,25 @@ compartido por dos caminos:
 
 Antes la ficha no incluía el SKU ni el máximo de unidades; ahora sí: el SKU
 exacto es lo que Victoria debe copiar al registrar el producto.
+
+ADR-012: la ficha también dice CÓMO se cierra la venta de este producto y cómo es su envío. Esa es la forma
+de darle a Victoria reglas distintas por producto sin tocar sus instrucciones generales.
 """
+from typing import List, Optional
+
+from src.routes.entregas.logica import texto_para_la_ficha
+from src.routes.ventas.origen import es_de_cierre_manual
+
+CIERRE_MANUAL = (
+    "Cierre de la venta: MANUAL. Este producto lo gestiona el dueño (no se crea un pedido solo). Apenas el cliente "
+    "muestre intención de compra (quiere comprar, pagar o pide envío) avisa al dueño con solicitar_gestion y sigue "
+    "tomando sus datos; si quiere ver el producto en persona o negociar el precio, usa solicitar_gestion y despídete. "
+    "Cuando tengas todos los datos usa cerrar_venta: eso le pasa el pedido al dueño, que coordina el pago y la entrega. "
+    "Tú nunca das cuentas bancarias ni confirmas pagos."
+)
 
 
-def formatear_ficha_producto(producto: dict) -> str:
+def formatear_ficha_producto(producto: dict, entregas: Optional[List[dict]] = None) -> str:
     partes = [
         f"SKU: {producto['sku']}",
         f"Nombre: {producto['nombre']}",
@@ -28,4 +43,9 @@ def formatear_ficha_producto(producto: dict) -> str:
         partes.append(f"Preguntas frecuentes: {producto['preguntas_frecuentes']}")
     if producto.get("temas_no_responder"):
         partes.append(f"Temas que NO debes responder: {producto['temas_no_responder']}")
+    # `entregas=None` = no se consultó (no se dice nada del envío); [] = se consultó y no tiene opciones.
+    if entregas is not None:
+        partes.append(texto_para_la_ficha(bool(producto.get("envio_incluido", True)), entregas))
+    if es_de_cierre_manual(producto):
+        partes.append(CIERRE_MANUAL)
     return "\n".join(partes)

@@ -61,3 +61,12 @@ class TopeDePruebasAlcanzadoError(Exception):
 class PruebaInvalidaError(Exception):
     """La prueba no puede seguir como viene (demasiado larga, o ya terminó). El
     mensaje está en español, listo para mostrarlo."""
+
+
+class DatosDeProductoInvalidosError(Exception):
+    """Lo que escribió el dueño no se puede guardar (opciones de entrega mal armadas, categoría que no
+    existe, etc.). `mensajes` están en español, listos para mostrarlos."""
+
+    def __init__(self, mensajes):
+        super().__init__("; ".join(mensajes))
+        self.mensajes = list(mensajes)

@@ -24,6 +24,7 @@ class TotalesPorFiltroRapidoSchema(Schema):
     escaladas = fields.Int()
     escaladas_sin_revisar = fields.Int(data_key="escaladasSinRevisar")
     esperando_pago = fields.Int(data_key="esperandoPago")
+    en_gestion = fields.Int(data_key="enGestion")
 
 
 class ListaConversacionesSchema(Schema):

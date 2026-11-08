@@ -25,6 +25,8 @@ from typing import List, Optional, Tuple
 
 from src.routes.ajustes.dto import AjustesNegocio
 
+from src.integrations.rocketfy import RECAUDO_MINIMO_CONTRAENTREGA
+
 from .verificacion import piso_de_precio
 
 CENTAVO = Decimal("0.01")
@@ -152,14 +154,16 @@ def recomendar(
     ajustes: AjustesNegocio,
     precio_evaluado: Optional[Decimal] = None,
     precio_competencia: Optional[Decimal] = None,
+    recaudo_minimo: Decimal = RECAUDO_MINIMO_CONTRAENTREGA,
 ) -> Recomendacion:
-    piso = piso_de_precio(costo, envio_para_piso(ajustes))
+    """`recaudo_minimo`: el de Rocketfy ($10) salvo en un producto propio, que no pasa por Rocketfy."""
+    piso = piso_de_precio(costo, envio_para_piso(ajustes), recaudo_minimo)
     resultado = Recomendacion(costo=costo, piso=piso)
 
     if costo is None:
         resultado.avisos.append(
-            "Todavía no hay costo de Rocketfy guardado para este producto: pulsa «Actualizar desde Rocketfy» "
-            "para poder calcular el precio."
+            "Todavía no hay costo guardado para este producto: en uno de Rocketfy pulsa «Actualizar desde Rocketfy»; "
+            "en uno propio anota cuánto te cuesta. Con el costo se puede calcular el precio."
         )
         return resultado
 

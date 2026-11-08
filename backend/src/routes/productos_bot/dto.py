@@ -35,6 +35,12 @@ class ProductoBotResumenDTO:
     # margen con el precio y el costo de hoy está bajo el mínimo del dueño.
     pedidos_30d: int = 0
     margen_en_riesgo: bool = False
+    # ADR-012: de dónde viene el producto, su categoría y si lleva su propio stock.
+    proveedor: str = "rocketfy"
+    proveedor_nombre: str = "Rocketfy"
+    categoria: Optional[str] = None
+    controla_stock: bool = True
+    envio_incluido: bool = True
 
 
 @dataclass
@@ -65,6 +71,17 @@ class ProductoBotDetalleDTO:
     verificacion: VerificacionDTO
     precio_competencia: Optional[str] = None
     historial: List[HistorialDTO] = field(default_factory=list)
+    # ADR-012
+    proveedor: str = "rocketfy"
+    proveedor_nombre: str = "Rocketfy"
+    categoria_id: Optional[int] = None
+    categoria: Optional[str] = None
+    costo_propio: Optional[str] = None
+    controla_stock: bool = True
+    envio_incluido: bool = True
+    costo_flete_estimado: Optional[str] = None
+    entregas: List[dict] = field(default_factory=list)
+    imagenes: List[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -196,3 +213,6 @@ class TurnoSimuladoDTO:
     avisos: List[AvisoSimuladoDTO]
     uso: "UsoPruebasDTO"
     fotos: List[FotoSimuladaDTO] = field(default_factory=list)
+    # ADR-012: lo que se habría guardado al cerrar un producto propio y las solicitudes de gestión abiertas.
+    venta_manual: Optional[dict] = None
+    solicitudes: List[dict] = field(default_factory=list)

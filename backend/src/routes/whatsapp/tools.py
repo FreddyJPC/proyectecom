@@ -41,6 +41,13 @@ from src.routes.pedidos.exceptions import (
     UbicacionNoResueltaError,
 )
 from src.routes.pedidos.services import PedidoService
+from src.routes.entregas.logica import describir, elegir_opcion, opciones_aplicables, total_con_envio
+from src.routes.entregas.repository import EntregaRepository
+from src.routes.gestion.services import GestionService
+from src.routes.gestion.tipos import TIPOS_QUE_PIDE_VICTORIA
+from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
+from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
+from src.routes.ventas.servicio import VentasService
 
 from .ficha import formatear_ficha_producto
 from .minimos import extraer_minimo_rocketfy
@@ -89,6 +96,9 @@ def _telefono_formato_rocketfy(telefono_whatsapp: str) -> str:
         return telefono_whatsapp[3:]
     return telefono_whatsapp
 
+
+# Estados de un lead que ya cerró su venta: no se cierra de nuevo.
+ESTADOS_DE_LEAD_CERRADO = ("despachado", "por_gestionar")
 
 _CAMPOS_REQUERIDOS_CIERRE = (
     "nombre_cliente",
@@ -203,11 +213,54 @@ HERRAMIENTAS_VICTORIA = [
             "Cierra la venta y dispara el envío del pedido. Solo llama esta "
             "herramienta cuando tengas confirmados TODOS estos datos: "
             "nombre del cliente, dirección completa, cantón, provincia, "
-            "producto y método de pago. Si el método de pago es "
-            "transferencia, esta herramienta te va a decir que falta "
-            "verificar el comprobante. No la llames si falta cualquier dato."
+            "producto, entrega (si el envío no va incluido) y método de pago. En un producto de Rocketfy, si el "
+            "método de pago es transferencia, esta herramienta te va a decir que falta "
+            "verificar el comprobante. En un producto de cierre manual, le pasa el pedido al dueño, que "
+            "coordina el pago y la entrega. No la llames si falta cualquier dato."
         ),
         parametros={"type": "object", "properties": {}},
+    ),
+    HerramientaLLM(
+        nombre="registrar_entrega",
+        descripcion=(
+            "Solo para productos cuyo envío NO está incluido en el precio (lo dice su ficha). Sin parámetros "
+            "te devuelve las opciones de entrega que le aplican al cliente según su cantón y provincia, con "
+            "su costo: ofrécele esas y NO otras. Cuando el cliente elija una, vuelve a llamarla con `opcion` "
+            "(el número de la lista o el nombre) y te devuelve el TOTAL final con el envío, que es el único "
+            "monto que puedes decirle. Necesitas haber guardado antes su cantón y provincia."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "opcion": {
+                    "type": "string",
+                    "description": "Número de la opción o su nombre, tal como te los dio esta herramienta. Omitir para ver las opciones.",
+                },
+            },
+        },
+    ),
+    HerramientaLLM(
+        nombre="solicitar_gestion",
+        descripcion=(
+            "Solo para productos de CIERRE MANUAL (lo dice su ficha). Avisa al dueño de que el cliente mostró "
+            "una intención de compra. tipo: quiere_comprar (dijo que lo quiere), quiere_pagar (pregunta cómo "
+            "pagar o quiere pagar ya), pide_envio (pide envío o retiro), quiere_ver_producto (quiere verlo en "
+            "persona o probarlo), quiere_negociar (pide rebaja o condiciones especiales) u otro. Con "
+            "quiere_comprar, quiere_pagar y pide_envio SIGUES tomando los datos del cliente; con "
+            "quiere_ver_producto, quiere_negociar y otro la conversación pasa al dueño y debes despedirte. "
+            "Llámala UNA vez por intención; no la repitas por lo mismo."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": list(TIPOS_QUE_PIDE_VICTORIA)},
+                "detalle": {
+                    "type": "string",
+                    "description": "Una frase con lo que pidió el cliente, para que el dueño sepa qué hacer.",
+                },
+            },
+            "required": ["tipo"],
+        },
     ),
     HerramientaLLM(
         nombre="escalar_a_humano",
@@ -275,6 +328,9 @@ class HerramientasVictoria:
         mensaje_repo: Optional[MensajeRepository] = None,
         whatsapp_client=None,
         enviar_fotos: Optional[bool] = None,
+        entrega_repo: Optional[EntregaRepository] = None,
+        gestion_service: Optional[GestionService] = None,
+        ventas_service: Optional[VentasService] = None,
     ):
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
@@ -284,6 +340,10 @@ class HerramientasVictoria:
         self._stock = stock_checker or StockChecker()
         self._minimos = minimo_repo or MinimoObservadoRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
+        # ADR-012: envío por producto, avisos de gestión al dueño y registro de ventas (cierre manual).
+        self._entregas = entrega_repo or EntregaRepository()
+        self._gestion = gestion_service or GestionService(telegram=self._telegram)
+        self._ventas = ventas_service or VentasService()
         # Perezoso: el cliente de WhatsApp solo se arma si de verdad se envía una foto.
         self._whatsapp = whatsapp_client
         # None = lo decide el parámetro «Enviar fotos» en cada llamada (se cambia desde la
@@ -294,6 +354,8 @@ class HerramientasVictoria:
             "ver_ficha_producto": self._handle_ver_ficha_producto,
             "registrar_producto": self._handle_registrar_producto,
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
+            "registrar_entrega": self._handle_registrar_entrega,
+            "solicitar_gestion": self._handle_solicitar_gestion,
             "cerrar_venta": self._handle_cerrar_venta,
             "escalar_a_humano": self._handle_escalar_a_humano,
             "enviar_foto_producto": self._handle_enviar_foto_producto,
@@ -320,7 +382,28 @@ class HerramientasVictoria:
             canton=entrada.get("canton"),
             provincia=entrada.get("provincia"),
         )
+        if entrada.get("canton") or entrada.get("provincia"):
+            aviso = self._revalidar_entrega_elegida(lead_id)
+            if aviso:
+                return f"Datos guardados correctamente. {aviso}"
         return "Datos guardados correctamente."
+
+    def _revalidar_entrega_elegida(self, lead_id: int) -> str:
+        """Si el cliente ya había elegido una opción de entrega y cambia su destino, la opción puede dejar
+        de aplicar (p. ej. «Envío en Cuenca» y ahora vive en Quito): se borra y se avisa a Victoria."""
+        lead = self._leads.obtener_por_id(lead_id)
+        if not lead or lead.get("entrega_opcion_id") is None:
+            return ""
+        opciones = self._entregas.listar(lead["producto_sku"], solo_activas=True) if lead.get("producto_sku") else []
+        aplicables = opciones_aplicables(opciones, lead.get("canton"), lead.get("provincia"))
+        if any(o["id"] == lead["entrega_opcion_id"] for o in aplicables):
+            return ""
+        subtotal = lead.get("subtotal") if lead.get("subtotal") is not None else lead.get("total")
+        self._leads.actualizar_entrega(lead_id, None, None, None, Decimal("0.00"), subtotal)
+        return (
+            "La entrega que había elegido ya no aplica al nuevo destino: vuelve a ofrecerle las opciones con "
+            "registrar_entrega y avísale que el total puede cambiar."
+        )
 
     def _handle_ver_ficha_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         """Ficha completa de un producto, en el mismo turno (hueco H7 del plan
@@ -332,7 +415,7 @@ class HerramientasVictoria:
             producto = self._buscar_producto_activo_por_nombre(consulta)
         if not self._esta_activo(producto):
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
-        return formatear_ficha_producto(producto)
+        return formatear_ficha_producto(producto, self._entregas.listar(producto["sku"], solo_activas=True))
 
     def _handle_enviar_foto_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         """Fase G2. Solo se envía la foto de un producto ACTIVO del catálogo (la URL
@@ -446,7 +529,7 @@ class HerramientasVictoria:
         if cantidad > maximo:
             return self._mensaje_maximo_unidades(maximo)
 
-        stock = self._stock.stock_de(producto_real["sku"])
+        stock = self._stock_disponible(producto_real)
         if stock is not None and stock < cantidad:
             return self._respuesta_sin_stock(lead_id, conversacion_id, producto_real, cantidad, stock)
 
@@ -461,10 +544,27 @@ class HerramientasVictoria:
             variante=entrada.get("variante"),
             cantidad=cantidad,
         )
+        if not producto_real.get("envio_incluido", True):
+            return (
+                f"Producto registrado: {cantidad} x {producto_real['nombre']}. Subtotal: ${total}, SIN el envío: "
+                "este producto cobra el envío aparte. Cuando tengas el cantón y la provincia del cliente, usa "
+                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta."
+            )
         return (
             f"Producto registrado: {cantidad} x {producto_real['nombre']}. "
             f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
         )
+
+    def _stock_disponible(self, producto: dict, fresco: bool = False) -> Optional[int]:
+        """Unidades que hay de un producto, o None si no se sabe / no se controla. Un producto propio con
+        control de stock lo lleva la propia app (la base); el de Rocketfy se le pregunta a Rocketfy."""
+        if es_de_cierre_manual(producto):
+            if not controla_su_stock(producto):
+                return None
+            if fresco:
+                producto = self._productos.obtener_por_sku(producto["sku"]) or producto
+            return producto.get("stock_ultimo")
+        return self._stock.stock_de(producto["sku"], fresco=fresco)
 
     @staticmethod
     def _esta_activo(producto: Optional[dict]) -> bool:
@@ -522,7 +622,8 @@ class HerramientasVictoria:
                 conversacion_id,
                 {
                     "motivo": (
-                        f"Producto sin stock en Rocketfy: {producto['nombre']} ({producto['sku']}). "
+                        f"Producto sin stock{'' if es_de_cierre_manual(producto) else ' en Rocketfy'}: "
+                        f"{producto['nombre']} ({producto['sku']}). "
                         f"El cliente quería {cantidad}. Conviene pausar el producto."
                     )
                 },
@@ -545,6 +646,13 @@ class HerramientasVictoria:
         return None
 
     def _handle_registrar_metodo_pago(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id)
+        producto = self._productos.obtener_por_sku(lead["producto_sku"]) if lead and lead.get("producto_sku") else None
+        if es_de_cierre_manual(producto):
+            # El dueño verifica el pago a mano: ni el lead ni la conversación quedan «esperando_pago»
+            # (ese estado es el de la regla de Rocketfy que le pide el comprobante a Victoria).
+            self._leads.actualizar_metodo_pago(lead_id, metodo_pago=entrada["metodo_pago"], esperar_comprobante=False)
+            return "Método de pago registrado."
         self._leads.actualizar_metodo_pago(lead_id, metodo_pago=entrada["metodo_pago"])
         if entrada["metodo_pago"] == "transferencia":
             # Espejo a nivel conversación -- el módulo de Conversaciones
@@ -559,13 +667,27 @@ class HerramientasVictoria:
         if faltantes:
             return f"Faltan datos: {', '.join(faltantes)}. Pide esos datos al cliente antes de intentar cerrar de nuevo."
 
-        if lead["metodo_pago"] == "transferencia":
+        if lead.get("estado") in ESTADOS_DE_LEAD_CERRADO:
+            # Nunca se cierra dos veces: un segundo cierre duplicaría un pedido real (Rocketfy) o un aviso al dueño.
+            return "Este pedido ya quedó registrado: no lo cierres otra vez. Despídete cordialmente."
+
+        producto = self._productos.obtener_por_sku(lead["producto_sku"])
+        manual = es_de_cierre_manual(producto)
+
+        # En Rocketfy la transferencia obliga a esperar el comprobante; en un producto propio la verificación
+        # del pago la hace el dueño, así que no frena el cierre (ADR-012).
+        if not manual and lead["metodo_pago"] == "transferencia":
             return (
                 "Este pedido es por transferencia. Pide al cliente la foto del comprobante "
                 "antes de continuar. No se puede cerrar todavía."
             )
 
-        producto = self._productos.obtener_por_sku(lead["producto_sku"])
+        if producto is not None and not producto.get("envio_incluido", True) and lead.get("entrega_opcion_id") is None:
+            return (
+                "Falta elegir la entrega: este producto cobra el envío aparte. Usa registrar_entrega para ofrecerle "
+                "al cliente las opciones y su total final, y luego vuelve a intentar cerrar."
+            )
+
         cantidad = int(lead.get("cantidad") or 1)
 
         # Última revisión ANTES de crear un pedido real en Rocketfy: el
@@ -580,6 +702,9 @@ class HerramientasVictoria:
             )
             self._handle_escalar_a_humano(lead_id, conversacion_id, {"motivo": motivo})
             return mensaje
+
+        if manual:
+            return self._cerrar_venta_manual(lead, producto, conversacion_id, cantidad)
 
         tiempo_entrega = producto["tiempo_entrega"]
 
@@ -626,7 +751,96 @@ class HerramientasVictoria:
         self._leads.actualizar_despacho(
             lead_id, id_pedido_local=resultado.id_local, id_pedido_rocketfy=resultado.id_rocketfy
         )
+        self._registrar_venta_de_rocketfy(lead_id, conversacion_id, producto)
         return f"¡Pedido confirmado! Llega en {tiempo_entrega}. Comunícaselo al cliente y agradécele."
+
+    def _registrar_venta_de_rocketfy(self, lead_id: int, conversacion_id: int, producto: dict) -> None:
+        """Deja la «foto» de la venta (precio y costo congelados) para los reportes. El pedido real YA se creó:
+        si esto falla, solo se registra el error."""
+        try:
+            lead = self._leads.obtener_por_id(lead_id)
+            conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+            entrega = self._entregas.obtener(lead["entrega_opcion_id"]) if lead.get("entrega_opcion_id") else None
+            self._ventas.registrar_venta_rocketfy(lead, producto, conversacion, entrega)
+        except Exception:
+            logger.exception("No se pudo registrar la venta del lead %s para los reportes", lead_id)
+
+    def _cerrar_venta_manual(self, lead: dict, producto: dict, conversacion_id: int, cantidad: int) -> str:
+        """Cierre de un producto PROPIO (ADR-012): no se crea ningún pedido en Rocketfy. Se guarda la venta,
+        se descuenta el stock (si lo controla), se pasa la conversación al dueño y se le avisa. Todo en una
+        sola transacción (ver `VentasRepository.cerrar_manual`)."""
+        lead_id = lead["id"]
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        entrega = self._entregas.obtener(lead["entrega_opcion_id"]) if lead.get("entrega_opcion_id") else None
+        try:
+            resultado = self._ventas.cerrar_manual(
+                lead, producto, conversacion, entrega, controla_su_stock(producto), self._detalle_del_pedido(lead, cantidad)
+            )
+        except StockInsuficienteError as exc:
+            return self._respuesta_sin_stock(lead_id, conversacion_id, producto, cantidad, exc.disponible or 0)
+        except VentaYaRegistradaError:
+            return "Este pedido ya quedó registrado: no lo cierres otra vez. Despídete cordialmente."
+        except Exception:
+            logger.exception(
+                "No se pudo registrar el pedido de un producto propio", extra={"lead_id": lead_id, "conversacion_id": conversacion_id}
+            )
+            self._handle_escalar_a_humano(
+                lead_id, conversacion_id, {"motivo": "No se pudo registrar el pedido de un producto propio (error técnico)."}
+            )
+            return (
+                "Hubo un problema técnico registrando el pedido. Ya se avisó al dueño, que va a contactar al "
+                "cliente: dile que en breve le confirman y despídete cordialmente."
+            )
+
+        self._avisar_pedido_cerrado(lead, producto, conversacion_id, cantidad, entrega, resultado)
+        return (
+            f"¡Pedido registrado! El dueño ya recibió todos los datos y se pondrá en contacto con el cliente para "
+            f"coordinar el pago y la entrega (tiempo estimado: {producto['tiempo_entrega']}). Dile al cliente que su "
+            "pedido quedó registrado y que lo van a contactar muy pronto; no confirmes el pago ni prometas fechas. "
+            "Este es tu último mensaje: despídete cordialmente."
+        )
+
+    @staticmethod
+    def _detalle_del_pedido(lead: dict, cantidad: int) -> str:
+        producto = f"{cantidad} x {lead['producto_nombre']}"
+        if lead.get("producto_variante"):
+            producto += f" ({lead['producto_variante']})"
+        entrega = lead.get("entrega_nombre") or "envío incluido en el precio"
+        return f"{producto} · total ${Decimal(str(lead['total'])):.2f} · entrega: {entrega} · pago: {lead['metodo_pago']}"
+
+    def _avisar_pedido_cerrado(self, lead, producto, conversacion_id, cantidad, entrega, resultado) -> None:
+        """El timbre (Telegram) de un pedido cerrado. El registro ya está guardado en la base; esto es best-effort."""
+        try:
+            nombre = lead["producto_nombre"] + (f" ({lead['producto_variante']})" if lead.get("producto_variante") else "")
+            datos = {
+                "cliente": lead["nombre_cliente"],
+                "telefono": lead["telefono"],
+                "direccion": f"{lead['direccion']}, {lead['canton']}, {lead['provincia']}",
+                "producto": f"{cantidad} x {nombre}",
+                "entrega": lead.get("entrega_nombre") or "Envío incluido en el precio",
+                "total": f"{Decimal(str(lead['total'])):.2f}",
+                "pago": lead["metodo_pago"],
+                "conversacion_id": conversacion_id,
+                "aviso": (
+                    "Pago por transferencia: pasa tú los datos de la cuenta y verifica el comprobante."
+                    if lead["metodo_pago"] == "transferencia"
+                    else None
+                ),
+            }
+            self._gestion.avisar_pedido_cerrado(datos)
+            if resultado.get("pausado_por_agotado"):
+                self._telegram.notificar_aviso(
+                    "🟠 Producto agotado: se pausó solo",
+                    f"{producto['nombre']} ({producto['sku']}) se quedó sin unidades con esta venta. Victoria ya no "
+                    "lo ofrece. Cuando repongas stock, actualízalo y reanúdalo en Catálogo → Mis productos.",
+                )
+            elif resultado.get("stock_restante") is not None and resultado["stock_restante"] <= parametros.valor("stock.umbral_bajo"):
+                self._telegram.notificar_aviso(
+                    "🟡 Quedan pocas unidades",
+                    f"{producto['nombre']} ({producto['sku']}): quedan {resultado['stock_restante']}.",
+                )
+        except Exception:
+            logger.exception("No se pudo avisar por Telegram el pedido cerrado (ya quedó guardado en «Por gestionar»)")
 
     def _revisar_antes_de_cerrar(
         self, lead: dict, producto: Optional[dict], cantidad: int
@@ -653,8 +867,9 @@ class HerramientasVictoria:
                 aviso_a_victoria.format(que="las unidades del pedido"),
             )
 
+        # El precio cotizado es el del producto (subtotal); el envío se verifica aparte.
         precio_actual = producto.get("precio")
-        cotizado = Decimal(str(lead["total"])).quantize(Decimal("0.01"))
+        cotizado = Decimal(str(lead["subtotal"] if lead.get("subtotal") is not None else lead["total"])).quantize(Decimal("0.01"))
         if precio_actual is None or self._calcular_total(producto, cantidad) != cotizado:
             actual = self._calcular_total(producto, cantidad) if precio_actual is not None else "desconocido"
             return (
@@ -663,14 +878,117 @@ class HerramientasVictoria:
                 aviso_a_victoria.format(que="el precio"),
             )
 
-        stock = self._stock.stock_de(sku, fresco=True)
+        problema_de_entrega = self._problema_de_entrega(lead, producto)
+        if problema_de_entrega is not None:
+            return problema_de_entrega, aviso_a_victoria.format(que="la entrega")
+
+        stock = self._stock_disponible(producto, fresco=True)
         if stock is not None and stock < cantidad:
+            donde = "" if es_de_cierre_manual(producto) else " en Rocketfy"
             return (
-                f"Sin stock suficiente en Rocketfy al cerrar: {sku}, pedido {cantidad}, disponible {stock}.",
+                f"Sin stock suficiente{donde} al cerrar: {sku}, pedido {cantidad}, disponible {stock}.",
                 aviso_a_victoria.format(que="el stock"),
             )
 
         return None
+
+    def _problema_de_entrega(self, lead: dict, producto: dict) -> Optional[str]:
+        """Si el envío se cobra aparte, la opción que eligió el cliente tiene que seguir existiendo, aplicar a su
+        destino y costar lo mismo que se le dijo."""
+        if producto.get("envio_incluido", True):
+            return None
+        opcion = self._entregas.obtener(lead["entrega_opcion_id"]) if lead.get("entrega_opcion_id") is not None else None
+        if opcion is None or not opcion.get("activo", True):
+            return f"La opción de entrega «{lead.get('entrega_nombre')}» de {lead['producto_sku']} ya no existe."
+        if opcion["id"] not in {o["id"] for o in opciones_aplicables([opcion], lead.get("canton"), lead.get("provincia"))}:
+            return f"La entrega «{opcion['nombre']}» ya no aplica al destino del cliente ({lead.get('canton')})."
+        if Decimal(str(opcion["costo_cliente"])).quantize(Decimal("0.01")) != Decimal(str(lead.get("costo_envio") or 0)).quantize(Decimal("0.01")):
+            return f"El costo de «{opcion['nombre']}» cambió desde que se le cotizó al cliente."
+        return None
+
+    # ------------------------------------------------------------------
+    # Envío y gestión (ADR-012)
+    # ------------------------------------------------------------------
+    def _handle_registrar_entrega(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id)
+        if not lead.get("producto_sku"):
+            return "Primero registra el producto con registrar_producto; la entrega se elige después."
+        producto = self._productos.obtener_por_sku(lead["producto_sku"])
+        if not self._esta_activo(producto):
+            return f"Ese producto ya no está disponible. {self._texto_catalogo_disponible()}"
+        if producto.get("envio_incluido", True):
+            return (
+                f"Este producto incluye el envío en el precio: no hay nada que elegir. "
+                f"El total a cobrar es ${Decimal(str(lead['total'])):.2f}."
+            )
+        if not (lead.get("canton") or lead.get("provincia")):
+            return (
+                "Necesito el cantón y la provincia del cliente para saber qué entrega le aplica. Pídeselos, "
+                "guárdalos con guardar_datos_cliente y vuelve a llamar esta herramienta."
+            )
+
+        opciones = self._entregas.listar(producto["sku"], solo_activas=True)
+        aplicables = opciones_aplicables(opciones, lead.get("canton"), lead.get("provincia"))
+        if not aplicables:
+            destino = ", ".join(x for x in (lead.get("canton"), lead.get("provincia")) if x)
+            self._pedir_gestion(
+                lead, conversacion_id, "sin_cobertura",
+                f"{producto['nombre']} ({producto['sku']}) no tiene una entrega que aplique a {destino}.",
+            )
+            self._conversaciones.marcar_en_gestion(conversacion_id)
+            return (
+                f"Este producto no tiene una entrega disponible para {destino}. Ya se avisó al dueño, que verá si "
+                "puede atender ese destino. No prometas nada: dile al cliente con naturalidad que lo van a "
+                "contactar y despídete. Este es tu último mensaje."
+            )
+
+        subtotal = Decimal(str(lead["subtotal"] if lead.get("subtotal") is not None else lead["total"]))
+        texto = (entrada.get("opcion") or "").strip()
+        if not texto:
+            lista = "\n".join(describir(o, con_numero=i) for i, o in enumerate(aplicables, start=1))
+            return (
+                f"Opciones de entrega para {lead.get('canton') or lead.get('provincia')} (subtotal de los productos: "
+                f"${subtotal:.2f}):\n{lista}\nOfrécele estas y NO otras. Cuando el cliente elija, llama otra vez "
+                "esta herramienta con `opcion` (el número o el nombre) y te doy el total final."
+            )
+
+        elegida = elegir_opcion(aplicables, texto)
+        if elegida is None:
+            lista = "\n".join(describir(o, con_numero=i) for i, o in enumerate(aplicables, start=1))
+            return f"No reconocí esa opción. Las disponibles son:\n{lista}\nPregúntale al cliente cuál prefiere."
+
+        total = total_con_envio(subtotal, elegida)
+        self._leads.actualizar_entrega(lead_id, elegida["id"], elegida["nombre"], elegida["tipo"], elegida["costo_cliente"], total)
+        return (
+            f"Entrega registrada: {describir(elegida)}. Total a cobrar: ${total} (productos ${subtotal:.2f} + envío "
+            f"${Decimal(str(elegida['costo_cliente'])):.2f}). Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
+        )
+
+    def _handle_solicitar_gestion(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id)
+        producto = self._productos.obtener_por_sku(lead["producto_sku"]) if lead.get("producto_sku") else None
+        if producto is not None and not es_de_cierre_manual(producto):
+            return (
+                "Este producto se cierra solo, sin que intervenga el dueño: no necesitas solicitar_gestion. "
+                "Sigue con el proceso normal de venta (si necesitas a una persona, usa escalar_a_humano)."
+            )
+        clave = entrada.get("tipo") if entrada.get("tipo") in TIPOS_QUE_PIDE_VICTORIA else "otro"
+        resultado = self._pedir_gestion(lead, conversacion_id, clave, entrada.get("detalle"))
+        if resultado.traspasa:
+            self._conversaciones.marcar_en_gestion(conversacion_id)
+            return (
+                "Listo: ya se avisó al dueño y la conversación pasa a él. Despídete con naturalidad diciéndole al "
+                "cliente que el dueño lo va a contactar muy pronto; no prometas fechas ni resuelvas tú lo que pidió. "
+                "Este es tu último mensaje."
+            )
+        return (
+            "Aviso registrado: el dueño ya sabe que el cliente quiere comprar. Tú sigue tomando los datos del pedido "
+            "(nombre, dirección, cantón, provincia, producto, entrega y forma de pago) y al final usa cerrar_venta. "
+            "No vuelvas a llamar solicitar_gestion por lo mismo."
+        )
+
+    def _pedir_gestion(self, lead: dict, conversacion_id: int, clave: str, detalle: Optional[str]):
+        return self._gestion.solicitar(conversacion_id, lead["id"], clave, detalle, lead.get("telefono") or "")
 
     def _guardar_minimo_observado(self, exc: Exception, lead: dict, cantidad: int) -> None:
         """Si Rocketfy rechazó la confirmación por importe insuficiente, guarda

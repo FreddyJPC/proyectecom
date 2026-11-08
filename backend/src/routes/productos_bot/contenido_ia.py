@@ -19,9 +19,11 @@ from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError, MensajeLLM
 from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
+from src.routes.ventas.origen import es_de_cierre_manual
 
 from .dto import AlertaContenidoDTO, BorradorContenidoDTO, CamposContenidoDTO, UsoIADTO
 from .exceptions import (
+    DatosDeProductoInvalidosError,
     IAFalloError,
     IANoDisponibleError,
     ProductoBotNoEncontradoError,
@@ -92,6 +94,12 @@ class ContenidoIAService:
             raise ProductoBotNoEncontradoError(f"No existe un producto con el SKU '{sku}'.")
         if ficha["estado"] == "archivado":
             raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
+        if es_de_cierre_manual(ficha):
+            # La redacción parte de lo que dice Rocketfy del producto (y lo contrasta con tus notas): un
+            # producto propio no tiene esa fuente. Pendiente #64: redactar a partir de lo que escribas.
+            raise DatosDeProductoInvalidosError(
+                ["Redactar con IA es solo para productos de Rocketfy. En un producto propio escribe tú la ficha."]
+            )
 
         campos = [c for c in CAMPOS if campos is None or c in campos]
         if not campos:

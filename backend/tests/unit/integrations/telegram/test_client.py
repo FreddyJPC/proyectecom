@@ -85,3 +85,41 @@ class TestNotificarAviso:
     def test_ok_false_de_telegram_no_lanza(self):
         responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": False, "description": "chat not found"}, status=200)
         TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_aviso("t", "d")  # no debe lanzar
+
+
+class TestAvisosDeGestion:
+    """ADR-012: el timbre para el dueño cuando un cliente quiere comprar un producto propio."""
+
+    @responses.activate
+    def test_cierre_previo_dice_que_quiere_el_cliente_y_donde_verlo(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_gestion(
+            "Quiere ver el producto", conversacion_id=42, telefono="593987654321", detalle="quiere verlos mañana"
+        )
+
+        texto = json.loads(responses.calls[0].request.body)["text"]
+        assert texto.startswith("🟡 Cierre previo: Quiere ver el producto")
+        assert "593987654321" in texto and "quiere verlos mañana" in texto and "42" in texto and "Por gestionar" in texto
+
+    @responses.activate
+    def test_pedido_cerrado_trae_todo_lo_necesario_para_gestionar_el_envio(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_pedido_cerrado(
+            {
+                "cliente": "Ana", "telefono": "593987654321", "direccion": "Calle 1, Cuenca, Azuay",
+                "producto": "2 x Zapatos (talla 40)", "entrega": "Envío en Cuenca", "total": "62.00",
+                "pago": "transferencia", "conversacion_id": 42, "aviso": "Verifica el comprobante.",
+            }
+        )
+
+        texto = json.loads(responses.calls[0].request.body)["text"]
+        assert texto.startswith("🟢 Pedido cerrado, gestionar envío")
+        for esperado in ("Ana", "593987654321", "Calle 1, Cuenca, Azuay", "2 x Zapatos (talla 40)", "Envío en Cuenca", "$62.00", "transferencia", "Verifica el comprobante.", "42"):
+            assert esperado in texto
+
+    @responses.activate
+    def test_sin_credenciales_o_con_telegram_caido_no_lanza(self):
+        TelegramNotifier(bot_token=None, chat_id=None).notificar_gestion("x", 1, "593")
+        TelegramNotifier(bot_token=None, chat_id=None).notificar_pedido_cerrado({})
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", body=RequestsConnectionError("sin red"))
+        TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_pedido_cerrado({"cliente": "Ana"})  # no debe lanzar

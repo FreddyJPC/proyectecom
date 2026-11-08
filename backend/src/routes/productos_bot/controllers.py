@@ -11,6 +11,7 @@ from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from . import productos_bot_bp
 from .contenido_ia import ContenidoIAService
 from .exceptions import (
+    DatosDeProductoInvalidosError,
     IAFalloError,
     IANoDisponibleError,
     ProductoBotNoEncontradoError,
@@ -26,10 +27,13 @@ from .pruebas import PruebasService
 from .redaccion import NotasDelDueno
 from .schemas import (
     borrador_contenido_schema,
+    copiar_entregas_input_schema,
     crear_input_schema,
+    crear_propio_input_schema,
     detalle_schema,
     editar_input_schema,
     generar_contenido_input_schema,
+    guardar_entregas_input_schema,
     probar_input_schema,
     recomendacion_precio_schema,
     resumen_lista_schema,
@@ -72,6 +76,8 @@ def _responder_error(exc):
         return jsonify(error=str(exc)), 409
     if isinstance(exc, PublicacionBloqueadaError):
         return jsonify(error="El producto no cumple lo mínimo para esa acción.", bloqueos=exc.bloqueos), 422
+    if isinstance(exc, DatosDeProductoInvalidosError):
+        return jsonify(error="Datos inválidos.", detalle={"producto": exc.mensajes}), 422
     if isinstance(exc, (SkuInvalidoError, SkuNoExisteEnRocketfyError)):
         return jsonify(error=str(exc)), 422
     if isinstance(exc, _ERRORES_ROCKETFY):
@@ -88,6 +94,7 @@ def _responder_error(exc):
 
 
 _ERRORES_CONOCIDOS = (
+    DatosDeProductoInvalidosError,
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
     TransicionInvalidaError,
@@ -144,6 +151,50 @@ def crear_producto_bot():
 
     try:
         return _detalle(_build_service().crear_borrador(data["sku"], _usuario()), 201)
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.post("/propios")
+def crear_producto_propio():
+    """Publica un producto PROPIO (no Rocketfy): el dueño escribe todos sus datos (ADR-012). Nace como
+    borrador y con SKU generado (`PROP-0001`…)."""
+    try:
+        data = crear_propio_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    entregas = data.pop("entregas")
+    try:
+        return _detalle(_build_service().crear_propio(data, entregas, _usuario()), 201)
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.put("/<sku>/entregas")
+def guardar_entregas(sku: str):
+    """Reemplaza las opciones de entrega del producto (envío y retiro, con su costo y a quién aplican)."""
+    try:
+        data = guardar_entregas_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        return _detalle(_build_service().guardar_entregas(sku, data["entregas"], _usuario()))
+    except _ERRORES_CONOCIDOS as exc:
+        return _responder_error(exc)
+
+
+@productos_bot_bp.post("/<sku>/entregas/copiar")
+def copiar_entregas(sku: str):
+    """Copia las opciones de entrega de OTRO producto a este."""
+    try:
+        data = copiar_entregas_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        return _detalle(_build_service().copiar_entregas(sku, data["desde_sku"], _usuario()))
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)
 

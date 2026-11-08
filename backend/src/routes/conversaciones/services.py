@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 from src.integrations.whatsapp import WhatsAppBusinessError, WhatsAppClient, WhatsAppRequestError, get_whatsapp_client
+from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO as ESTADOS_QUE_ESPERAN_AL_DUENO
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository, MensajeRepository
 
 from .dto import (
@@ -100,7 +101,7 @@ class ConversacionesService:
                     origen=fila["origen"],
                     estado=fila["estado"],
                     producto_interes=fila.get("producto_nombre"),
-                    sin_revisar=(fila["estado"] == "escalada" and fila.get("vista_en") is None),
+                    sin_revisar=(fila["estado"] in ESTADOS_QUE_ESPERAN_AL_DUENO and fila.get("vista_en") is None),
                     ultimo_mensaje=ultimo_mensaje,
                     creada_en=_iso(fila["creada_en"]),
                     actualizada_en=_iso(fila["actualizada_en"]),
@@ -117,6 +118,7 @@ class ConversacionesService:
                 escaladas=totales["escaladas"],
                 escaladas_sin_revisar=totales["escaladas_sin_revisar"],
                 esperando_pago=totales["esperando_pago"],
+                en_gestion=totales.get("en_gestion", 0),
             ),
         )
 
@@ -125,7 +127,7 @@ class ConversacionesService:
         if conversacion is None:
             raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
 
-        if conversacion["estado"] == "escalada" and conversacion.get("vista_en") is None:
+        if conversacion["estado"] in ESTADOS_QUE_ESPERAN_AL_DUENO and conversacion.get("vista_en") is None:
             self._conversaciones.marcar_vista(conversacion_id)
             conversacion["vista_en"] = datetime.now(timezone.utc)
 
