@@ -201,7 +201,7 @@ posible y rotarlos.
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
   conectado, **backend desplegado y sano** (2026-10-30; `/health` →
   `scheduler: true`). **Ojo:** el despliegue automático NO se ha podido comprobar (pendiente #48; no se
-  disparó en 11 fusiones seguidas hasta el 2026-11-06). Tras fusionar a `main` algo de `backend/`, reconectar la
+  disparó en 12 fusiones seguidas hasta el 2026-11-08). Tras fusionar a `main` algo de `backend/`, reconectar la
   fuente con `connect-service-source` y verificar el despliegue en los logs.
 - Vercel: `proyectecom-dashboard` **desplegado en producción**
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel
@@ -220,6 +220,11 @@ posible y rotarlos.
   se puede hacer `curl` al backend; verificar con los logs/estado de Railway.
 - Una respuesta ambigua de una herramienta de escritura (p. ej. "outcome
   unknown") **no se reintenta a ciegas**: se verifica el estado real primero.
+- **Parámetros del sistema e instrucciones de Victoria editables desde la app
+  (ADR-011, desplegado 2026-11-08):** migraciones 018 y 019 aplicadas en Supabase
+  (tablas `parametros_sistema`, `parametros_historial`, `victoria_instrucciones_versiones`).
+  Pantalla Control → Parámetros (+ Instrucciones de Victoria). Mientras no se guarde nada
+  en la app, todo vale lo mismo que antes (variable del servidor o valor del código).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
