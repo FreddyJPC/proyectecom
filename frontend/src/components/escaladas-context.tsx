@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { apiFetch } from "@/lib/api";
 import type { ConversacionesListado } from "@/types/conversacion";
@@ -17,7 +17,12 @@ type Contadores = {
   gestionPendiente: number;
 };
 
-const ContadoresContext = createContext<Contadores>({ escaladasSinRevisar: 0, gestionPendiente: 0 });
+type ValorDelContexto = Contadores & {
+  /** Vuelve a consultar los contadores ya (p. ej. justo después de atender o cancelar algo en «Por gestionar»). */
+  refrescar: () => void;
+};
+
+const ContadoresContext = createContext<ValorDelContexto>({ escaladasSinRevisar: 0, gestionPendiente: 0, refrescar: () => {} });
 
 /** Consulta UNA sola vez cada 30 s cuántas conversaciones escaladas siguen
  * sin revisar y cuántas solicitudes esperan en «Por gestionar», y lo comparte
@@ -25,33 +30,24 @@ const ContadoresContext = createContext<Contadores>({ escaladasSinRevisar: 0, ge
 export function EscaladasProvider({ children }: { children: ReactNode }) {
   const [contadores, setContadores] = useState<Contadores>({ escaladasSinRevisar: 0, gestionPendiente: 0 });
 
-  useEffect(() => {
-    let cancelado = false;
-
-    function consultar() {
-      // Best-effort: si falla, simplemente no se muestra el contador --
-      // no es motivo para un toast de error en cada carga de página.
-      apiFetch<ConversacionesListado>("/conversaciones?estado=escalada&pageSize=1")
-        .then((data) => {
-          if (!cancelado) setContadores((c) => ({ ...c, escaladasSinRevisar: data.totalesPorFiltroRapido.escaladasSinRevisar }));
-        })
-        .catch(() => {});
-      apiFetch<{ pendientes: number }>("/gestion/resumen")
-        .then((data) => {
-          if (!cancelado) setContadores((c) => ({ ...c, gestionPendiente: data.pendientes }));
-        })
-        .catch(() => {});
-    }
-
-    consultar();
-    const intervalo = setInterval(consultar, INTERVALO_POLL_MS);
-    return () => {
-      cancelado = true;
-      clearInterval(intervalo);
-    };
+  const consultar = useCallback(() => {
+    // Best-effort: si falla, simplemente no se muestra el contador --
+    // no es motivo para un toast de error en cada carga de página.
+    apiFetch<ConversacionesListado>("/conversaciones?estado=escalada&pageSize=1")
+      .then((data) => setContadores((c) => ({ ...c, escaladasSinRevisar: data.totalesPorFiltroRapido.escaladasSinRevisar })))
+      .catch(() => {});
+    apiFetch<{ pendientes: number }>("/gestion/resumen")
+      .then((data) => setContadores((c) => ({ ...c, gestionPendiente: data.pendientes })))
+      .catch(() => {});
   }, []);
 
-  return <ContadoresContext.Provider value={contadores}>{children}</ContadoresContext.Provider>;
+  useEffect(() => {
+    consultar();
+    const intervalo = setInterval(consultar, INTERVALO_POLL_MS);
+    return () => clearInterval(intervalo);
+  }, [consultar]);
+
+  return <ContadoresContext.Provider value={{ ...contadores, refrescar: consultar }}>{children}</ContadoresContext.Provider>;
 }
 
 export function useEscaladasSinRevisar(): number {
@@ -60,4 +56,9 @@ export function useEscaladasSinRevisar(): number {
 
 export function useGestionPendiente(): number {
   return useContext(ContadoresContext).gestionPendiente;
+}
+
+/** Para refrescar los contadores del menú sin esperar al siguiente poll. */
+export function useRefrescarContadores(): () => void {
+  return useContext(ContadoresContext).refrescar;
 }

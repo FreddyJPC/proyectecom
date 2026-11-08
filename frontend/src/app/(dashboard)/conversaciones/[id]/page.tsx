@@ -87,7 +87,7 @@ function PanelDatos({
   notaCambiada: boolean;
   telefono: string;
 }) {
-  const puedeCrearPedido = Boolean(lead?.nombreCliente && lead?.direccion && lead?.productoNombre) && lead?.estado !== "despachado";
+  const puedeCrearPedido = Boolean(lead?.nombreCliente && lead?.direccion && lead?.productoNombre) && lead?.estado !== "despachado" && lead?.estado !== "cancelado";
 
   const paramsPedido = new URLSearchParams();
   if (lead?.nombreCliente) paramsPedido.set("nombreCliente", lead.nombreCliente);

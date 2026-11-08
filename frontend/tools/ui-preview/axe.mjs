@@ -25,7 +25,13 @@ for (const theme of ["light", "dark"]) {
       await page.waitForTimeout(500);
       await page.evaluate(axeSrc);
       const auditar = async (etiqueta) => {
-        const res = await page.evaluate(async () => await axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"], resultTypes: ["violations"] }));
+        // Con un cuadro abierto, el resto de la página queda inerte detrás del velo y el desenfoque: axe lo mediría
+        // mezclado con lo que casualmente haya debajo (p. ej. la barra inferior sobre un botón). Ese contraste ya se
+        // audita en el estado normal de la página; aquí se mide el cuadro.
+        const res = await page.evaluate(async () => {
+          const cuadro = document.querySelector('[role="dialog"], [role="alertdialog"]');
+          return await axe.run(cuadro ?? document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"], resultTypes: ["violations"] });
+        });
         for (const v of res.violations) {
           // el indicador de desarrollo de Next no es parte del producto
           const nodos = v.nodes.filter((n) => !n.target.join(" ").includes("nextjs-portal"));
@@ -173,6 +179,17 @@ for (const theme of ["light", "dark"]) {
         await page.getByRole("dialog").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [atender]");
+        await page.keyboard.press("Escape");
+        // Cobrar y cancelar una venta (cuadros de confirmación). Solo se abren y se cierran: no cambian datos.
+        await page.getByRole("button", { name: "Marcar cobrada" }).first().click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [cobrar]");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Cancelar venta" }).first().click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [cancelar]");
         await page.keyboard.press("Escape");
         await page.getByRole("button", { name: /Atendidas/ }).click();
         await page.getByText("Se coordinó el envío por Servientrega").waitFor();

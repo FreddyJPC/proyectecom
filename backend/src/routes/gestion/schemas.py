@@ -25,6 +25,18 @@ class SolicitudSchema(Schema):
     total = fields.Str(allow_none=True)
     proveedor = fields.Str(allow_none=True)
     tiene_pedido = fields.Bool(data_key="tienePedido")
+    # La venta ligada (solo si ya hay un pedido cerrado) y lo que se puede hacer con ella.
+    venta_id = fields.Int(data_key="ventaId", allow_none=True)
+    venta_estado = fields.Str(data_key="ventaEstado", allow_none=True)
+    venta_cobrada_en = fields.Str(data_key="ventaCobradaEn", allow_none=True)
+    venta_cobrada_por = fields.Str(data_key="ventaCobradaPor", allow_none=True)
+    venta_nota_cobro = fields.Str(data_key="ventaNotaCobro", allow_none=True)
+    venta_cancelada_en = fields.Str(data_key="ventaCanceladaEn", allow_none=True)
+    venta_cancelada_por = fields.Str(data_key="ventaCanceladaPor", allow_none=True)
+    venta_motivo_cancelacion = fields.Str(data_key="ventaMotivoCancelacion", allow_none=True)
+    puede_cobrar = fields.Bool(data_key="puedeCobrar")
+    puede_deshacer_cobro = fields.Bool(data_key="puedeDeshacerCobro")
+    puede_cancelar = fields.Bool(data_key="puedeCancelar")
 
 
 class AtenderInputSchema(Schema):

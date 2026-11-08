@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.integrations.telegram import get_telegram_notifier
+from src.routes.ventas.reglas import acciones_disponibles
 
 from .repository import ResultadoUpsert, SolicitudGestionRepository
 from .tipos import ESTADOS, tipo as tipo_de
@@ -103,6 +104,10 @@ class GestionService:
     def _a_dto(fila: Dict[str, Any]) -> Dict[str, Any]:
         tipo = tipo_de(fila["tipo"])
         total = fila.get("venta_total")
+        # Lo que se puede hacer con la venta (cobrar, cancelar…) lo decide el código, no la pantalla.
+        acciones = acciones_disponibles(
+            {"estado": fila.get("venta_estado"), "cobrada_en": fila.get("venta_cobrada_en"), "proveedor_cierre": fila.get("proveedor_cierre")}
+        ) if fila.get("venta_id") is not None else {"puede_cobrar": False, "puede_deshacer_cobro": False, "puede_cancelar": False}
         return {
             "id": fila["id"],
             "conversacion_id": fila["conversacion_id"],
@@ -127,4 +132,13 @@ class GestionService:
             "total": f"{total:.2f}" if total is not None else None,
             "proveedor": fila.get("proveedor_nombre"),
             "tiene_pedido": fila.get("venta_id") is not None,
+            "venta_id": fila.get("venta_id"),
+            "venta_estado": fila.get("venta_estado"),
+            "venta_cobrada_en": _iso(fila.get("venta_cobrada_en")),
+            "venta_cobrada_por": fila.get("venta_cobrada_por"),
+            "venta_nota_cobro": fila.get("venta_nota_cobro"),
+            "venta_cancelada_en": _iso(fila.get("venta_cancelada_en")),
+            "venta_cancelada_por": fila.get("venta_cancelada_por"),
+            "venta_motivo_cancelacion": fila.get("venta_motivo_cancelacion"),
+            **acciones,
         }

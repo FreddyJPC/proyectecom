@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { FilterChips, type Chip } from "@/components/app/filter-chips";
 import { ListSkeleton } from "@/components/app/list-skeleton";
 import { PageHeader } from "@/components/app/page-header";
+import { useRefrescarContadores } from "@/components/escaladas-context";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import type { Solicitud } from "@/types/gestion";
@@ -29,9 +30,11 @@ export default function GestionPage() {
     { value: "atendida", label: "Atendidas" },
   ];
 
-  const alAtender = () => {
+  const refrescarMenu = useRefrescarContadores();
+  const alCambiar = () => {
     recargar();
     pendientes.recargar();
+    refrescarMenu(); // el contador rojo del menú también, sin esperar al siguiente poll
   };
 
   return (
@@ -69,7 +72,7 @@ export default function GestionPage() {
         <ul className="grid gap-3 lg:grid-cols-2">
           {data.map((s) => (
             <li key={s.id}>
-              <SolicitudCard solicitud={s} onAtendida={alAtender} />
+              <SolicitudCard solicitud={s} onCambio={alCambiar} />
             </li>
           ))}
         </ul>
