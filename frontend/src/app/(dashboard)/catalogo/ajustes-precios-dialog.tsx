@@ -4,10 +4,12 @@ import { Loader2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { InfoEjemplo, InfoAviso, InfoButton } from "@/components/app/info-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -103,10 +105,17 @@ export function AjustesPreciosDialog({ trigger, onGuardado }: { trigger: ReactNo
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Ajustes de precios</DialogTitle>
-          <DialogDescription>
-            Son los números con los que la app recomienda precios (y los topes de uso de la IA). Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.
-          </DialogDescription>
+          <div className="flex items-center gap-1 pr-8">
+            <DialogTitle>Ajustes de precios</DialogTitle>
+            <InfoButton titulo="Ajustes de precios">
+              <p>Son los números con los que la app recomienda precios, y los topes de uso de la IA.</p>
+              <InfoAviso>
+                <p>Revísalos con los datos reales de tu negocio: si no son correctos, las recomendaciones tampoco lo serán.</p>
+              </InfoAviso>
+              <p>Valen para todos los productos. El costo de envío de un producto en particular se cambia en la sección «Envío» de su ficha.</p>
+            </InfoButton>
+          </div>
+          <DialogDescription>Los números con los que la app recomienda precios y limita el uso de la IA.</DialogDescription>
         </DialogHeader>
 
         {cargando ? (
@@ -176,7 +185,7 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
     <form onSubmit={guardar} noValidate>
       {!ajustes.confirmado && (
         <p role="note" className="mb-4 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
-          Todavía no has guardado estos ajustes: lo que ves son valores de partida. Guárdalos (aunque no cambies nada) para confirmar que los revisaste.
+          Son valores de partida. Revísalos y guárdalos (aunque no cambies nada) para confirmarlos.
         </p>
       )}
 
@@ -185,7 +194,14 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
           id="envioEstimado"
           label="Costo de envío estimado (USD)"
           error={errores.envioEstimado}
-          ayuda="Rocketfy no cotiza el envío antes de vender. Usa un promedio de lo que te cobran por tus envíos (lo ves en el panel de Rocketfy)."
+          ayuda="Un promedio de lo que te cobran por envío."
+          info={
+            <InfoButton titulo="Costo de envío estimado">
+              <p>Rocketfy no cotiza el envío antes de vender, así que la app usa un valor estimado para calcular tu precio mínimo y tu margen.</p>
+              <p>Pon un promedio de lo que te cobran por tus envíos: lo ves en el panel de Rocketfy.</p>
+              <p>Si un producto pesa mucho o poco, anota su flete propio en su ficha (sección «Envío»): ese número reemplaza a este estimado solo para ese producto.</p>
+            </InfoButton>
+          }
         >
           <Input
             id="envioEstimado"
@@ -210,7 +226,7 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
                   a <strong className="tabular">{formatMoney(calibracion.maximo)}</strong> (mediana <span className="tabular">{formatMoney(calibracion.mediana)}</span>)
                 </>
               )}
-              . Es orientativo: depende del destino y del peso.
+              . Es orientativo.
             </p>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => poner("envioEstimado", calibracion.mediana)}>
               Usar {formatMoney(calibracion.mediana)}
@@ -223,7 +239,15 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
             id="margenMinimoPct"
             label="Margen mínimo (%)"
             error={errores.margenMinimoPct}
-            ayuda="Lo menos que aceptas ganar, como % del precio. Con 25 %, de cada $100 que cobras te quedan $25."
+            ayuda="Como % del precio."
+            info={
+              <InfoButton titulo="Margen mínimo">
+                <p>Lo menos que aceptas ganar por una venta, como porcentaje del precio. Con él se calcula el precio mínimo para publicar.</p>
+                <InfoEjemplo>
+                  <p>Con un margen mínimo de 25 %, de cada $100 que cobras te quedan $25 de ganancia.</p>
+                </InfoEjemplo>
+              </InfoButton>
+            }
           >
             <Input
               id="margenMinimoPct"
@@ -236,7 +260,18 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
               className="tabular max-w-32"
             />
           </Campo>
-          <Campo id="margenObjetivoPct" label="Margen objetivo (%)" error={errores.margenObjetivoPct} ayuda="Lo que quieres ganar normalmente. Es el precio «Recomendado».">
+          <Campo
+            id="margenObjetivoPct"
+            label="Margen objetivo (%)"
+            error={errores.margenObjetivoPct}
+            ayuda="Como % del precio."
+            info={
+              <InfoButton titulo="Margen objetivo">
+                <p>Lo que quieres ganar normalmente. Con este margen se calcula el precio «Recomendado».</p>
+                <p>No puede ser menor que el margen mínimo.</p>
+              </InfoButton>
+            }
+          >
             <Input
               id="margenObjetivoPct"
               inputMode="decimal"
@@ -255,7 +290,12 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
             id="otrosCostosFijos"
             label="Otros costos por unidad (USD)"
             error={errores.otrosCostosFijos}
-            ayuda="Empaque, etiquetas u otro gasto fijo por cada unidad vendida. 0 si no aplica."
+            ayuda="0 si no aplica."
+            info={
+              <InfoButton titulo="Otros costos por unidad">
+                <p>Empaque, etiquetas u otro gasto fijo por cada unidad vendida. Se suma al costo del producto al calcular tu precio mínimo y tu margen.</p>
+              </InfoButton>
+            }
           >
             <Input
               id="otrosCostosFijos"
@@ -272,7 +312,13 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
             id="otrosCostosPct"
             label="Otros costos (% del precio)"
             error={errores.otrosCostosPct}
-            ayuda="Comisiones o impuestos que dependen del precio. 0 si no aplica."
+            ayuda="0 si no aplica."
+            info={
+              <InfoButton titulo="Otros costos como % del precio">
+                <p>Comisiones o impuestos que dependen del precio de venta (por ejemplo, la comisión de un medio de pago).</p>
+                <p>Junto con el margen objetivo deben sumar menos de 100 %.</p>
+              </InfoButton>
+            }
           >
             <Input
               id="otrosCostosPct"
@@ -287,21 +333,30 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
           </Campo>
         </div>
 
-        <label htmlFor="terminado99" className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3">
+        <div className="flex min-h-12 items-start gap-3 rounded-lg border bg-card p-3">
           <Checkbox id="terminado99" checked={form.terminado99} onCheckedChange={(c) => poner("terminado99", c === true)} className="mt-0.5" />
-          <span className="min-w-0">
-            <span className="block text-sm font-medium">Terminar los precios en .99</span>
-            <span className="block text-xs text-muted-foreground">Los precios recomendados suben siempre al siguiente .99 (nunca bajan, para no recortar tu margen).</span>
-          </span>
-        </label>
+          <Label htmlFor="terminado99" className="block min-w-0 flex-1 cursor-pointer text-sm font-medium leading-snug">
+            Terminar los precios en .99
+          </Label>
+          <InfoButton titulo="Terminar los precios en .99">
+            <p>Los precios recomendados suben siempre al siguiente .99 (por ejemplo, de $14.20 a $14.99).</p>
+            <p>Nunca bajan, para no recortar tu margen.</p>
+          </InfoButton>
+        </div>
 
         <div className="grid gap-2 border-t pt-5">
-          <h3 className="text-sm font-semibold">Uso de la IA</h3>
+          <div className="flex items-center gap-1">
+            <h3 className="text-sm font-semibold">Uso de la IA</h3>
+            <InfoButton titulo="Uso de la IA">
+              <p>Cada borrador que pides con «Redactar con IA» y cada mensaje que envías en «Probar con Victoria» llaman a la IA igual que un mensaje real, y eso tiene costo.</p>
+              <p>Aquí pones el máximo que quieres usar al día. Los contadores se reinician a medianoche (hora de Ecuador).</p>
+            </InfoButton>
+          </div>
           <Campo
             id="topeRedaccionesDia"
             label="Borradores de IA por día"
             error={errores.topeRedaccionesDia}
-            ayuda="Cada borrador que pides usa la IA, y eso tiene costo. Pon el máximo que quieres pedir al día; se reinicia a medianoche (hora de Ecuador)."
+            ayuda="De 1 a 200."
           >
             <Input
               id="topeRedaccionesDia"
@@ -318,7 +373,7 @@ function FormularioAjustes({ ajustes, onGuardado }: { ajustes: AjustesNegocio; o
             id="topePruebasDia"
             label="Mensajes de prueba con Victoria por día"
             error={errores.topePruebasDia}
-            ayuda="Cada mensaje que envías en «Probar con Victoria» llama a la IA igual que uno real, y eso tiene costo. Se reinicia a medianoche (hora de Ecuador)."
+            ayuda="De 1 a 1000."
           >
             <Input
               id="topePruebasDia"

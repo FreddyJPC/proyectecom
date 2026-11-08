@@ -121,6 +121,10 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
   ≥ 40 px; nada puede quedar fuera de pantalla; respetar la barra inferior
   (`pb-28`) y el área segura.
 - Todo texto visible en **español**; dinero siempre como string (nunca `float`).
+- **Pantalla limpia, explicación en el botón ⓘ** (`InfoButton`, pedido por Freddy el 2026-11-08): en la pantalla
+  solo van títulos, etiquetas cortas, la unidad y el rango, errores y avisos que piden una acción. El «para qué sirve»,
+  el «cómo funciona», los ejemplos y los avisos que solo informan van en un cuadro ⓘ (`PageHeader info`,
+  `SectionCard info`, `Campo info`). Una descripción visible = una línea. Ver `docs/CONCEPTOS_TECNICOS.md` §42.
 - Cada pantalla necesita estados de carga, vacío y error (con "Reintentar").
 - Antes de entregar cambios de UI: `npm run lint`, `npx next build` y la
   auditoría de accesibilidad de `frontend/tools/ui-preview/` (`node axe.mjs`)

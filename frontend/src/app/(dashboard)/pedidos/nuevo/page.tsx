@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { InfoButton } from "@/components/app/info-button";
 import { PageHeader } from "@/components/app/page-header";
 import { UbicacionSelector } from "@/components/ubicacion-selector";
 import { Button } from "@/components/ui/button";
@@ -171,11 +172,20 @@ function NuevoPedidoFormulario() {
         title="Nuevo pedido"
         description={
           <>
-            Crea un pedido a mano en Rocketfy: una venta cerrada fuera de WhatsApp o una que Victoria no pudo completar.{" "}
+            Un pedido a mano en Rocketfy.{" "}
             <span className="whitespace-nowrap text-xs">
               ID interno <span className="tabular" suppressHydrationWarning>{idLocal}</span>
             </span>
           </>
+        }
+        info={
+          <InfoButton titulo="Nuevo pedido a mano">
+            <p>Crea un pedido directamente en Rocketfy: sirve para una venta cerrada fuera de WhatsApp o para una que Victoria no pudo completar.</p>
+            <ul>
+              <li>La ciudad (cantón) se valida antes de enviar el pedido a Rocketfy.</li>
+              <li>El «ID interno» identifica este pedido en el sistema; evita que se cree dos veces si pulsas el botón más de una vez.</li>
+            </ul>
+          </InfoButton>
         }
       />
 
@@ -207,7 +217,7 @@ function NuevoPedidoFormulario() {
             </div>
           </Seccion>
 
-          <Seccion titulo="Entrega" descripcion="Dónde se entrega. La ciudad se valida antes de enviarla a Rocketfy.">
+          <Seccion titulo="Entrega" descripcion="Dónde se entrega.">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor="direccion">Dirección</Label>

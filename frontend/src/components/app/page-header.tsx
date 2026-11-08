@@ -5,12 +5,16 @@ import { cn } from "@/lib/utils";
 /** Encabezado estándar de página: título, descripción y acciones. Las
  * acciones van a la derecha del título; si son varias (p. ej. Modificar +
  * Rechazar) `accionesDebajoEnMovil` las baja a su propia fila en pantallas
- * chicas para no apretar el texto. */
+ * chicas para no apretar el texto.
+ *
+ * `info` es el botón ⓘ (`InfoButton`) con la explicación de TODA la página: ahí va lo largo; `description` se
+ * queda en una línea corta (qué es esta pantalla) o no se pone. */
 export function PageHeader({
   title,
   description,
   actions,
   badge,
+  info,
   accionesDebajoEnMovil,
   className,
 }: {
@@ -18,6 +22,7 @@ export function PageHeader({
   description?: ReactNode;
   actions?: ReactNode;
   badge?: ReactNode;
+  info?: ReactNode;
   accionesDebajoEnMovil?: boolean;
   className?: string;
 }) {
@@ -32,6 +37,7 @@ export function PageHeader({
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold tracking-tight text-balance sm:text-2xl">{title}</h1>
+          {info}
           {badge}
         </div>
         {description && <p className="max-w-prose text-sm text-muted-foreground">{description}</p>}

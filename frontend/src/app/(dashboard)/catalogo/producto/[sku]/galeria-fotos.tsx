@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
+import { InfoAviso, InfoButton } from "@/components/app/info-button";
 import { SectionCard } from "@/components/app/section-card";
 import {
   AlertDialog,
@@ -179,14 +180,35 @@ export function GaleriaFotos({ detalle, onCambio }: { detalle: ProductoBotDetall
   }
 
   return (
-    <SectionCard titulo="Fotos del producto" descripcion="Las que Victoria manda por WhatsApp cuando el cliente pide ver el producto.">
+    <SectionCard
+      titulo="Fotos del producto"
+      descripcion="Las que Victoria manda por WhatsApp."
+      info={
+        <InfoButton titulo="Fotos del producto">
+          <p>Son las fotos que Victoria manda por WhatsApp cuando el cliente pide ver el producto. La primera es la principal.</p>
+          <ul>
+            <li>Victoria manda unas pocas fotos cada vez y, si el cliente quiere más, sigue con las siguientes.</li>
+            <li>
+              Cuántas manda cada vez se cambia en{" "}
+              <Link href="/parametros">Parámetros → «Fotos por envío»</Link>.
+            </li>
+            <li>Al subirlas, se reducen y se convierten a JPG para que pesen poco.</li>
+            <li>Puedes tener hasta {MAXIMO_FOTOS} fotos por producto.</li>
+          </ul>
+          <p>Si el producto no tiene fotos y un cliente las pide, Victoria le dice que por ahora no hay imágenes disponibles.</p>
+          <InfoAviso>
+            <p>El envío de fotos por WhatsApp debe estar encendido en el parámetro «Enviar fotos del producto».</p>
+          </InfoAviso>
+        </InfoButton>
+      }
+    >
       <div className="space-y-4 p-4 sm:p-5">
         {fotos.length === 0 ? (
           <div className="space-y-3 rounded-lg bg-muted/50 p-3">
             <p className="text-sm text-muted-foreground">
               {detalle.imagenUrl && detalle.proveedor === "rocketfy"
                 ? "Todavía no subiste fotos. Mientras tanto Victoria usa la foto de Rocketfy:"
-                : "Este producto todavía no tiene fotos. Si un cliente las pide, Victoria le dice que por ahora no hay imágenes disponibles."}
+                : "Este producto todavía no tiene fotos."}
             </p>
             {detalle.imagenUrl && detalle.proveedor === "rocketfy" && !imagenFalla && (
               // eslint-disable-next-line @next/next/no-img-element -- la imagen viene de un CDN externo de Rocketfy
@@ -218,7 +240,7 @@ export function GaleriaFotos({ detalle, onCambio }: { detalle: ProductoBotDetall
               {trabajando ?? "Subir fotos"}
             </Button>
             <p className="text-xs text-muted-foreground">
-              {fotos.length} de {MAXIMO_FOTOS} fotos. Se reducen y se convierten a JPG antes de subirlas.
+              {fotos.length} de {MAXIMO_FOTOS} fotos.
             </p>
           </div>
         )}
@@ -229,14 +251,6 @@ export function GaleriaFotos({ detalle, onCambio }: { detalle: ProductoBotDetall
             {error}
           </p>
         )}
-
-        <p className="text-xs text-muted-foreground">
-          Victoria manda unas pocas fotos cada vez y, si el cliente quiere más, sigue con las siguientes (cuántas, en{" "}
-          <Link href="/parametros" className="underline underline-offset-2 hover:text-foreground">
-            Parámetros → «Fotos por envío»
-          </Link>
-          ). El envío de fotos por WhatsApp debe estar encendido en el parámetro «Enviar fotos del producto».
-        </p>
       </div>
     </SectionCard>
   );

@@ -75,7 +75,7 @@ export function MisProductosTab({
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-prose text-sm text-muted-foreground">
-          Aquí están los productos que preparaste para que Victoria los venda, de Rocketfy y propios. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados. Cada hora se actualizan costo y stock de los de Rocketfy, y un producto que se queda sin stock se pausa solo.
+          <strong className="font-medium text-foreground">Victoria solo ve los que están «A la venta».</strong>
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm">
@@ -118,7 +118,7 @@ export function MisProductosTab({
             <EmptyState
               icon={PackageOpen}
               title="Aún no preparaste ningún producto"
-              description="Pulsa «Preparar para vender» en un producto de Rocketfy del Catálogo, o publica uno tuyo. Se crea como borrador y Victoria no lo ve hasta que lo publiques."
+              description="Prepara un producto de Rocketfy desde el Catálogo o publica uno tuyo."
               action={
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button onClick={onIrAlCatalogo}>Ir al Catálogo</Button>

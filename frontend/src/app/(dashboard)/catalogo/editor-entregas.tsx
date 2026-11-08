@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useId } from "react";
 
+import { InfoAviso, InfoButton, InfoEjemplo } from "@/components/app/info-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -238,7 +239,7 @@ function Opcion({
                   aria-describedby={`${id}-lugares-ayuda`}
                 />
                 <p id={`${id}-lugares-ayuda`} className="text-xs text-muted-foreground">
-                  Separados por coma. Se comparan con lo que diga el cliente sin importar mayúsculas ni tildes.
+                  Separados por coma.
                 </p>
               </div>
             )}
@@ -327,23 +328,40 @@ export function EditorEntregas({
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
         <Switch id={`${id}-incluido`} checked={envioIncluido} disabled={deshabilitado} onCheckedChange={onEnvioIncluido} className="mt-0.5" aria-describedby={`${id}-incluido-ayuda`} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <Label htmlFor={`${id}-incluido`} className="text-sm font-medium">
             El envío ya está incluido en el precio
           </Label>
           <p id={`${id}-incluido-ayuda`} className="text-xs text-muted-foreground">
-            {envioIncluido
-              ? "El cliente paga solo el precio del producto; el envío sale de tu ganancia. Es lo normal en Rocketfy."
-              : "El cliente paga el precio más el envío que elija. Defínelo abajo: Victoria le ofrece solo las opciones que le aplican según su cantón."}
+            {envioIncluido ? "El cliente paga solo el precio del producto." : "El cliente paga el precio más el envío que elija."}
           </p>
         </div>
+        <InfoButton titulo="Envío incluido o cobrado aparte">
+          <p>
+            <strong>Incluido en el precio:</strong> el cliente paga solo el precio del producto y el envío sale de tu ganancia. Es lo normal en Rocketfy.
+          </p>
+          <p>
+            <strong>Cobrado aparte:</strong> el cliente paga el precio más el envío que elija. Tú defines las opciones (envío a domicilio o retiro, con su costo y a quién se le ofrece) y Victoria le ofrece solo las que le aplican según su cantón y provincia.
+          </p>
+          <p>Cada producto tiene su propio envío: lo que configures aquí no cambia los demás productos.</p>
+        </InfoButton>
       </div>
 
       {envioIncluido ? (
         <div className="grid max-w-sm gap-1.5">
-          <Label htmlFor={`${id}-flete`}>
-            Lo que te cuesta el flete de este producto ($) <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor={`${id}-flete`}>
+              Costo del flete ($) <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <InfoButton titulo="Costo del flete de este producto">
+              <p>
+                Lo que te cuesta a ti enviar <strong>este</strong> producto. Un producto pesado cuesta más de enviar que uno liviano.
+              </p>
+              <p>
+                Si lo anotas, el precio mínimo y tu margen usan este número en vez del envío estimado general de «Ajustes de precios». Si lo dejas vacío, se usa el estimado general.
+              </p>
+            </InfoButton>
+          </div>
           <Input
             id={`${id}-flete`}
             inputMode="decimal"
@@ -352,12 +370,8 @@ export function EditorEntregas({
             placeholder="Vacío = usar el envío estimado general"
             onChange={(e) => onCostoFlete(e.target.value)}
             aria-invalid={Boolean(errorFlete)}
-            aria-describedby={`${id}-flete-ayuda`}
             className="tabular"
           />
-          <p id={`${id}-flete-ayuda`} className="text-xs text-muted-foreground">
-            Un producto pesado cuesta más de enviar que uno liviano. Si lo anotas, el precio mínimo y tu margen usan este número en vez del envío estimado general de «Ajustes de precios».
-          </p>
           {errorFlete && (
             <p role="alert" className="text-xs font-medium text-status-danger-ink">
               {errorFlete}
@@ -366,9 +380,38 @@ export function EditorEntregas({
         </div>
       ) : (
         <div className="space-y-3">
+          <div className="flex items-center gap-1">
+            <h3 className="text-sm font-medium">Opciones de entrega</h3>
+            <InfoButton titulo="Opciones de entrega">
+              <p>Cada opción es una forma de entregar este producto: un envío a domicilio o un retiro, con lo que paga el cliente.</p>
+              <ul>
+                <li>
+                  <strong>A quién se le ofrece:</strong> unos cantones, unas provincias o el resto del país. Se comparan con lo que diga el cliente sin importar mayúsculas ni tildes.
+                </li>
+                <li>
+                  <strong>Lo que te cuesta a ti:</strong> es opcional y sirve para calcular tu ganancia real.
+                </li>
+                <li>
+                  <strong>Activa o pausada:</strong> una opción pausada se conserva pero Victoria no la ofrece.
+                </li>
+                <li>
+                  <strong>El orden:</strong> puedes subir o bajar cada opción con las flechas.
+                </li>
+              </ul>
+              <p>
+                Victoria le ofrece al cliente solo las opciones que le aplican según su cantón y provincia. Un envío «al resto del país» se ofrece solo si ninguna otra cubre su destino.
+              </p>
+              <InfoEjemplo>
+                <p>«Envío dentro de Cuenca» $2 · «Retiro en mi local» $0 · «Envío al resto del país» $5</p>
+              </InfoEjemplo>
+              <InfoAviso>
+                <p>Hace falta al menos una opción para poder publicar el producto. Puedes tener hasta {MAXIMO_OPCIONES}.</p>
+              </InfoAviso>
+            </InfoButton>
+          </div>
           {entregas.length === 0 ? (
             <p className="rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
-              Todavía no hay opciones de entrega. Agrega al menos una para poder publicar el producto: por ejemplo «Envío dentro de Cuenca $2», «Retiro en mi local» o «Envío al resto del país $5».
+              Todavía no hay opciones de entrega. Agrega al menos una para poder publicar el producto.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -395,11 +438,6 @@ export function EditorEntregas({
               <Plus /> Agregar retiro
             </Button>
           </div>
-          {entregas.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Victoria le ofrece al cliente solo las opciones que le aplican según su cantón y provincia. Un envío «al resto del país» se ofrece solo si ninguna otra cubre su destino.
-            </p>
-          )}
         </div>
       )}
     </div>

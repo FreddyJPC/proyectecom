@@ -7,16 +7,20 @@ import { cn } from "@/lib/utils";
 
 /** Tarjeta con título y enlace "Ver todo": el bloque básico de paneles. El
  * contenido va a sangre completa (sin padding) para que las listas lleguen
- * hasta el borde; quien lo use decide el espaciado interno. */
+ * hasta el borde; quien lo use decide el espaciado interno.
+ *
+ * `info` es el botón ⓘ (`InfoButton`) con la explicación de esta sección; `descripcion` se queda en una línea corta. */
 export function SectionCard({
   titulo,
   descripcion,
+  info,
   enlace,
   children,
   className,
 }: {
   titulo: string;
   descripcion?: string;
+  info?: ReactNode;
   enlace?: { href: string; label?: string };
   children: ReactNode;
   className?: string;
@@ -25,7 +29,10 @@ export function SectionCard({
     <Card className={cn("gap-0 py-0", className)}>
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3.5 sm:px-5">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{titulo}</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="text-sm font-semibold">{titulo}</h2>
+            {info}
+          </div>
           {descripcion && <p className="text-xs text-muted-foreground">{descripcion}</p>}
         </div>
         {enlace && (

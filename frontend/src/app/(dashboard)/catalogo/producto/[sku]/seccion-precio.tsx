@@ -2,6 +2,7 @@
 
 import { Info, Settings2, TriangleAlert } from "lucide-react";
 
+import { InfoButton } from "@/components/app/info-button";
 import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,15 +68,38 @@ export function SeccionPrecio({
   );
 
   return (
-    <SectionCard titulo="Precio" descripcion="Lo que pagará el cliente por cada unidad, y cuánto te queda a ti.">
+    <SectionCard
+      titulo="Precio"
+      descripcion="Lo que paga el cliente y lo que te queda."
+      info={
+        <InfoButton titulo="Cómo se calcula el precio">
+          <p>
+            Aquí defines <strong>lo que pagará el cliente por cada unidad</strong> y ves cuánto te queda a ti. El total del pedido lo calcula el sistema con este precio;
+            Victoria nunca hace la cuenta.
+          </p>
+          <h3>De dónde salen los números</h3>
+          <p>
+            Lo que te queda por unidad es el precio menos el costo del producto, el envío estimado y tus otros costos. Los precios recomendados salen de tus ajustes de
+            precios.
+          </p>
+          {data && (
+            <p>
+              Ahora mismo se calcula con envío {formatMoney(data.envioEstimado)}, margen mínimo {formatPct(data.margenMinimoPct)} y objetivo {formatPct(data.margenObjetivoPct)}
+              {Number(data.otrosCostosFijos) > 0 && <>, otros costos {formatMoney(data.otrosCostosFijos)} por unidad</>}
+              {Number(data.otrosCostosPct) > 0 && <> y {formatPct(data.otrosCostosPct)} del precio</>}.
+            </p>
+          )}
+          <p>Puedes cambiar esos valores en «Ajustes de precios».</p>
+        </InfoButton>
+      }
+    >
       <div className="space-y-5 p-4 sm:p-5">
         {data && !data.ajustesConfirmados && (
           <div role="note" className="flex items-start gap-2.5 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
             <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
             <div className="min-w-0 space-y-2">
               <p>
-                <strong className="font-semibold">Estos cálculos usan valores de partida</strong> (envío {formatMoney(data.envioEstimado)}, margen {formatPct(data.margenMinimoPct)} / {formatPct(data.margenObjetivoPct)}), no los de tu negocio.
-                Revísalos y guárdalos para que las recomendaciones sean confiables.
+                <strong className="font-semibold">Estos cálculos usan valores de partida</strong>, no los de tu negocio. Revísalos para que las recomendaciones sean confiables.
               </p>
               <AjustesPreciosDialog
                 trigger={
@@ -96,11 +120,18 @@ export function SeccionPrecio({
           id="precio"
           label="Precio de venta (USD)"
           error={errorPrecio}
-          ayuda={
-            <>
-              {data && <>Mínimo para poder publicar: <span className="tabular font-medium text-foreground">{formatMoney(data.piso)}</span>. </>}
-              El total del pedido lo calcula el sistema con este precio; Victoria nunca hace la cuenta.
-            </>
+          ayuda={data ? <>Mínimo para publicar: <span className="tabular font-medium text-foreground">{formatMoney(data.piso)}</span></> : undefined}
+          info={
+            <InfoButton titulo="Precio de venta">
+              <p>
+                Lo que paga el cliente por cada unidad. El total del pedido lo calcula el sistema con este precio; Victoria nunca hace la cuenta.
+              </p>
+              {data && (
+                <p>
+                  El mínimo para poder publicar es <strong>{formatMoney(data.piso)}</strong>: por debajo de eso no se puede vender sin perder.
+                </p>
+              )}
+            </InfoButton>
           }
         >
           <div className="flex flex-wrap items-center gap-2">
@@ -114,7 +145,7 @@ export function SeccionPrecio({
               value={precio}
               onChange={(e) => onPrecio(e.target.value)}
               aria-invalid={Boolean(errorPrecio)}
-              aria-describedby={descripcionDe("precio", true, errorPrecio)}
+              aria-describedby={descripcionDe("precio", Boolean(data), errorPrecio)}
               className="tabular max-w-40 text-lg font-semibold"
             />
             {sugerido && montoPrecio !== sugerido && (
@@ -168,13 +199,31 @@ export function SeccionPrecio({
                     <strong className="tabular font-semibold">{formatMoney(ev.ganancia)}</strong>
                   </>
                 )}{" "}
-                ({formatPct(ev.margenPct)} del precio), ya descontados el costo, el envío estimado y tus otros costos.
+                ({formatPct(ev.margenPct)}).
               </p>
             )}
 
             {data.niveles.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Precios recomendados</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-sm font-medium">Precios recomendados</p>
+                  <InfoButton titulo="Precios recomendados">
+                    <ul>
+                      <li>
+                        <strong>Mínimo:</strong> el precio con el que ganas justo tu margen mínimo ({formatPct(data.margenMinimoPct)}).
+                      </li>
+                      <li>
+                        <strong>Recomendado:</strong> el precio con el que ganas tu margen objetivo ({formatPct(data.margenObjetivoPct)}).
+                      </li>
+                      {data.niveles.some((n) => n.clave === "premium") && (
+                        <li>
+                          <strong>Premium:</strong> el precio sugerido por Rocketfy.
+                        </li>
+                      )}
+                    </ul>
+                    <p>Tócalos para usarlos como precio de venta; tú siempre decides el precio final.</p>
+                  </InfoButton>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {data.niveles.map((n) => {
                     const seleccionado = montoPrecio === n.precio;
@@ -198,15 +247,6 @@ export function SeccionPrecio({
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  <strong className="font-medium">Mínimo</strong>: tu margen mínimo ({formatPct(data.margenMinimoPct)}). <strong className="font-medium">Recomendado</strong>: tu margen objetivo ({formatPct(data.margenObjetivoPct)}).
-                  {data.niveles.some((n) => n.clave === "premium") && (
-                    <>
-                      {" "}
-                      <strong className="font-medium">Premium</strong>: el precio sugerido por Rocketfy.
-                    </>
-                  )}
-                </p>
               </div>
             )}
 
@@ -228,7 +268,13 @@ export function SeccionPrecio({
           label="Precio de la competencia (USD)"
           opcional
           error={errorCompetencia}
-          ayuda="Si miraste cuánto cobra otra tienda por lo mismo, anótalo para compararlo. La app no lo busca ni lo inventa, y Victoria no lo ve."
+          info={
+            <InfoButton titulo="Precio de la competencia">
+              <p>
+                Si miraste cuánto cobra otra tienda por lo mismo, anótalo para compararlo con el tuyo. La app no lo busca ni lo inventa, y Victoria no lo ve.
+              </p>
+            </InfoButton>
+          }
         >
           <Input
             id="precioCompetencia"
@@ -237,23 +283,12 @@ export function SeccionPrecio({
             value={competencia}
             onChange={(e) => onCompetencia(e.target.value)}
             aria-invalid={Boolean(errorCompetencia)}
-            aria-describedby={descripcionDe("precioCompetencia", true, errorCompetencia)}
+            aria-describedby={descripcionDe("precioCompetencia", false, errorCompetencia)}
             className="tabular max-w-40"
           />
         </Campo>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <p className="min-w-0 text-xs text-muted-foreground">
-            {data ? (
-              <>
-                Calculado con envío {formatMoney(data.envioEstimado)}, margen mínimo {formatPct(data.margenMinimoPct)} y objetivo {formatPct(data.margenObjetivoPct)}
-                {Number(data.otrosCostosFijos) > 0 && <>, otros costos {formatMoney(data.otrosCostosFijos)} por unidad</>}
-                {Number(data.otrosCostosPct) > 0 && <> y {formatPct(data.otrosCostosPct)} del precio</>}.
-              </>
-            ) : (
-              "Los precios recomendados salen de tus ajustes de precios."
-            )}
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
           <AjustesPreciosDialog
             trigger={botonAjustes}
             onGuardado={() => {

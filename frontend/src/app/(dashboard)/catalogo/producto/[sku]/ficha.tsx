@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { InfoButton } from "@/components/app/info-button";
 import { PageHeader } from "@/components/app/page-header";
 import { SectionCard } from "@/components/app/section-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -23,6 +24,7 @@ import { SelectorCategoria } from "../../selector-categoria";
 import { Campo, descripcionDe } from "./campo";
 import { GaleriaFotos } from "./galeria-fotos";
 import { ProbarConVictoria } from "./probar-victoria";
+import { InfoCategoria, InfoControlaStock, InfoCostoPropio, InfoDescripcion, InfoMaxUnidades, InfoMetodosPago, InfoPreguntasFrecuentes, InfoTemasNoResponder, InfoTiempoEntrega, InfoVariantes } from "./info-campos";
 import { RedactarIADialog } from "./redactar-ia-dialog";
 import { DatosProductoPropio, DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
 import { SeccionEnvio, firmaDelEnvio } from "./seccion-envio";
@@ -229,13 +231,24 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
             {propio && <StatusBadge label="Producto propio" variant="info" />}
           </>
         }
+        info={
+          <InfoButton titulo={`Qué significa «${estado.label}»`}>
+            <p>{estado.explicacion}</p>
+            {propio && (
+              <p>
+                Es un <strong>producto propio</strong>: no está en Rocketfy. Cuando un cliente decide comprar, el pedido no se crea solo en Rocketfy: te llega a ti en
+                «Por gestionar» para que lo gestiones.
+              </p>
+            )}
+          </InfoButton>
+        }
         description={
           <>
-            <span className="tabular">{detalle.sku}</span> · {estado.explicacion}
+            <span className="tabular">{detalle.sku}</span>
             {vendiendo && detalle.publicadoEn && (
               <>
-                {" "}
-                Publicado {detalle.publicadoPor ? `por ${detalle.publicadoPor} ` : ""}el {formatFechaHora(detalle.publicadoEn)}.
+                {" · "}
+                Publicado {detalle.publicadoPor ? `por ${detalle.publicadoPor} ` : ""}el {formatFechaHora(detalle.publicadoEn)}
               </>
             )}
           </>
@@ -301,17 +314,32 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
               onAjustesGuardados={onCambio}
             />
 
-            <SectionCard titulo="Contenido para Victoria" descripcion="Todo lo de esta sección lo lee Victoria y se lo cuenta al cliente. Si algo no está aquí, ella no lo inventa.">
+            <SectionCard
+              titulo="Contenido para Victoria"
+              descripcion="Lo que Victoria lee y le cuenta al cliente."
+              info={
+                <InfoButton titulo="Contenido para Victoria">
+                  <p>
+                    Todo lo de esta sección lo lee Victoria y <strong>se lo cuenta al cliente tal cual</strong>. Si algo no está aquí, ella no lo inventa: dice que no lo sabe y te
+                    pasa la conversación.
+                  </p>
+                  <p>Mientras más clara y verdadera sea la ficha, mejor vende Victoria.</p>
+                  {propio ? (
+                    <p>
+                      «Redactar con IA» parte de lo que dice Rocketfy del producto, y uno propio no está en Rocketfy: en estos productos escribes tú la ficha.
+                    </p>
+                  ) : (
+                    <p>
+                      «Redactar con IA» prepara un primer borrador con los datos de Rocketfy y tus notas; tú revisas y aceptas cada campo.
+                    </p>
+                  )}
+                </InfoButton>
+              }
+            >
               <div className="space-y-5 p-4 sm:p-5">
-                {propio ? (
-                  <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                    Redactar con IA parte de lo que dice Rocketfy del producto, y uno propio no está en Rocketfy: escribe tú la ficha. Mientras más clara y verdadera sea, mejor vende Victoria.
-                  </p>
-                ) : (
+                {!propio && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/50 p-3">
-                  <p className="min-w-0 text-sm text-muted-foreground">
-                    ¿Quieres un primer borrador? La IA lo redacta con los datos de Rocketfy y tus notas; tú revisas y aceptas cada campo.
-                  </p>
+                  <p className="min-w-0 text-sm font-medium">¿Quieres un primer borrador?</p>
                   <RedactarIADialog
                     sku={detalle.sku}
                     actuales={{
@@ -345,7 +373,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                 <Campo
                   id="descripcion"
                   label="Descripción"
-                  ayuda="Qué es, para qué sirve y qué incluye. Escribe solo lo que sabes que es cierto: Victoria lo repetirá tal cual."
+                  info={<InfoDescripcion />}
                   contador={{ actual: form.descripcion.length, maximo: LIMITE.descripcion }}
                 >
                   <Textarea
@@ -354,7 +382,6 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     value={form.descripcion}
                     maxLength={LIMITE.descripcion}
                     onChange={(e) => poner("descripcion", e.target.value)}
-                    aria-describedby="descripcion-ayuda"
                   />
                 </Campo>
 
@@ -362,7 +389,8 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                   id="variantes"
                   label="Variantes"
                   opcional
-                  ayuda="Colores, tallas o modelos disponibles, separados por comas."
+                  ayuda="Separadas por comas."
+                  info={<InfoVariantes />}
                   contador={{ actual: form.variantes.length, maximo: LIMITE.variantes }}
                 >
                   <Input
@@ -378,7 +406,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                   id="preguntasFrecuentes"
                   label="Preguntas frecuentes"
                   opcional
-                  ayuda="Escribe la pregunta y su respuesta. Así Victoria contesta con tu información y no con suposiciones."
+                  info={<InfoPreguntasFrecuentes />}
                   contador={{ actual: form.preguntasFrecuentes.length, maximo: LIMITE.preguntasFrecuentes }}
                 >
                   <Textarea
@@ -387,7 +415,6 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     value={form.preguntasFrecuentes}
                     maxLength={LIMITE.preguntasFrecuentes}
                     onChange={(e) => poner("preguntasFrecuentes", e.target.value)}
-                    aria-describedby="preguntasFrecuentes-ayuda"
                   />
                 </Campo>
 
@@ -395,7 +422,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                   id="temasNoResponder"
                   label="Temas que Victoria NO debe responder"
                   opcional
-                  ayuda="Cosas sobre las que no quieres que opine ni prometa nada (por ejemplo, garantías que no ofreces)."
+                  info={<InfoTemasNoResponder />}
                   contador={{ actual: form.temasNoResponder.length, maximo: LIMITE.temasNoResponder }}
                 >
                   <Textarea
@@ -404,7 +431,6 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     value={form.temasNoResponder}
                     maxLength={LIMITE.temasNoResponder}
                     onChange={(e) => poner("temasNoResponder", e.target.value)}
-                    aria-describedby="temasNoResponder-ayuda"
                   />
                 </Campo>
               </div>
@@ -415,7 +441,8 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                 <Campo
                   id="tiempoEntrega"
                   label="Tiempo de entrega"
-                  ayuda="Cómo se lo dice Victoria al cliente, por ejemplo: «2 a 4 días hábiles». Es obligatorio para publicar."
+                  ayuda="Por ejemplo: «2 a 4 días hábiles»."
+                  info={<InfoTiempoEntrega />}
                   contador={{ actual: form.tiempoEntrega.length, maximo: LIMITE.tiempoEntrega }}
                 >
                   <Input
@@ -431,7 +458,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                   id="maxUnidades"
                   label="Unidades máximas por pedido"
                   error={errores.maxUnidades}
-                  ayuda="Cuántas unidades puede comprar una persona en un solo pedido. Si pide más, Victoria le explica el máximo."
+                  info={<InfoMaxUnidades />}
                 >
                   <Input
                     id="maxUnidades"
@@ -442,13 +469,15 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     value={form.maxUnidades}
                     onChange={(e) => poner("maxUnidades", e.target.value)}
                     aria-invalid={Boolean(errores.maxUnidades)}
-                    aria-describedby={descripcionDe("maxUnidades", true, errores.maxUnidades)}
+                    aria-describedby={descripcionDe("maxUnidades", false, errores.maxUnidades)}
                     className="tabular w-28"
                   />
                 </Campo>
 
                 <fieldset className="grid gap-1.5">
-                  <legend className="mb-1.5 text-sm font-medium">Métodos de pago que acepta</legend>
+                  <legend className="mb-1.5 flex items-center gap-1 text-sm font-medium">
+                    Métodos de pago que acepta <InfoMetodosPago />
+                  </legend>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {METODOS_PAGO.map((m) => (
                       <label
@@ -480,16 +509,43 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
 
             <SectionCard
               titulo={propio ? "Categoría, costo y stock" : "Categoría"}
-              descripcion={propio ? "Para tus reportes y para llevar la cuenta de las unidades. Victoria no lee el costo." : "Para saber después qué tipo de producto te deja más."}
+              descripcion={propio ? "Para tus reportes y tu inventario." : "Para tus reportes."}
+              info={
+                <InfoButton titulo={propio ? "Categoría, costo y stock" : "Categoría"}>
+                  {propio ? (
+                    <>
+                      <p>
+                        Esta sección es <strong>para ti</strong>: la categoría y el costo alimentan tus reportes (qué tipo de producto te deja más) y el stock lleva la cuenta de
+                        las unidades.
+                      </p>
+                      <p>Victoria no lee el costo.</p>
+                    </>
+                  ) : (
+                    <p>La categoría sirve para saber después qué tipo de producto te deja más. Victoria no la usa con los clientes.</p>
+                  )}
+                </InfoButton>
+              }
             >
               <div className="space-y-5 p-4 sm:p-5">
-                <Campo id="categoria" label="Categoría" opcional ayuda="Calzado, ropa, electrónica… Crea las que necesites.">
-                  <SelectorCategoria id="categoria" valor={form.categoriaId} onCambio={(v) => poner("categoriaId", v)} describedBy="categoria-ayuda" />
+                <Campo
+                  id="categoria"
+                  label="Categoría"
+                  opcional
+                  info={<InfoCategoria />}
+                >
+                  <SelectorCategoria id="categoria" valor={form.categoriaId} onCambio={(v) => poner("categoriaId", v)} />
                 </Campo>
 
                 {propio && (
                   <>
-                    <Campo id="costoPropio" label="Lo que te cuesta ($)" opcional error={errores.costoPropio} ayuda="Por unidad. Con esto se calcula tu ganancia real en cada venta.">
+                    <Campo
+                      id="costoPropio"
+                      label="Lo que te cuesta ($)"
+                      opcional
+                      error={errores.costoPropio}
+                      ayuda="Por unidad."
+                      info={<InfoCostoPropio />}
+                    >
                       <Input
                         id="costoPropio"
                         inputMode="decimal"
@@ -504,19 +560,20 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
                       <Switch id="controlaStock" checked={form.controlaStock} onCheckedChange={(c) => poner("controlaStock", c)} className="mt-0.5" aria-describedby="controlaStock-ayuda" />
                       <div className="min-w-0">
-                        <label htmlFor="controlaStock" className="text-sm font-medium">
-                          Llevar la cuenta de las unidades
-                        </label>
+                        <div className="flex items-center gap-1">
+                          <label htmlFor="controlaStock" className="text-sm font-medium">
+                            Llevar la cuenta de las unidades
+                          </label>
+                          <InfoControlaStock />
+                        </div>
                         <p id="controlaStock-ayuda" className="text-xs text-muted-foreground">
-                          {form.controlaStock
-                            ? "Cada venta descuenta del stock y, cuando llega a cero, el producto se pausa solo."
-                            : "Victoria siempre lo ofrece como disponible."}
+                          {form.controlaStock ? "Cada venta descuenta del stock." : "Siempre disponible."}
                         </p>
                       </div>
                     </div>
 
                     {form.controlaStock && (
-                      <Campo id="stock" label="Unidades que tienes" error={errores.stock} ayuda="El total del producto, sumando todas las variantes.">
+                      <Campo id="stock" label="Unidades que tienes" error={errores.stock} ayuda="Total, sumando todas las variantes.">
                         <Input
                           id="stock"
                           type="number"

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InfoButton } from "@/components/app/info-button";
 import { PageHeader } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
@@ -55,7 +56,24 @@ function CatalogoContenido() {
     <>
       <PageHeader
         title="Catálogo y stock"
-        description="Explora el catálogo de Rocketfy, prepara los productos que Victoria venderá (de Rocketfy o propios) y elige cuáles vigilar para no pagar publicidad de algo agotado."
+        description="Explora el catálogo, prepara lo que Victoria venderá y vigila el stock."
+        info={
+          <InfoButton titulo="Cómo funciona el catálogo">
+            <p>Esta pantalla tiene tres pestañas:</p>
+            <ul>
+              <li>
+                <strong>Catálogo:</strong> los productos de Rocketfy. Aquí los exploras y pulsas «Preparar para vender» en los que quieres que Victoria venda.
+              </li>
+              <li>
+                <strong>Mis productos:</strong> los que ya preparaste, de Rocketfy y propios. Solo los que están «A la venta» los ve Victoria; el resto son borradores, pausados o archivados.
+              </li>
+              <li>
+                <strong>Vigilados:</strong> los productos que anuncias. Te avisamos en Incidencias cuando su stock baje del mínimo que elijas o cambie su precio, para no pagar publicidad de algo agotado.
+              </li>
+            </ul>
+            <p>Cada hora se actualizan costo y stock de los de Rocketfy, y un producto que se queda sin stock se pausa solo.</p>
+          </InfoButton>
+        }
       />
 
       <Tabs value={pestana} onValueChange={cambiarPestana} className="gap-5">

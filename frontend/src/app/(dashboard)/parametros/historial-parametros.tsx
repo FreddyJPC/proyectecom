@@ -27,7 +27,7 @@ export function HistorialParametros({
   const porClave = new Map(parametros.map((p) => [p.clave, p]));
 
   return (
-    <SectionCard titulo="Historial de cambios" descripcion="Los últimos 20 cambios. Si algo salió mal, aquí ves qué valor tenía antes.">
+    <SectionCard titulo="Historial de cambios" descripcion="Los últimos 20 cambios, con su valor anterior.">
       {cargando ? (
         <ListSkeleton filas={3} />
       ) : error && !cambios ? (

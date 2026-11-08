@@ -9,6 +9,8 @@ const SOLO = (process.env.ONLY || "").split(",").filter(Boolean);
 const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/metricas", "/parametros", "/parametros/instrucciones"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
+const SIN_INFOS = process.env.SIN_INFOS === "1"; // SIN_INFOS=1 salta los cuadros ⓘ (más rápido)
+let infosAuditados = 0;
 for (const theme of ["light", "dark"]) {
   for (const [vn, vp] of [["desktop", { width: 1440, height: 900 }], ["movil", { width: 390, height: 844 }]]) {
     const ctx = await browser.newContext({ viewport: vp, colorScheme: theme, locale: "es-EC" });
@@ -29,7 +31,8 @@ for (const theme of ["light", "dark"]) {
         // mezclado con lo que casualmente haya debajo (p. ej. la barra inferior sobre un botón). Ese contraste ya se
         // audita en el estado normal de la página; aquí se mide el cuadro.
         const res = await page.evaluate(async () => {
-          const cuadro = document.querySelector('[role="dialog"], [role="alertdialog"]');
+          const cuadros = document.querySelectorAll('[role="dialog"], [role="alertdialog"]');
+          const cuadro = cuadros.length ? cuadros[cuadros.length - 1] : null; // el de más arriba (un ⓘ puede abrirse sobre otro cuadro)
           return await axe.run(cuadro ?? document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"], resultTypes: ["violations"] });
         });
         for (const v of res.violations) {
@@ -54,6 +57,30 @@ for (const theme of ["light", "dark"]) {
         }
       };
       await auditar(r);
+      // Botones ⓘ (InfoButton): se abre cada uno de la pantalla y se audita su cuadro. `dentro` limita la búsqueda a un cuadro abierto.
+      const auditarInfos = async (etiqueta, dentro) => {
+        const alcance = dentro ? page.locator('[role="dialog"]').last() : page;
+        const infos = alcance.locator('[aria-label^="Más información"]');
+        const total = Math.min(await infos.count(), 30);
+        for (let i = 0; i < total; i++) {
+          const boton = infos.nth(i);
+          if (!(await boton.isVisible())) continue;
+          const nombre = await boton.getAttribute("aria-label");
+          await boton.scrollIntoViewIfNeeded();
+          await boton.click();
+          await page.getByRole("dialog").last().getByRole("button", { name: "Entendido" }).waitFor();
+          await page.waitForTimeout(250);
+          await auditar(`${etiqueta} [${nombre}]`);
+          await page.keyboard.press("Escape");
+          await page.getByRole("button", { name: "Entendido" }).waitFor({ state: "detached" });
+          await page.waitForTimeout(150);
+        }
+        return total;
+      };
+      if (!SIN_INFOS) {
+        const abiertos = await auditarInfos(r, false);
+        infosAuditados += abiertos;
+      }
       // Fase F: alertas nuevas de Incidencias y la insignia de margen en la lista (necesita ajustes confirmados).
       if (r === "/incidencias") {
         await page.getByRole("tab", { name: "Stock y precio" }).click();
@@ -75,6 +102,7 @@ for (const theme of ["light", "dark"]) {
         await page.getByLabel("Costo de envío estimado (USD)").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [ajustes abierto]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [ajustes abierto]", true);
         await page.keyboard.press("Escape");
 
         // Redactar con IA: se audita el paso de las notas y el del borrador.
@@ -82,6 +110,7 @@ for (const theme of ["light", "dark"]) {
         await page.getByLabel("¿A quién va dirigido?").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [ia notas]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [ia notas]", true);
         await page.getByRole("button", { name: "Redactar borrador" }).click();
         await page.getByRole("button", { name: "Aceptar", exact: true }).first().waitFor();
         await page.waitForTimeout(300);
@@ -93,6 +122,7 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Escribe como lo haría un cliente").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [prueba vacia]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [prueba vacia]", true);
         await page.keyboard.press("Escape");
       }
       // Parámetros del sistema: error de validación, confirmación de un cambio sensible y el cuadro de ajustes de precios.
@@ -131,6 +161,7 @@ for (const theme of ["light", "dark"]) {
         await page.getByLabel("Costo de envío estimado (USD)").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [ajustes de precios]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [ajustes de precios]", true);
         await page.keyboard.press("Escape");
       }
       // Instrucciones de Victoria: error de sección, borrador guardado, prueba del borrador, publicar y volver a las originales.
@@ -151,6 +182,7 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Escribe como lo haría un cliente").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [prueba del borrador]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [prueba del borrador]", true);
         await page.keyboard.press("Escape");
 
         await page.getByRole("button", { name: "Publicar", exact: true }).click();
@@ -256,5 +288,6 @@ for (const theme of ["light", "dark"]) {
   }
 }
 await browser.close();
+console.log(`Cuadros ⓘ abiertos y auditados: ${infosAuditados}`);
 if (!resumen.size) console.log("SIN VIOLACIONES");
 for (const [k, arr] of resumen) { console.log("\n" + k + "  — " + arr.length + " casos"); arr.slice(0, 4).forEach((a) => console.log("   ", a)); }

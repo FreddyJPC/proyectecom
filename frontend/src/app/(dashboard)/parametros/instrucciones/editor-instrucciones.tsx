@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { SectionCard } from "@/components/app/section-card";
+import { InfoButton } from "@/components/app/info-button";
 import { StatusBadge } from "@/components/status-badge";
 import {
   AlertDialog,
@@ -106,7 +107,19 @@ export function EditorInstrucciones({ data, onCambiado }: { data: Instrucciones;
   return (
     <>
       {/* ------------------------------------------------------- qué rige hoy */}
-      <SectionCard titulo="Qué usa Victoria hoy" descripcion="Lo que se aplica ahora mismo con los clientes reales.">
+      <SectionCard
+        titulo="Qué usa Victoria hoy"
+        descripcion="Lo que se aplica ahora mismo con los clientes reales."
+        info={
+          <InfoButton titulo="Qué instrucciones usa Victoria hoy">
+            <p>
+              Victoria usa la <strong>versión publicada</strong> más reciente. Si todavía no publicaste nada, usa las <strong>instrucciones originales</strong>: las que trae el
+              programa (un archivo del código). Mientras no publiques nada, Victoria sigue exactamente como siempre.
+            </p>
+            <p>«Volver a las originales» hace que use al instante el texto del programa; las versiones publicadas no se pierden.</p>
+          </InfoButton>
+        }
+      >
         <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
           <div className="min-w-0 flex-1 space-y-1">
             <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
@@ -121,7 +134,7 @@ export function EditorInstrucciones({ data, onCambiado }: { data: Instrucciones;
             <p className="text-sm text-muted-foreground">
               {data.usando === "publicada" && data.publicada
                 ? `Publicada ${tiempoRelativo(data.publicada.publicadaEn)} por ${data.publicada.creadoPor ?? "alguien"}${data.publicada.nota ? `: «${data.publicada.nota}»` : ""}.`
-                : "Son las que trae el programa (un archivo del código). Mientras no publiques nada, Victoria sigue exactamente como siempre."}
+                : "Son las que trae el programa."}
             </p>
           </div>
           {data.usando === "publicada" && (
@@ -159,11 +172,23 @@ export function EditorInstrucciones({ data, onCambiado }: { data: Instrucciones;
       {/* --------------------------------------------------- borrador y acciones */}
       <SectionCard titulo="Borrador" descripcion="Los clientes no ven nada hasta que publiques.">
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-4 sm:px-5">
-          <p role="status" className={cn("text-sm", excede ? "font-medium text-status-danger-ink" : "text-muted-foreground")}>
-            Las instrucciones completas miden unos <span className="tabular font-medium">{total.toLocaleString("es-EC")}</span> caracteres (≈{" "}
-            <span className="tabular">{tokens.toLocaleString("es-EC")}</span> «tokens»); el máximo es {data.maximoTotal.toLocaleString("es-EC")}. Todo ese texto viaja en
-            cada mensaje: más largo = más lento y más caro.
-          </p>
+          <div className="flex items-center gap-1">
+            <p role="status" className={cn("text-sm", excede ? "font-medium text-status-danger-ink" : "text-muted-foreground")}>
+              Largo total: <span className="tabular font-medium">{total.toLocaleString("es-EC")}</span> de {data.maximoTotal.toLocaleString("es-EC")} caracteres (≈{" "}
+              <span className="tabular">{tokens.toLocaleString("es-EC")}</span> «tokens»)
+              {excede && ": te pasas del máximo"}
+            </p>
+            <InfoButton titulo="Por qué importa el largo de las instrucciones">
+              <p>
+                Las instrucciones completas se envían <strong>en cada mensaje</strong> que Victoria responde, así que cuanto más largas, <strong>más lento y más caro</strong>{" "}
+                sale cada respuesta.
+              </p>
+              <p>
+                Un «token» es el trozo de texto que cuenta la IA (≈ 4 caracteres). El máximo de {data.maximoTotal.toLocaleString("es-EC")} caracteres incluye las partes que no
+                se editan (la ficha del producto, cómo usa sus herramientas, etc.).
+              </p>
+            </InfoButton>
+          </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-nota`}>
@@ -253,7 +278,18 @@ export function EditorInstrucciones({ data, onCambiado }: { data: Instrucciones;
       </div>
 
       {/* --------------------------------------------------------------- historial */}
-      <SectionCard titulo="Versiones publicadas" descripcion="Para volver a una versión anterior: cárgala en el borrador, pruébala y publícala.">
+      <SectionCard
+        titulo="Versiones publicadas"
+        descripcion="Las que ya publicaste."
+        info={
+          <InfoButton titulo="Cómo volver a una versión anterior">
+            <p>
+              Para volver a una versión anterior: <strong>cárgala en el borrador</strong>, pruébala con «Probar con Victoria» y publícala. Así ningún cambio llega a un
+              cliente sin haberse probado, tampoco volver atrás.
+            </p>
+          </InfoButton>
+        }
+      >
         {data.versiones.length === 0 ? (
           <p className="flex items-start gap-2 p-4 text-sm text-muted-foreground sm:px-5">
             <History className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -357,15 +393,15 @@ function SeccionEditable({
   const largo = texto.trim().length;
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-xl border bg-card p-4 shadow-card sm:p-5" aria-labelledby={`${idBase}-titulo`}>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
         <h2 id={`${idBase}-titulo`} className="text-sm font-semibold">
           {s.nombre}
         </h2>
+        <InfoButton titulo={s.nombre}>
+          <p>{s.ayuda}</p>
+        </InfoButton>
         {cambiada && <StatusBadge label="Distinta de la que rige hoy" variant="info" />}
       </div>
-      <p id={`${idBase}-ayuda`} className="text-sm text-muted-foreground">
-        {s.ayuda}
-      </p>
       <Label htmlFor={idBase} className="sr-only">
         {s.nombre}
       </Label>
@@ -376,7 +412,7 @@ function SeccionEditable({
         onChange={(e) => onCambio(e.target.value)}
         disabled={deshabilitado}
         aria-invalid={error ? true : undefined}
-        aria-describedby={[`${idBase}-ayuda`, error ? `${idBase}-error` : null].filter(Boolean).join(" ")}
+        aria-describedby={error ? `${idBase}-error` : undefined}
         className="max-h-[28rem] overflow-y-auto leading-relaxed"
       />
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs">
