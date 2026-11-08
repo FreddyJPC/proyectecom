@@ -3,7 +3,7 @@
 import { Info } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -31,15 +31,23 @@ export function InfoButton({
 }) {
   return (
     <Dialog>
+      {/* Un <span role="button"> y no un <button>: dentro de un <fieldset disabled> (la ficha de un producto archivado, o mientras
+          se guarda) todo <button> queda deshabilitado, y la explicación tiene que poder leerse siempre. */}
       <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
+        <span
+          role="button"
+          tabIndex={0}
           aria-label={`Más información: ${titulo}`}
-          className={cn("-my-1.5 size-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground md:size-7", className)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.currentTarget.click();
+            }
+          }}
+          className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "-my-1.5 size-9 cursor-pointer rounded-full text-muted-foreground hover:text-foreground md:size-7", className)}
         >
           <Info className="size-4" aria-hidden />
-        </Button>
+        </span>
       </DialogTrigger>
       <DialogContent className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-4 py-3.5 pr-12">

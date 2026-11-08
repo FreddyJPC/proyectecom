@@ -60,7 +60,7 @@ for (const theme of ["light", "dark"]) {
       // Botones ⓘ (InfoButton): se abre cada uno de la pantalla y se audita su cuadro. `dentro` limita la búsqueda a un cuadro abierto.
       const auditarInfos = async (etiqueta, dentro) => {
         const alcance = dentro ? page.locator('[role="dialog"]').last() : page;
-        const infos = alcance.locator('button[aria-label^="Más información"]');
+        const infos = alcance.locator('[aria-label^="Más información"]');
         const total = Math.min(await infos.count(), 30);
         for (let i = 0; i < total; i++) {
           const boton = infos.nth(i);
