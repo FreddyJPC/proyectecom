@@ -169,11 +169,14 @@ export function ProbarConVictoria({
   sku,
   nombre,
   sinCambiosPendientes,
+  usarBorrador = false,
 }: {
   sku: string;
   nombre: string;
   /** Falso si hay ediciones sin guardar: la prueba usa lo último guardado. */
   sinCambiosPendientes: boolean;
+  /** Probar con el borrador de las instrucciones de Victoria (Parámetros → Instrucciones), no con las publicadas. */
+  usarBorrador?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -212,7 +215,7 @@ export function ProbarConVictoria({
     setPendiente(mensaje);
     setError(null);
     setBorrador("");
-    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada };
+    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada, ...(usarBorrador ? { usarBorrador: true } : {}) };
     try {
       const res = await apiFetch<TurnoSimulado>(`/productos-bot/${encodeURIComponent(sku)}/probar`, {
         method: "POST",
@@ -258,10 +261,15 @@ export function ProbarConVictoria({
   const hayPrueba = turnos.length > 0;
 
   return (
-    <SectionCard titulo="Probar con Victoria" descripcion="Conversa como un cliente antes de publicar. No se envía nada real.">
+    <SectionCard
+      titulo={usarBorrador ? "Probar el borrador con Victoria" : "Probar con Victoria"}
+      descripcion={usarBorrador ? "Conversa con las instrucciones del borrador antes de publicarlas. Los clientes no ven nada." : "Conversa como un cliente antes de publicar. No se envía nada real."}
+    >
       <div className="space-y-3 p-4 sm:p-5">
         <p className="text-sm text-muted-foreground">
-          Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe.
+          {usarBorrador
+            ? "Mira cómo responde Victoria con tu borrador de instrucciones y la ficha del producto que elegiste: si mantiene el tono, si respeta tus reglas y si sigue cerrando bien la venta."
+            : "Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe."}
         </p>
 
         <Dialog open={abierto} onOpenChange={setAbierto}>
@@ -281,7 +289,8 @@ export function ProbarConVictoria({
             <DialogHeader>
               <DialogTitle>Probar con Victoria</DialogTitle>
               <DialogDescription>
-                Es una conversación de ensayo con «{nombre}» tal como está guardado.{" "}
+                Es una conversación de ensayo con «{nombre}» tal como está guardado
+                {usarBorrador && <>, usando <strong className="font-medium text-foreground">tu borrador de instrucciones</strong></>}.{" "}
                 <strong className="font-medium text-foreground">No se envía nada a Rocketfy, WhatsApp ni Telegram, y la conversación no se guarda.</strong> Cada mensaje usa la IA y cuenta para tu tope diario.
               </DialogDescription>
             </DialogHeader>

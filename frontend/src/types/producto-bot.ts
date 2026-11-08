@@ -299,4 +299,6 @@ export type ProbarInput = {
   estado: EstadoPrueba | null;
   desdeAnuncio: boolean;
   escalada: boolean;
+  /** Probar con el borrador de las instrucciones de Victoria en vez de con las que rigen hoy. */
+  usarBorrador?: boolean;
 };

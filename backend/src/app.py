@@ -16,6 +16,7 @@ from src.routes.ajustes import ajustes_bp
 from src.routes.catalogos import catalogos_bp
 from src.routes.conversaciones import conversaciones_bp
 from src.routes.incidencias import incidencias_bp
+from src.routes.instrucciones import instrucciones_bp
 from src.routes.metricas import metricas_bp
 from src.routes.parametros import parametros_bp
 from src.routes.pedidos import pedidos_bp
@@ -67,6 +68,7 @@ def create_app() -> Flask:
     app.register_blueprint(catalogos_bp)
     app.register_blueprint(conversaciones_bp)
     app.register_blueprint(incidencias_bp)
+    app.register_blueprint(instrucciones_bp)
     app.register_blueprint(parametros_bp)
     app.register_blueprint(pedidos_bp)
     app.register_blueprint(productos_bp)

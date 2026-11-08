@@ -23,11 +23,15 @@ def mock_login_ok(email: str = "freddyjavier556@gmail.com") -> None:
 
 
 @pytest.fixture(autouse=True)
-def _parametros_sin_memoria():
-    """Los parámetros del sistema se recuerdan 30 s en memoria (ver src/config/parametros):
-    cada test empieza y termina sin recordar nada, para que lo que uno guarde no se filtre al siguiente."""
+def _sin_memoria_de_configuracion():
+    """Los parámetros del sistema y las instrucciones publicadas de Victoria se recuerdan 30 s en
+    memoria (ver src/config/parametros y src/routes/whatsapp/instrucciones.py): cada test empieza y
+    termina sin recordar nada, para que lo que uno guarde no se filtre al siguiente."""
     from src.config.parametros import parametros
+    from src.routes.whatsapp.instrucciones import instrucciones_vigentes
 
     parametros.invalidar()
+    instrucciones_vigentes.invalidar()
     yield
     parametros.invalidar()
+    instrucciones_vigentes.invalidar()

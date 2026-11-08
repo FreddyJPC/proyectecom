@@ -22,6 +22,7 @@ const rutas = [
   ["ficha-archivado", "/catalogo/producto/CAM-SEG-360", true],
   ["metricas", "/metricas", true],
   ["parametros", "/parametros", true],
+  ["instrucciones", "/parametros/instrucciones", true],
 ];
 const vistas = [["desktop", { width: 1440, height: 900 }], ["movil", { width: 390, height: 844 }]];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });

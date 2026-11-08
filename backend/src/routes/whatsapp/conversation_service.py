@@ -13,10 +13,8 @@ dentro de sí misma. Quien la llama (BotWorker en producción, o
 tools/chat_con_victoria.py en pruebas) decide qué hacer con el texto
 devuelto.
 """
-import functools
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import List, Optional
 
 from src.config.parametros import parametros
@@ -24,21 +22,17 @@ from src.integrations.llm.contratos import LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
 
 from .ficha import formatear_ficha_producto
+from .instrucciones import instrucciones_vigentes
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
 from .tools import HerramientasVictoria, herramientas_de_victoria
 
 logger = logging.getLogger(__name__)
 
-_RUTA_SYSTEM_PROMPT = Path(__file__).resolve().parent / "victoria_system_prompt.txt"
 _ZONA_ECUADOR = timezone(timedelta(hours=-5))
 _MESES_ES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
-
-@functools.lru_cache(maxsize=1)
-def _plantilla_system_prompt() -> str:
-    return _RUTA_SYSTEM_PROMPT.read_text(encoding="utf-8")
 
 
 def _fecha_legible_ecuador() -> str:
@@ -58,6 +52,7 @@ class VictoriaConversationService:
         max_turnos_herramientas: Optional[int] = None,
         max_mensajes_historial: Optional[int] = None,
         enviar_fotos: Optional[bool] = None,
+        plantilla: Optional[str] = None,
     ):
         # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
         # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
@@ -73,13 +68,17 @@ class VictoriaConversationService:
         self._max_turnos_fijo = max_turnos_herramientas
         self._max_historial_fijo = max_mensajes_historial
         self._enviar_fotos_fijo = enviar_fotos
+        # Las instrucciones de Victoria: por defecto las que rigen hoy (la versión publicada desde la app o,
+        # si no hay, el archivo del código); «Probar con Victoria» puede pasar las del borrador.
+        self._plantilla_fija = plantilla
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(conversacion_id, telefono=conversacion["telefono"])
 
         producto_contexto = self._resolver_producto_contexto(lead, conversacion)
-        system_prompt = _plantilla_system_prompt().format(
+        plantilla = self._plantilla_fija if self._plantilla_fija is not None else instrucciones_vigentes.plantilla()
+        system_prompt = plantilla.format(
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
             + self._formatear_contexto_producto(producto_contexto),
             contexto_lead_actual=self._formatear_contexto_lead(lead),

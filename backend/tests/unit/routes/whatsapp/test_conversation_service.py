@@ -453,3 +453,63 @@ class TestParametrosDeVictoria:
         assert servicio.procesar_turno(1, "hola") == "modelo A"
         assert servicio.procesar_turno(1, "hola") == "modelo B"
         assert len(usados) == 2
+
+
+class TestInstruccionesDeVictoria:
+    """ADR-011, fase P3: lo que Victoria recibe como instrucciones sale de la versión publicada
+    (o del archivo del código), se lee en cada turno y nunca se rompe por el texto editado."""
+
+    @staticmethod
+    def _system_del_turno(**kw):
+        llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
+        servicio = VictoriaConversationService(
+            llm_client=llm, lead_repo=FakeLeadRepository(),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
+            producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorHerramientasFalso(),
+            max_turnos_herramientas=5, max_mensajes_historial=40, **kw,
+        )
+        servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
+        return llm.llamadas[0]["system"]
+
+    def test_sin_version_publicada_usa_el_archivo_del_codigo(self):
+        from src.routes.whatsapp.instrucciones import cuerpo_fijo
+
+        system = self._system_del_turno()
+        assert system.startswith("Eres Victoria, asesora de ventas de AzoShop")
+        # las secciones editables y las bloqueadas del archivo original llegan completas y sin huecos sin rellenar
+        assert "Hablas como una persona real" in system and cuerpo_fijo("herramientas") in system and "{" not in system
+
+    def test_una_plantilla_fija_manda_sobre_la_vigente(self):
+        system = self._system_del_turno(plantilla="Solo prueba. Producto: {contexto_producto}. Fecha: {fecha_actual}. Lead: {contexto_lead_actual}")
+        assert system.startswith("Solo prueba. Producto:") and "## Tu personalidad" not in system
+
+    def test_lo_publicado_se_lee_en_cada_turno_sin_reiniciar(self, monkeypatch):
+        from src.routes.whatsapp import conversation_service as modulo
+        from src.routes.whatsapp.instrucciones import InstruccionesVigentes, ensamblar, secciones_originales
+
+        publicada = {"secciones": {**secciones_originales(), "personalidad": "Eres de Loja, con acento lojano."}}
+
+        class Repo:
+            def publicada(self):
+                return publicada
+
+        monkeypatch.setattr(modulo, "instrucciones_vigentes", InstruccionesVigentes(repo=Repo()))
+        system = self._system_del_turno()
+        assert "Eres de Loja, con acento lojano." in system and "Hablas como una persona real" not in system
+        assert "## Estado actual de este lead" in system  # las secciones bloqueadas siguen ahí
+        assert ensamblar({**secciones_originales(), "personalidad": "Eres de Loja, con acento lojano."}).count("{contexto_producto}") == 1
+
+    def test_las_llaves_del_texto_publicado_no_rompen_el_turno(self, monkeypatch):
+        from src.routes.whatsapp import conversation_service as modulo
+        from src.routes.whatsapp.instrucciones import InstruccionesVigentes, secciones_originales
+
+        publicada = {"secciones": {**secciones_originales(), "reglas": "Nunca digas {esto} ni } aquello { ni {contexto_producto}."}}
+
+        class Repo:
+            def publicada(self):
+                return publicada
+
+        monkeypatch.setattr(modulo, "instrucciones_vigentes", InstruccionesVigentes(repo=Repo()))
+        system = self._system_del_turno()  # no debe lanzar KeyError/ValueError
+        assert "{esto}" in system and "aquello {" in system

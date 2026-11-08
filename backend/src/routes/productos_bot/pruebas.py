@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError
 from src.routes.ajustes.services import AjustesService
+from src.routes.whatsapp.instrucciones import InstruccionesInvalidas, ensamblar, validar
+from src.routes.whatsapp.instrucciones_repository import InstruccionesRepository
 
 from .dto import (
     AvisoSimuladoDTO,
@@ -79,7 +81,8 @@ def faltantes_para_probar(ficha: dict) -> List[str]:
 
 
 class PruebasService:
-    def __init__(self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None):
+    def __init__(self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None, instrucciones_repo=None):
+        self._instrucciones = instrucciones_repo or InstruccionesRepository()
         self._repo = repo or ProductoBotGestionRepository()
         self._generaciones = generaciones or GeneracionesIARepository()
         self._ajustes = ajustes_service or AjustesService()
@@ -103,6 +106,7 @@ class PruebasService:
         desde_anuncio: bool,
         escalada: bool,
         usuario: Optional[str],
+        usar_borrador: bool = False,
     ) -> TurnoSimuladoDTO:
         sku = (sku or "").strip()
         ficha = self._repo.obtener(sku)
@@ -115,6 +119,8 @@ class PruebasService:
             raise PublicacionBloqueadaError(faltan)
 
         self._validar_que_la_prueba_siga(historial, estado, escalada)
+        # Antes de gastar nada: si se pidió probar el borrador de las instrucciones, tiene que existir y ser válido.
+        plantilla = self._plantilla_del_borrador() if usar_borrador else None
 
         # El tope se mira antes de gastar nada.
         uso = self.uso()
@@ -131,6 +137,7 @@ class PruebasService:
                 estado=estado,
                 desde_anuncio=desde_anuncio,
                 llm=llm,
+                plantilla=plantilla,
             )
         except LLMAuthError as exc:
             self._registrar(ficha["sku"], usuario, modelo, "fallo")
@@ -189,6 +196,19 @@ class PruebasService:
         del_cliente = sum(1 for h in historial if h.get("rol") == "cliente")
         if del_cliente >= maximo:
             raise PruebaInvalidaError(f"La prueba llegó a {maximo} mensajes. Reiníciala para empezar de nuevo.")
+
+    def _plantilla_del_borrador(self) -> str:
+        """Las instrucciones del borrador, armadas como las usaría Victoria. Así se prueba lo que se está
+        por publicar, sin que los clientes reales lo vean todavía."""
+        borrador = self._instrucciones.borrador()
+        if borrador is None:
+            raise PruebaInvalidaError(
+                "No hay un borrador de instrucciones para probar: guarda uno en Parámetros → Instrucciones de Victoria."
+            )
+        try:
+            return ensamblar(validar(borrador["secciones"]))
+        except InstruccionesInvalidas as exc:
+            raise PruebaInvalidaError(f"El borrador de instrucciones no es válido: {exc}") from exc
 
     def _anotar_simulacion_completa(self, sku: str, usuario: Optional[str]) -> None:
         """Es un registro de auditoría: si falla, la prueba ya se hizo y no debe tumbar la respuesta."""

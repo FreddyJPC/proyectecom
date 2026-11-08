@@ -340,6 +340,69 @@ function manejarParametros(req, res, p, q, send) {
   });
 }
 
+// ---------- Instrucciones de Victoria (ADR-011, P3) ----------
+// Las secciones salen del backend (instrucciones-secciones.json): títulos, ayudas y textos originales reales.
+const instruccionesBase = JSON.parse(fs.readFileSync(new URL("./instrucciones-secciones.json", import.meta.url), "utf8"));
+let instrPublicada = null; // { id, secciones, nota, creadoPor, creadoEn, publicadaEn }
+let instrBorrador = null;
+let instrArchivadas = [];
+let instrSiguienteId = 1;
+const textosEditables = () => Object.fromEntries(instruccionesBase.secciones.filter((x) => x.editable).map((x) => [x.id, x.original]));
+const versionDto = (v, estado) => v && { id: v.id, estado, nota: v.nota ?? null, creadoPor: v.creadoPor, creadoEn: v.creadoEn, publicadaEn: v.publicadaEn ?? null };
+function instruccionesDto() {
+  return {
+    secciones: instruccionesBase.secciones.map((x) => ({
+      ...x,
+      vigente: x.editable ? instrPublicada?.secciones[x.id] ?? x.original : x.original,
+      borrador: x.editable && instrBorrador ? instrBorrador.secciones[x.id] : null,
+    })),
+    usando: instrPublicada ? "publicada" : "original",
+    publicada: versionDto(instrPublicada, "publicada"),
+    borrador: versionDto(instrBorrador, "borrador"),
+    versiones: [instrPublicada && versionDto(instrPublicada, "publicada"), ...instrArchivadas.map((v) => versionDto(v, "archivada"))].filter(Boolean).sort((a, b) => b.id - a.id),
+    maximoTotal: instruccionesBase.maximoTotal,
+    caracteresFijos: instruccionesBase.caracteresFijos,
+  };
+}
+function manejarInstrucciones(req, res, p, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = raw ? JSON.parse(raw) : {};
+    const ahoraIso = new Date().toISOString();
+    if (p === "/instrucciones-victoria" && req.method === "GET") return send(instruccionesDto());
+    if (p === "/instrucciones-victoria/borrador" && req.method === "PUT") {
+      const detalle = {};
+      for (const x of instruccionesBase.secciones.filter((y) => y.editable)) {
+        const t = String(body.secciones?.[x.id] ?? "").trim();
+        if (!t) detalle[x.id] = ["No puede quedar vacía."];
+        else if (t.length > x.maximo) detalle[x.id] = [`Es demasiado larga: máximo ${x.maximo} caracteres (tiene ${t.length}).`];
+        else if (/^#{1,6}\s/m.test(t)) detalle[x.id] = ["No uses títulos con «#»: los títulos de cada sección los pone el sistema."];
+      }
+      if (Object.keys(detalle).length) return send({ error: "Las instrucciones no son válidas.", detalle }, 422);
+      instrBorrador = { id: instrBorrador?.id ?? instrSiguienteId++, secciones: Object.fromEntries(Object.entries(body.secciones).map(([k, v]) => [k, String(v).trim()])), nota: body.nota, creadoPor: "freddy@azoshop.ec", creadoEn: ahoraIso };
+      return send(instruccionesDto());
+    }
+    if (p === "/instrucciones-victoria/borrador" && req.method === "DELETE") { instrBorrador = null; return send(instruccionesDto()); }
+    if (p === "/instrucciones-victoria/publicar") {
+      if (!instrBorrador) return send({ error: "No hay un borrador para publicar." }, 409);
+      if (instrPublicada) instrArchivadas.push(instrPublicada);
+      instrPublicada = { ...instrBorrador, nota: body.nota ?? instrBorrador.nota, publicadaEn: ahoraIso };
+      instrBorrador = null;
+      return send(instruccionesDto());
+    }
+    if (p === "/instrucciones-victoria/volver-a-la-original") { if (instrPublicada) instrArchivadas.push(instrPublicada); instrPublicada = null; return send(instruccionesDto()); }
+    const c = p.match(/^\/instrucciones-victoria\/versiones\/(\d+)\/cargar$/);
+    if (c) {
+      const v = [instrPublicada, ...instrArchivadas].filter(Boolean).find((x) => x.id === Number(c[1]));
+      if (!v) return send({ error: `No existe la versión ${c[1]}.` }, 404);
+      instrBorrador = { id: instrBorrador?.id ?? instrSiguienteId++, secciones: { ...textosEditables(), ...v.secciones }, nota: `Cargada desde la versión ${v.id}`, creadoPor: "freddy@azoshop.ec", creadoEn: ahoraIso };
+      return send(instruccionesDto());
+    }
+    send({ error: "mock: ruta no implementada" }, 404);
+  });
+}
+
 // ---------- Redactar con IA (Fase D) ----------
 // Borrador de mentira, pero con la forma de la API real: fuentes por campo, alertas
 // generales y por campo, y una cifra "inventada" (30) para ver cómo se marca.
@@ -459,6 +522,7 @@ function manejarProductosBot(req, res, p, q, send) {
       if (!f.metodosPago.length) faltan.push("Falta elegir al menos un método de pago.");
       if (!(cents(f.precio) > 0)) faltan.push("El precio de venta debe ser mayor que cero.");
       if (faltan.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos: faltan }, 422);
+      if (body.usarBorrador && !instrBorrador) return send({ error: "No hay un borrador de instrucciones para probar: guarda uno en Parámetros → Instrucciones de Victoria." }, 409);
       const mensaje = String(body.mensaje || "").trim();
       if (!mensaje || mensaje.length > 1000) return send({ error: "Datos inválidos.", detalle: { mensaje: ["Escribe un mensaje de hasta 1000 caracteres."] } }, 422);
       if (body.escalada) return send({ error: "Victoria ya pasó esta conversación a una persona: en la vida real no seguiría respondiendo. Reinicia la prueba para empezar otra." }, 409);
@@ -571,6 +635,7 @@ const server = http.createServer((req, res) => {
     if ((m = p.match(/^\/catalogos\/ubicaciones\/(.+)\/cantones$/))) return send({ cantones: cantones[decodeURIComponent(m[1])] || [] });
     if (p === "/ajustes/negocio") return manejarAjustes(req, res, send);
     if (p === "/parametros" || p.startsWith("/parametros/")) return manejarParametros(req, res, p, q, send);
+    if (p === "/instrucciones-victoria" || p.startsWith("/instrucciones-victoria/")) return manejarInstrucciones(req, res, p, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     send({ error: "mock: ruta no implementada " + p }, 404);
   };

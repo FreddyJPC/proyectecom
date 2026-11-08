@@ -304,6 +304,8 @@ class ProbarInputSchema(Schema):
     estado = fields.Nested(EstadoDeLaPruebaSchema, load_default=None, allow_none=True)
     desde_anuncio = fields.Bool(data_key="desdeAnuncio", load_default=False)
     escalada = fields.Bool(load_default=False)
+    # Probar con el borrador de las instrucciones de Victoria en vez de con las que rigen hoy.
+    usar_borrador = fields.Bool(data_key="usarBorrador", load_default=False)
 
     @post_load
     def _limpiar(self, data, **kwargs):

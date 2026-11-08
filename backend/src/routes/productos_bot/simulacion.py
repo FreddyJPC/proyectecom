@@ -366,6 +366,7 @@ def simular_turno(
     estado: Optional[Dict[str, Any]],
     desde_anuncio: bool,
     llm: LLMProvider,
+    plantilla: Optional[str] = None,
 ) -> ResultadoDelTurno:
     """Procesa UN mensaje del cliente de mentira y devuelve lo que Victoria
     respondió, qué herramientas usó y cómo quedó la venta. `producto` es la
@@ -399,6 +400,9 @@ def simular_turno(
         mensaje_repo=mensajes,
         producto_repo=productos,
         ejecutor_herramientas=herramientas,
+        # None = las instrucciones que rigen hoy con los clientes; un texto = las del borrador
+        # (que se prueba aquí antes de publicarlo).
+        plantilla=plantilla,
         # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
         # (parámetro «Enviar fotos»): así se puede ver cómo la usa Victoria antes de encenderla.
         enviar_fotos=True,

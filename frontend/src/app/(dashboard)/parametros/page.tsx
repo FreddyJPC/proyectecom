@@ -1,6 +1,7 @@
 "use client";
 
-import { Calculator, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Calculator, MessageSquareText, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { ListSkeleton } from "@/components/app/list-skeleton";
@@ -72,6 +73,20 @@ export default function ParametrosPage() {
       )}
 
       <SectionCard titulo="Otros ajustes" descripcion="Se editan en su propia pantalla porque tienen reglas entre sí.">
+        <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-neutral-soft text-status-neutral-ink">
+            <MessageSquareText className="size-[1.1rem]" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-semibold">Instrucciones de Victoria</p>
+            <p className="text-sm text-muted-foreground">
+              Su personalidad, su objetivo y las reglas que sigue. Con borrador, prueba antes de publicar y versiones para volver atrás.
+            </p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href="/parametros/instrucciones">Abrir instrucciones</Link>
+          </Button>
+        </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-neutral-soft text-status-neutral-ink">
             <Calculator className="size-[1.1rem]" aria-hidden />
