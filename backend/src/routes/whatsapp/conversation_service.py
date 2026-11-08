@@ -13,36 +13,26 @@ dentro de sí misma. Quien la llama (BotWorker en producción, o
 tools/chat_con_victoria.py en pruebas) decide qué hacer con el texto
 devuelto.
 """
-import functools
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import List, Optional
 
-from src.config.settings import load_settings
+from src.config.parametros import parametros
 from src.integrations.llm.contratos import LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
 
 from .ficha import formatear_ficha_producto
+from .instrucciones import instrucciones_vigentes
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
 from .tools import HerramientasVictoria, herramientas_de_victoria
 
 logger = logging.getLogger(__name__)
 
-_RUTA_SYSTEM_PROMPT = Path(__file__).resolve().parent / "victoria_system_prompt.txt"
 _ZONA_ECUADOR = timezone(timedelta(hours=-5))
 _MESES_ES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
-_MENSAJE_LIMITE_ALCANZADO = (
-    "Disculpa la demora — ya te conecto con un asesor humano que te ayuda enseguida 🙋"
-)
-
-
-@functools.lru_cache(maxsize=1)
-def _plantilla_system_prompt() -> str:
-    return _RUTA_SYSTEM_PROMPT.read_text(encoding="utf-8")
 
 
 def _fecha_legible_ecuador() -> str:
@@ -62,44 +52,59 @@ class VictoriaConversationService:
         max_turnos_herramientas: Optional[int] = None,
         max_mensajes_historial: Optional[int] = None,
         enviar_fotos: Optional[bool] = None,
+        plantilla: Optional[str] = None,
     ):
-        settings = load_settings()
-        self._llm = llm_client or get_llm_client()
+        # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
+        # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
+        # (src/config/parametros): se leen en cada turno, no una vez al construir el servicio
+        # (el worker lo construye una sola vez por proceso). Los argumentos de abajo los fijan
+        # a la fuerza: los usan los tests y «Probar con Victoria», que no deben depender de ellos.
+        self._llm_fijo = llm_client
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
         self._productos = producto_repo or ProductoBotRepository()
         self._ejecutor = ejecutor_herramientas or HerramientasVictoria()
-        self._max_turnos = (
-            max_turnos_herramientas if max_turnos_herramientas is not None else settings.bot_max_turnos_herramientas
-        )
-        self._max_historial = (
-            max_mensajes_historial if max_mensajes_historial is not None else settings.bot_max_mensajes_historial
-        )
-        # Fase G2: la herramienta de la foto solo se ofrece si está encendida (BOT_ENVIAR_FOTOS).
-        self._herramientas = herramientas_de_victoria(settings.bot_enviar_fotos if enviar_fotos is None else enviar_fotos)
+        self._max_turnos_fijo = max_turnos_herramientas
+        self._max_historial_fijo = max_mensajes_historial
+        self._enviar_fotos_fijo = enviar_fotos
+        # Las instrucciones de Victoria: por defecto las que rigen hoy (la versión publicada desde la app o,
+        # si no hay, el archivo del código); «Probar con Victoria» puede pasar las del borrador.
+        self._plantilla_fija = plantilla
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(conversacion_id, telefono=conversacion["telefono"])
 
         producto_contexto = self._resolver_producto_contexto(lead, conversacion)
-        system_prompt = _plantilla_system_prompt().format(
+        plantilla = self._plantilla_fija if self._plantilla_fija is not None else instrucciones_vigentes.plantilla()
+        system_prompt = plantilla.format(
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
             + self._formatear_contexto_producto(producto_contexto),
             contexto_lead_actual=self._formatear_contexto_lead(lead),
             fecha_actual=_fecha_legible_ecuador(),
         )
 
-        mensajes: List[MensajeLLM] = self._construir_historial(conversacion_id)
+        # Una sola lectura de los parámetros por turno: si cambian mientras Victoria
+        # responde, este mensaje termina con las reglas con que empezó.
+        llm = self._llm_fijo or get_llm_client()
+        max_turnos = self._max_turnos_fijo if self._max_turnos_fijo is not None else parametros.valor("bot.max_turnos_herramientas")
+        max_historial = (
+            self._max_historial_fijo if self._max_historial_fijo is not None else parametros.valor("bot.max_mensajes_historial")
+        )
+        # Fase G2: la herramienta de la foto solo se ofrece si está encendida (parámetro «Enviar fotos»).
+        enviar_fotos = self._enviar_fotos_fijo if self._enviar_fotos_fijo is not None else parametros.valor("bot.enviar_fotos")
+        herramientas = herramientas_de_victoria(enviar_fotos)
+
+        mensajes: List[MensajeLLM] = self._construir_historial(conversacion_id, max_historial)
         mensajes.append(MensajeLLM(rol="user", texto=mensaje_cliente))
 
         texto_final = ""
         ya_escalo = False
 
-        for _ in range(self._max_turnos):
-            respuesta = self._llm.generar_respuesta(
-                system=system_prompt, mensajes=mensajes, herramientas=self._herramientas
+        for _ in range(max_turnos):
+            respuesta = llm.generar_respuesta(
+                system=system_prompt, mensajes=mensajes, herramientas=herramientas
             )
             texto_final += respuesta.texto
 
@@ -131,8 +136,8 @@ class VictoriaConversationService:
                 # despedida con el resultado que le llegó -- después de
                 # esa, se corta pase lo que pase (no es criterio del
                 # modelo seguir la conversación tras escalar).
-                despedida = self._llm.generar_respuesta(
-                    system=system_prompt, mensajes=mensajes, herramientas=self._herramientas
+                despedida = llm.generar_respuesta(
+                    system=system_prompt, mensajes=mensajes, herramientas=herramientas
                 )
                 texto_final += despedida.texto
                 break
@@ -148,12 +153,12 @@ class VictoriaConversationService:
                 entrada={"motivo": "Se alcanzó el límite de turnos de herramientas sin resolver"},
                 id_llamada="limite-interno",
             )
-            texto_final = _MENSAJE_LIMITE_ALCANZADO
+            texto_final = parametros.valor("bot.texto_limite_alcanzado")
 
         self._mensajes.crear(conversacion_id=conversacion_id, rol="bot", contenido=texto_final, tipo="texto", wamid=None)
         return texto_final
 
-    def _construir_historial(self, conversacion_id: int) -> List[MensajeLLM]:
+    def _construir_historial(self, conversacion_id: int, max_historial: int) -> List[MensajeLLM]:
         """Excluye la última fila a propósito: para cuando procesar_turno()
         corre, el mensaje del cliente que se está por responder YA quedó
         guardado en `mensajes` (WebhookService lo guarda antes de encolar
@@ -161,8 +166,8 @@ class VictoriaConversationService:
         mensaje_cliente lo duplicaría en lo que ve el LLM."""
         filas = self._mensajes.obtener_por_conversacion(conversacion_id)
         anteriores = filas[:-1] if filas else []
-        if self._max_historial:
-            anteriores = anteriores[-self._max_historial:]
+        if max_historial:
+            anteriores = anteriores[-max_historial:]
         return [
             MensajeLLM(rol="user" if fila["rol"] == "cliente" else "assistant", texto=fila["contenido"])
             for fila in anteriores

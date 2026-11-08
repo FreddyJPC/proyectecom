@@ -15,6 +15,7 @@ Qué NO hace, a propósito:
 import logging
 from typing import List, Optional
 
+from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError, MensajeLLM
 from src.routes.ajustes.services import AjustesService
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
@@ -192,22 +193,19 @@ class ContenidoIAService:
         return producto
 
     def _cliente_llm(self):
-        if self._llm is None:
-            from src.integrations.llm import get_llm_client
+        if self._llm is not None:
+            return self._llm  # inyectado (tests)
+        from src.integrations.llm import get_llm_client
 
-            try:
-                self._llm = get_llm_client()
-            except ValueError as exc:
-                # Falta ANTHROPIC_API_KEY (o el proveedor no está soportado).
-                raise IANoDisponibleError("La redacción con IA no está configurada en el servidor.") from exc
-        return self._llm
+        try:
+            # En cada uso, no una vez: así un cambio del parámetro «Modelo de IA» se nota enseguida.
+            return get_llm_client()
+        except ValueError as exc:
+            # Falta ANTHROPIC_API_KEY (o el proveedor no está soportado).
+            raise IANoDisponibleError("La redacción con IA no está configurada en el servidor.") from exc
 
     def _nombre_del_modelo(self) -> Optional[str]:
-        if self._modelo is None:
-            from src.config.settings import load_settings
-
-            self._modelo = load_settings().llm_model
-        return self._modelo
+        return self._modelo if self._modelo is not None else parametros.valor("llm.modelo")
 
     def _registrar(self, sku: str, usuario: Optional[str], modelo: Optional[str], resultado: str, campos: List[str]) -> None:
         """El registro es auditoría y tope; si falla no debe tumbar la respuesta."""

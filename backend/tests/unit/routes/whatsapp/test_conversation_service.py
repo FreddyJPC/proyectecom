@@ -350,3 +350,166 @@ class TestHerramientasOfrecidasAlModelo:
         )
         servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
         assert "enviar_foto_producto" in [h.nombre for h in llm.llamadas[0]["herramientas"]]
+
+
+def _servicio_sin_fijar(llm, historial):
+    """Como en producción: el servicio NO recibe memoria, vueltas ni fotos; los lee de los parámetros."""
+    return VictoriaConversationService(
+        llm_client=llm,
+        lead_repo=FakeLeadRepository(),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+        mensaje_repo=FakeMensajeRepository(historial=historial),
+        producto_repo=FakeProductoBotRepository(),
+        ejecutor_herramientas=EjecutorHerramientasFalso(),
+    )
+
+
+def _con_parametros(monkeypatch, valores):
+    """Fija el valor de algunos parámetros durante el test (los demás siguen valiendo lo de siempre)."""
+    from src.config.parametros import parametros
+
+    real = parametros.valor
+    monkeypatch.setattr(parametros, "valor", lambda clave: valores[clave] if clave in valores else real(clave))
+
+
+class TestParametrosDeVictoria:
+    """ADR-011: memoria, vueltas y textos se leen en CADA turno, así un cambio hecho en la app
+    se nota en el siguiente mensaje sin reiniciar el worker (que construye el servicio una sola vez)."""
+
+    @staticmethod
+    def _historial(cantidad):
+        filas = [{"rol": "cliente" if i % 2 == 0 else "bot", "contenido": f"mensaje {i}"} for i in range(cantidad)]
+        return filas + [{"rol": "cliente", "contenido": "el mensaje nuevo"}]
+
+    @staticmethod
+    def _fin():
+        return RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")
+
+    def test_la_memoria_por_defecto_son_cuarenta_mensajes(self, monkeypatch):
+        monkeypatch.delenv("BOT_MAX_MENSAJES_HISTORIAL", raising=False)
+        llm = LLMProviderFalso([self._fin()])
+        _servicio_sin_fijar(llm, self._historial(60)).procesar_turno(1, "el mensaje nuevo")
+        assert len(llm.llamadas[0]["mensajes"]) == 40 + 1  # 40 anteriores + el mensaje nuevo
+
+    def test_cambiar_la_memoria_se_nota_en_el_siguiente_turno_con_el_mismo_servicio(self, monkeypatch):
+        llm = LLMProviderFalso([self._fin(), self._fin()])
+        servicio = _servicio_sin_fijar(llm, self._historial(60))
+
+        _con_parametros(monkeypatch, {"bot.max_mensajes_historial": 12})
+        servicio.procesar_turno(1, "el mensaje nuevo")
+        _con_parametros(monkeypatch, {"bot.max_mensajes_historial": 30})
+        servicio.procesar_turno(1, "el mensaje nuevo")
+
+        assert [len(c["mensajes"]) for c in llm.llamadas] == [12 + 1, 30 + 1]
+
+    def test_cambiar_las_vueltas_con_herramientas_se_nota_en_el_siguiente_turno(self, monkeypatch):
+        def pide_herramienta(i):
+            return RespuestaLLM(
+                texto="",
+                llamadas_herramientas=[LlamadaHerramienta(id=f"t{i}", nombre="guardar_datos_cliente", entrada={})],
+                razon_de_parada="necesita_herramientas",
+            )
+
+        llm = LLMProviderFalso([pide_herramienta(i) for i in range(2)] + [pide_herramienta(i) for i in range(2, 5)])
+        servicio = _servicio_sin_fijar(llm, [{"rol": "cliente", "contenido": "hola"}])
+
+        _con_parametros(monkeypatch, {"bot.max_turnos_herramientas": 2})
+        servicio.procesar_turno(1, "hola")
+        assert len(llm.llamadas) == 2  # con 2 vueltas, escala
+
+        _con_parametros(monkeypatch, {"bot.max_turnos_herramientas": 3})
+        servicio.procesar_turno(1, "hola")
+        assert len(llm.llamadas) == 2 + 3
+
+    def test_el_mensaje_de_limite_alcanzado_es_el_parametro(self, monkeypatch):
+        respuestas = [
+            RespuestaLLM(
+                texto="",
+                llamadas_herramientas=[LlamadaHerramienta(id=f"t{i}", nombre="guardar_datos_cliente", entrada={})],
+                razon_de_parada="necesita_herramientas",
+            )
+            for i in range(2)
+        ]
+        _con_parametros(monkeypatch, {"bot.max_turnos_herramientas": 2, "bot.texto_limite_alcanzado": "Texto editado desde la app"})
+        servicio = _servicio_sin_fijar(LLMProviderFalso(respuestas), [{"rol": "cliente", "contenido": "hola"}])
+        assert servicio.procesar_turno(1, "hola") == "Texto editado desde la app"
+
+    def test_el_cliente_de_ia_se_pide_en_cada_turno_para_que_un_cambio_de_modelo_se_note(self, monkeypatch):
+        usados = []
+
+        class LLMDelTurno(LLMProviderFalso):
+            def __init__(self, nombre):
+                super().__init__([RespuestaLLM(texto=nombre, llamadas_herramientas=[], razon_de_parada="fin")])
+
+        turnos = iter([LLMDelTurno("modelo A"), LLMDelTurno("modelo B")])
+        monkeypatch.setattr("src.routes.whatsapp.conversation_service.get_llm_client", lambda: usados.append(1) or next(turnos))
+        servicio = VictoriaConversationService(
+            lead_repo=FakeLeadRepository(),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "hola"}]),
+            producto_repo=FakeProductoBotRepository(),
+            ejecutor_herramientas=EjecutorHerramientasFalso(),
+        )
+        assert servicio.procesar_turno(1, "hola") == "modelo A"
+        assert servicio.procesar_turno(1, "hola") == "modelo B"
+        assert len(usados) == 2
+
+
+class TestInstruccionesDeVictoria:
+    """ADR-011, fase P3: lo que Victoria recibe como instrucciones sale de la versión publicada
+    (o del archivo del código), se lee en cada turno y nunca se rompe por el texto editado."""
+
+    @staticmethod
+    def _system_del_turno(**kw):
+        llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
+        servicio = VictoriaConversationService(
+            llm_client=llm, lead_repo=FakeLeadRepository(),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
+            producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorHerramientasFalso(),
+            max_turnos_herramientas=5, max_mensajes_historial=40, **kw,
+        )
+        servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Hola")
+        return llm.llamadas[0]["system"]
+
+    def test_sin_version_publicada_usa_el_archivo_del_codigo(self):
+        from src.routes.whatsapp.instrucciones import cuerpo_fijo
+
+        system = self._system_del_turno()
+        assert system.startswith("Eres Victoria, asesora de ventas de AzoShop")
+        # las secciones editables y las bloqueadas del archivo original llegan completas y sin huecos sin rellenar
+        assert "Hablas como una persona real" in system and cuerpo_fijo("herramientas") in system and "{" not in system
+
+    def test_una_plantilla_fija_manda_sobre_la_vigente(self):
+        system = self._system_del_turno(plantilla="Solo prueba. Producto: {contexto_producto}. Fecha: {fecha_actual}. Lead: {contexto_lead_actual}")
+        assert system.startswith("Solo prueba. Producto:") and "## Tu personalidad" not in system
+
+    def test_lo_publicado_se_lee_en_cada_turno_sin_reiniciar(self, monkeypatch):
+        from src.routes.whatsapp import conversation_service as modulo
+        from src.routes.whatsapp.instrucciones import InstruccionesVigentes, ensamblar, secciones_originales
+
+        publicada = {"secciones": {**secciones_originales(), "personalidad": "Eres de Loja, con acento lojano."}}
+
+        class Repo:
+            def publicada(self):
+                return publicada
+
+        monkeypatch.setattr(modulo, "instrucciones_vigentes", InstruccionesVigentes(repo=Repo()))
+        system = self._system_del_turno()
+        assert "Eres de Loja, con acento lojano." in system and "Hablas como una persona real" not in system
+        assert "## Estado actual de este lead" in system  # las secciones bloqueadas siguen ahí
+        assert ensamblar({**secciones_originales(), "personalidad": "Eres de Loja, con acento lojano."}).count("{contexto_producto}") == 1
+
+    def test_las_llaves_del_texto_publicado_no_rompen_el_turno(self, monkeypatch):
+        from src.routes.whatsapp import conversation_service as modulo
+        from src.routes.whatsapp.instrucciones import InstruccionesVigentes, secciones_originales
+
+        publicada = {"secciones": {**secciones_originales(), "reglas": "Nunca digas {esto} ni } aquello { ni {contexto_producto}."}}
+
+        class Repo:
+            def publicada(self):
+                return publicada
+
+        monkeypatch.setattr(modulo, "instrucciones_vigentes", InstruccionesVigentes(repo=Repo()))
+        system = self._system_del_turno()  # no debe lanzar KeyError/ValueError
+        assert "{esto}" in system and "aquello {" in system

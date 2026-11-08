@@ -321,6 +321,9 @@ class TestFotoDelProducto:
         def prohibido(*args, **kwargs):
             raise AssertionError("La simulación intentó usar WhatsApp o la base de datos")
 
+        # Leer los parámetros del sistema (memoria, vueltas…) es lo único que la simulación pide a la base:
+        # no escribe nada. Aquí se da por leído para que el resto de la prohibición sea estricta.
+        monkeypatch.setattr("src.config.parametros.repository.ParametrosRepository.listar", staticmethod(lambda: {}))
         monkeypatch.setattr("src.config.database._get_pool", prohibido)
         monkeypatch.setattr("src.routes.whatsapp.tools.get_whatsapp_client", prohibido)
         r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")))

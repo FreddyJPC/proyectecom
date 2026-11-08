@@ -40,4 +40,7 @@ Si Playwright no encuentra el navegador, indica uno con `CHROMIUM_PATH=/ruta/a/c
 Notas:
 - El login del servidor falso acepta cualquier correo y contraseña.
 - Si cambias la forma de un endpoint del backend, actualiza también `server.mjs`.
+- `parametros-catalogo.json` e `instrucciones-secciones.json` salen del backend (catálogo de Parámetros y secciones de las instrucciones de Victoria) en la forma que devuelve la API
+  (así la pantalla se ve con las explicaciones y rangos reales). Si cambias `backend/src/config/parametros/catalogo.py`,
+  regénéralo desde `backend/` con el entorno de pruebas activo: `python tools/exportar_para_preview.py`.
 - No uses `pkill -f server.mjs` desde un comando que contenga ese mismo texto: se mata a sí mismo.

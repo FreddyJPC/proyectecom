@@ -5,11 +5,11 @@ nadie tenga que vigilarla.
 
 Qué hace, por cada producto `activo` o `agotado`:
   1. Refresca costo, precio sugerido, stock, peso e imagen desde Rocketfy.
-  2. AUTO-PAUSA por agotado: si un producto `activo` queda con 0 unidades pasa a
+  2. AUTO-PAUSA por agotado (parámetro «Pausar solo un producto agotado»): si un producto `activo` queda con 0 unidades pasa a
      `agotado` (Victoria deja de ofrecerlo, igual que con una pausa manual), se
      anota en su historial, se avisa por Telegram y queda en Incidencias.
      Reanudar es SIEMPRE manual (al reanudar se vuelve a comprobar el stock).
-  3. ALERTA de margen en riesgo: si el costo cambió y con el precio actual el
+  3. ALERTA de margen en riesgo (parámetro «Avisar cuando el margen está en riesgo»): si el costo cambió y con el precio actual el
      margen cae bajo el mínimo del dueño, se avisa (Incidencias + Telegram) UNA
      vez, cuando cruza el umbral. NUNCA cambia el precio solo: eso es del dueño.
 
@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
+from src.config.parametros import parametros
 from src.integrations.rocketfy import RocketfyBusinessError, RocketfyRequestError
 from src.integrations.telegram import get_telegram_notifier
 from src.jobs._locks import acquire_lock, release_lock
@@ -34,7 +35,7 @@ from src.routes.productos.repository import SkuMonitoreadoRepository
 
 from .calculadora import margen_en_riesgo
 from .repository import ProductoBotGestionRepository
-from .services import UMBRAL_STOCK_AL_PUBLICAR, ProductosBotService, _dinero
+from .services import ProductosBotService, _dinero
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +120,11 @@ class SincronizacionProductosService:
         if cambios:
             self._repo.registrar_historial(sku, "actualizado_rocketfy", None, cambios)
 
-        self._revisar_agotado(antes, despues, resultado)
-        self._revisar_margen(antes, despues, resultado)
+        # Los dos automatismos se pueden apagar desde Parámetros; la actualización de datos de arriba no.
+        if parametros.valor("sync.autopausa_agotado"):
+            self._revisar_agotado(antes, despues, resultado)
+        if parametros.valor("sync.alerta_margen"):
+            self._revisar_margen(antes, despues, resultado)
 
     # -- agotado ---------------------------------------------------------
     def _revisar_agotado(self, antes: dict, despues: dict, resultado: ResultadoSincronizacion) -> None:
@@ -183,7 +187,7 @@ class SincronizacionProductosService:
         try:
             vigilados = {m["sku"] for m in self._monitoreo.listar(solo_activos=False)}
             if sku not in vigilados:
-                self._monitoreo.upsert(sku, UMBRAL_STOCK_AL_PUBLICAR)
+                self._monitoreo.upsert(sku, parametros.valor("stock.umbral_bajo"))
             self._alertas.guardar_alerta(sku, tipo, detalle)
         except Exception:
             logger.exception("Sincronización: no se pudo guardar la alerta '%s' de '%s'", tipo, sku)

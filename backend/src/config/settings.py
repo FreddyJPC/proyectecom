@@ -52,18 +52,23 @@ class Settings:
     # integrations/llm/factory.py::get_llm_client(), que es el único punto
     # que de verdad necesita la key -- ver PROGRESS.md, Fase 3.2, para el
     # razonamiento completo de por qué no vive acá.
+    #
+    # Qué modelo usa, cuánta memoria tiene Victoria, cuántas vueltas con
+    # herramientas da y si manda fotos YA NO son ajustes de arranque: se
+    # cambian desde la app (src/config/parametros, ADR-011). Las variables
+    # LLM_MODEL, BOT_MAX_MENSAJES_HISTORIAL, BOT_MAX_TURNOS_HERRAMIENTAS y
+    # BOT_ENVIAR_FOTOS siguen valiendo, pero solo como respaldo cuando nadie
+    # guardó un valor en la app, y las lee ese módulo, no este.
     llm_provider: str
-    llm_model: str
-    bot_max_turnos_herramientas: int
-    bot_max_mensajes_historial: int
-    # Fase G2: Victoria puede enviar la foto del producto por WhatsApp (herramienta
-    # `enviar_foto_producto`). APAGADO por defecto hasta comprobar con un teléfono que
-    # Meta descarga las imágenes de Rocketfy: BOT_ENVIAR_FOTOS=true la enciende.
-    bot_enviar_fotos: bool
+
+
+# Qué valores de una variable de entorno significan «sí». Es el criterio de siempre del
+# proyecto y también el que usa src/config/parametros para las variables de respaldo.
+VALORES_VERDADEROS = ("1", "true", "yes", "si", "sí")
 
 
 def _env_bool(nombre: str) -> bool:
-    return os.getenv(nombre, "").strip().lower() in ("1", "true", "yes", "si", "sí")
+    return os.getenv(nombre, "").strip().lower() in VALORES_VERDADEROS
 
 
 def load_settings() -> Settings:
@@ -88,8 +93,4 @@ def load_settings() -> Settings:
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,
         telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID") or None,
         llm_provider=os.getenv("LLM_PROVIDER", "anthropic"),
-        llm_model=os.getenv("LLM_MODEL", "claude-sonnet-5"),
-        bot_max_turnos_herramientas=int(os.getenv("BOT_MAX_TURNOS_HERRAMIENTAS", "5")),
-        bot_max_mensajes_historial=int(os.getenv("BOT_MAX_MENSAJES_HISTORIAL", "40")),
-        bot_enviar_fotos=_env_bool("BOT_ENVIAR_FOTOS"),
     )

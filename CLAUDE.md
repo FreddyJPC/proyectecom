@@ -71,6 +71,16 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   editar nunca una migración ya aplicada.**
 - Proveedor del LLM detrás de la interfaz `LLMProvider`; no importar el SDK
   de Anthropic fuera de `src/integrations/llm/` (hay un test que lo vigila).
+- **Valores que se ajustan con el negocio (límites, interruptores, intervalos,
+  textos al cliente, modelo de IA) = parámetros**, no constantes ni variables
+  nuevas: se declaran una vez en `backend/src/config/parametros/catalogo.py`
+  (explicación, rango, valor por defecto) y se leen con
+  `parametros.valor("clave")` **en cada uso**, nunca al arrancar (ADR-011). Prioridad:
+  lo guardado en la app > variable del servidor (respaldo) > valor del código.
+  **Nunca** meter ahí secretos, URLs de conexión ni cosas de seguridad. Las
+  instrucciones de Victoria se editan desde la app por secciones
+  (`backend/src/routes/whatsapp/instrucciones.py`); el archivo
+  `victoria_system_prompt.txt` es el texto original y el respaldo.
 
 ## 5. Entorno de trabajo (sesión en la nube)
 - Desarrollar en la rama que indique la sesión; **commit + push al terminar**
@@ -92,7 +102,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **909 tests pasando**.
+   desde `backend/`. Estado actual: **1163 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,

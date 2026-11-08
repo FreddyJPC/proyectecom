@@ -11,6 +11,9 @@ from src.routes.productos_bot.verificacion import (
     verificar_producto,
 )
 
+# El valor por defecto del parámetro «Qué cuenta como stock bajo» (stock.umbral_bajo).
+UMBRAL = 5
+
 
 def _producto(**cambios):
     producto = {
@@ -124,46 +127,52 @@ class TestBloqueosDeDisponibilidad:
 
 class TestAvisos:
     def test_producto_sencillo_solo_sin_avisos(self):
-        assert avisos_de(_producto(), stock=50) == []
+        assert avisos_de(_producto(), 50, UMBRAL) == []
 
     def test_transferencia(self):
-        assert any("transferencia" in a for a in avisos_de(_producto(metodos_pago_aceptados="contraentrega, transferencia"), 50))
+        assert any("transferencia" in a for a in avisos_de(_producto(metodos_pago_aceptados="contraentrega, transferencia"), 50, UMBRAL))
 
     def test_stock_bajo_pero_no_cero(self):
-        assert any("pocas unidades" in a for a in avisos_de(_producto(), stock=3))
-        assert not any("pocas unidades" in a for a in avisos_de(_producto(), stock=0))
-        assert not any("pocas unidades" in a for a in avisos_de(_producto(), stock=6))
+        assert any("pocas unidades" in a for a in avisos_de(_producto(), 3, UMBRAL))
+        assert not any("pocas unidades" in a for a in avisos_de(_producto(), 0, UMBRAL))
+        assert not any("pocas unidades" in a for a in avisos_de(_producto(), 6, UMBRAL))
+
+    def test_el_umbral_de_stock_bajo_lo_decide_quien_llama(self):
+        # Es el parámetro «Qué cuenta como stock bajo»: con 10, quedar con 8 ya es poco; con 2, no.
+        assert any("pocas unidades" in a for a in avisos_de(_producto(), 8, 10))
+        assert not any("pocas unidades" in a for a in avisos_de(_producto(), 8, 2))
+        assert any("pocas unidades" in a for a in avisos_de(_producto(), 2, 2))
 
     def test_sin_preguntas_frecuentes(self):
-        assert any("preguntas frecuentes" in a for a in avisos_de(_producto(preguntas_frecuentes=None), 50))
+        assert any("preguntas frecuentes" in a for a in avisos_de(_producto(preguntas_frecuentes=None), 50, UMBRAL))
 
     def test_descripcion_larga(self):
-        assert any("muy larga" in a for a in avisos_de(_producto(descripcion="x" * 1201), 50))
+        assert any("muy larga" in a for a in avisos_de(_producto(descripcion="x" * 1201), 50, UMBRAL))
 
     def test_variantes(self):
-        assert any("variantes" in a for a in avisos_de(_producto(variantes="negro, blanco"), 50))
+        assert any("variantes" in a for a in avisos_de(_producto(variantes="negro, blanco"), 50, UMBRAL))
 
     def test_mas_de_una_unidad(self):
-        assert any("más de una unidad" in a for a in avisos_de(_producto(max_unidades_por_pedido=2), 50))
+        assert any("más de una unidad" in a for a in avisos_de(_producto(max_unidades_por_pedido=2), 50, UMBRAL))
 
 
 class TestVerificarProducto:
     def test_usa_el_stock_guardado_si_no_se_pasa_uno_en_vivo(self):
-        resultado = verificar_producto(_producto(stock_ultimo=0))
+        resultado = verificar_producto(_producto(stock_ultimo=0), umbral_stock_bajo=UMBRAL)
         assert any("stock" in b for b in resultado.bloqueos)
 
     def test_el_stock_en_vivo_tiene_prioridad(self):
-        resultado = verificar_producto(_producto(stock_ultimo=0), existe_en_rocketfy=True, stock=8)
+        resultado = verificar_producto(_producto(stock_ultimo=0), existe_en_rocketfy=True, stock=8, umbral_stock_bajo=UMBRAL)
         assert resultado.bloqueos == []
 
     def test_el_envio_confirmado_llega_hasta_los_bloqueos(self):
         producto = _producto(precio=Decimal("16.00"), costo_rocketfy=Decimal("12.00"))
-        assert verificar_producto(producto).bloqueos == []
-        assert len(verificar_producto(producto, envio_para_piso=Decimal("5.00")).bloqueos) == 1
+        assert verificar_producto(producto, umbral_stock_bajo=UMBRAL).bloqueos == []
+        assert len(verificar_producto(producto, envio_para_piso=Decimal("5.00"), umbral_stock_bajo=UMBRAL).bloqueos) == 1
 
     def test_junta_bloqueos_y_avisos(self):
         resultado = verificar_producto(
-            _producto(descripcion="", metodos_pago_aceptados="transferencia"), existe_en_rocketfy=False, stock=2
+            _producto(descripcion="", metodos_pago_aceptados="transferencia"), existe_en_rocketfy=False, stock=2, umbral_stock_bajo=UMBRAL
         )
         assert len(resultado.bloqueos) == 2  # sin descripción + SKU inexistente
         assert any("transferencia" in a for a in resultado.avisos)

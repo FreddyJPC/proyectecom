@@ -35,6 +35,19 @@
 20. [Dominio propio, DNS y certificado HTTPS](#20-dominio-propio-dns-y-certificado-https)
 21. [Prerenderizado: por qué la hora no se calcula al compilar](#21-prerenderizado-por-qué-la-hora-no-se-calcula-al-compilar)
 22. [Las tres claves de WhatsApp (App Secret, clave de verificación y token de acceso)](#22-las-tres-claves-de-whatsapp)
+23. [Latido de la base de datos (heartbeat) y pausa de Supabase](#23-latido-de-la-base-de-datos-heartbeat-y-pausa-de-supabase)
+24. [Los dos catálogos: Rocketfy y Victoria](#24-los-dos-catálogos-rocketfy-y-victoria)
+25. [Modo simulación (*dry run*)](#25-modo-simulación-dry-run)
+26. [Fallar abierto o fallar cerrado](#26-fallar-abierto-o-fallar-cerrado)
+27. [Estado de un producto y la regla que lo protege (`CHECK`)](#27-estado-de-un-producto-y-la-regla-que-lo-protege-check)
+28. [Margen, piso y cómo se calcula un precio recomendado](#28-margen-piso-y-cómo-se-calcula-un-precio-recomendado)
+29. [Redactar con IA sin que invente: salida estructurada, datos no confiables y verificación](#29-redactar-con-ia-sin-que-invente-salida-estructurada-datos-no-confiables-y-verificación)
+30. [Probar con Victoria: el mismo cerebro en un mundo de mentira](#30-probar-con-victoria-el-mismo-cerebro-en-un-mundo-de-mentira)
+31. [Operación continua: sincronizar, pausar solo y avisar sin pisar a nadie](#31-operación-continua-sincronizar-pausar-solo-y-avisar-sin-pisar-a-nadie)
+32. [Mandar una foto por WhatsApp: un enlace, una sola vez y un interruptor (apagado hasta verificar)](#32-mandar-una-foto-por-whatsapp-un-enlace-una-sola-vez-y-un-interruptor-apagado-hasta-verificar)
+33. [Variantes: por qué no es solo «un texto más»](#33-variantes-por-qué-no-es-solo-un-texto-más)
+34. [Parámetros: cambiar el sistema sin tocar el servidor](#34-parámetros-cambiar-el-sistema-sin-tocar-el-servidor)
+35. [Las instrucciones de Victoria, editables sin que se rompan](#35-las-instrucciones-de-victoria-editables-sin-que-se-rompan)
 
 ---
 
@@ -423,10 +436,14 @@ tenga que hacer una petición.
 dentro del mismo proceso del backend (ver §10).
 
 **Qué agenda en tu proyecto** (`backend/src/app.py`, `start_scheduler()`):
-| Job | Frecuencia |
-|---|---|
-| Reconciliación de pedidos | cada 45 min |
-| Stock watcher | cada 60 min |
+| Job | Frecuencia (por defecto) | ¿Se cambia desde la app? |
+|---|---|---|
+| Reconciliación de pedidos | cada 45 min | Sí: Control → Parámetros |
+| Stock watcher | cada 60 min | Sí |
+| Sincronización de productos | cada 60 min | Sí |
+| Latido de la base | cada 6 h | No (evita que Supabase pause el proyecto) |
+
+Al guardar un intervalo nuevo, el reloj se **reprograma al instante** (ver §34): no hace falta reiniciar nada.
 
 **Cómo sabes si está encendido en producción:** abre `/health` del backend;
 debe responder `{"scheduler": true, "status": "ok"}`.
@@ -1024,10 +1041,11 @@ una herramienta, pero **el código decide qué se envía**:
 si el primer intento *sí* llegó pero la respuesta se perdió, reintentar mandaría
 la foto dos veces.
 
-**El interruptor (`BOT_ENVIAR_FOTOS`).** Una función nueva que toca conversaciones
-con clientes reales se despliega con un **interruptor**: una variable que la
-enciende o apaga sin tocar el código ni volver a una versión anterior. Se llama
-*feature flag*. Aquí **nace APAGADO**: no se enciende hasta comprobar con un
+**El interruptor (parámetro «Enviar fotos del producto»).** Una función nueva que toca
+conversaciones con clientes reales se despliega con un **interruptor**: un valor que la
+enciende o apaga sin tocar el código ni volver a una versión anterior (hoy, desde
+Control → Parámetros; antes era la variable `BOT_ENVIAR_FOTOS`, que sigue valiendo como
+respaldo). Se llama *feature flag*. Aquí **nace APAGADO**: no se enciende hasta comprobar con un
 teléfono que las imágenes llegan.
 
 **Un hallazgo que lo justificó.** La guía del proveedor decía que la imagen es una
@@ -1058,3 +1076,93 @@ Para una persona que lee el pedido sirve; para **Rocketfy no**: despacha por SKU
 así que no sabría cuál variante enviar, ni descontaría su stock. Arreglarlo
 cambia qué se le manda a Rocketfy (la ruta del dinero), por eso se hace con
 decisiones y pruebas reales (pendiente #55) y no a ciegas.
+
+## 34. Parámetros: cambiar el sistema sin tocar el servidor
+
+**El problema.** Hasta ahora, ajustar algo como «cuántos mensajes recuerda Victoria» o «cada cuántos
+minutos se sincroniza Rocketfy» exigía entrar a Railway, cambiar una variable y reiniciar, o pedir un
+cambio de código y esperar un despliegue. En la etapa inicial del negocio se quiere probar y ajustar
+muchas cosas, así que esos valores pasaron a ser **parámetros**: se cambian con un clic, desde
+**Control → Parámetros**, y se explican solos.
+
+**Qué es un parámetro.** Un valor del sistema con nombre, **explicación de para qué sirve**, tipo
+(número, sí/no, texto o una opción de una lista), **rango permitido** y un **valor original**. Todo eso
+se declara una sola vez en `backend/src/config/parametros/catalogo.py` (el *catálogo*). La pantalla lee
+el catálogo por API, así la explicación nunca queda desactualizada respecto al código. Una clave que no
+está en el catálogo no se puede leer ni guardar (lista blanca).
+
+**Quién gana: tres niveles de valor.** De más fuerte a más débil:
+1. lo que **guardaste en la app** (tabla `parametros_sistema`);
+2. la **variable del servidor** equivalente (Railway), si existe: es el *respaldo* que ya había;
+3. el **valor original** escrito en el código.
+
+Por eso, al desplegar el módulo **nada cambió** hasta que alguien guardó un valor: todo siguió valiendo lo
+mismo que antes. Y «Restaurar original» solo borra lo guardado en la app: vuelve al nivel 2 o 3. La
+pantalla muestra de dónde sale cada valor («Cambiado en la app», «Valor del servidor», «Valor original»).
+
+**¿Se consulta la base en cada acción? No.** Los valores guardados se recuerdan en memoria 30 segundos
+(*caché con vencimiento*): una consulta cada 30 s como máximo, lleguen los mensajes que lleguen. Guardar o
+restaurar un valor **borra esa memoria al instante**, así que el cambio se nota en el siguiente uso. El
+sistema corre con un solo worker de gunicorn (§12), por eso una memoria por proceso basta.
+
+**Si la base falla**, no pasa nada grave: se usa lo último que se leyó o, si no hay nada, la variable del
+servidor y el valor original. Un parámetro nunca debe dejar a Victoria muda. Y un valor guardado que ya no
+cumple las reglas (alguien tocó la base a mano) se **ignora** y se avisa una sola vez en el registro.
+
+**Por qué las partes que leen el valor lo piden en cada uso.** Antes, Victoria leía «cuántos mensajes
+recordar» al construirse (una vez por arranque). Ahora lo pide **en cada turno**: es lo que hace posible que
+un cambio se note sin reiniciar. Mismo cuidado con el modelo de IA, la foto del producto y los textos fijos.
+
+**Qué NO es un parámetro (a propósito).**
+- **Secretos** (claves, tokens, el App Secret de Meta): jamás en la base ni en la app; viven en Railway/Vercel.
+  Un test vigila que ninguna clave del catálogo parezca un secreto.
+- Lo que se necesita **antes** de tener base (`SUPABASE_DB_URL`) o que **te dejaría sin pantalla** si se
+  equivocara (`FRONTEND_ORIGIN`), y lo que **apaga la seguridad** (`WHATSAPP_SKIP_SIGNATURE`).
+- Reglas de Meta y de Rocketfy, tiempos de espera y reintentos (mal ajustados pueden duplicar mensajes o
+  pedidos), el dinero y la lógica de ventas (los manda el código, ADR-010).
+- Los **ajustes de precios** (márgenes, envío) **siguen en su propia pantalla**: tienen reglas entre sí
+  que la base hace cumplir (p. ej. «objetivo ≥ mínimo») y una tabla genérica las perdería.
+
+**El historial.** Cada cambio queda en `parametros_historial` (quién, cuándo, qué valor había antes): es tu
+«deshacer».
+
+**Los modelos de IA, en una lista cerrada.** «Modelo de IA» no es un texto libre: un nombre mal escrito
+dejaría a Victoria sin cerebro. Solo están los modelos que se comportan como el actual con este código.
+Quedaron fuera los que rechazan la «herramienta forzada» con que «Redactar con IA» pide el borrador; se
+suman cuando se adapte y pruebe ese código. Cambiar el modelo afecta a **todo**: Victoria, «Redactar con IA»
+y «Probar con Victoria». Después de cambiarlo, hay que hacer una prueba completa antes de confiar en él.
+
+## 35. Las instrucciones de Victoria, editables sin que se rompan
+
+**Qué son.** El texto que se le entrega a la IA en cada mensaje (su *system prompt*): quién es, cómo habla,
+qué reglas sigue. Hasta ahora vivía en un archivo del código (`backend/src/routes/whatsapp/
+victoria_system_prompt.txt`); ahora se pueden **editar desde la app**: Control → Parámetros → Instrucciones
+de Victoria.
+
+**El riesgo que había que cerrar.** Ese texto se completa con una función de Python (`str.format`) que
+rellena unos *huecos* ({contexto_producto}, la fecha…). **Una `{` o una `}` suelta en el texto hace fallar
+esa función en CADA mensaje**: Victoria quedaría muda con todos los clientes por un error de tipeo. Por eso:
+
+- Las llaves de lo que escribes se **escapan** al armar el texto (se tratan como letras, no como huecos).
+- Los huecos viven en **secciones bloqueadas** que no se pueden borrar.
+
+**Secciones editables y bloqueadas.** Se editan: *quién es Victoria*, *personalidad*, *objetivo*, *reglas
+que nunca rompe* y *variantes*. Son de solo lectura: *la ficha del producto*, *cómo usa sus herramientas*
+(nombra las herramientas reales y el flujo de cierre, que son código; cambiarlas sin cambiar el código la
+confundiría), *lo que ya se sabe del cliente* y *la fecha*.
+
+**Borrador → prueba → publicar.** Editas un **borrador**; los clientes no ven nada. Lo pruebas en «Probar con
+Victoria» (que usa la simulación de §30, sin tocar nada real). Cuando estés conforme, **publicas**: desde el
+siguiente mensaje Victoria habla con ese texto. La versión anterior queda **archivada** y puedes cargarla de
+nuevo en el borrador. «Volver a las originales» hace que Victoria use al instante el texto del código.
+
+**Nunca sin instrucciones.** Si al leer la versión publicada falla la base, o el texto guardado ya no es
+válido, Victoria usa el archivo del código. Y el original no se pierde: es el respaldo.
+
+**Qué NO puede cambiar un prompt.** El total a cobrar, el stock, la cantidad máxima y la pausa de productos
+los decide el código (ADR-010). Un prompt peor puede empeorar el trato con un cliente, pero no puede
+saltarse esas reglas.
+
+**El costo.** Todo el texto viaja en **cada** mensaje: más largo = más lento y más caro. Hay un máximo por
+sección y de 8 000 caracteres en total, y la pantalla muestra una estimación en «tokens» (≈ 4 caracteres cada
+uno).

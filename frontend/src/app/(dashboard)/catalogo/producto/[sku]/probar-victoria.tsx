@@ -13,11 +13,10 @@ import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoIA } from "@/types/producto-bot";
+import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoPruebas } from "@/types/producto-bot";
 
-// Mismos límites que el backend (schemas.py y pruebas.py).
+// Mismo límite que el backend (schemas.py).
 const MAX_MENSAJE = 1000;
-const MAX_MENSAJES_POR_PRUEBA = 20;
 
 /** Escenarios para probar con un toque. `esperado` dice qué debería pasar, para
  * que se pueda juzgar si Victoria lo hizo bien. */
@@ -170,11 +169,14 @@ export function ProbarConVictoria({
   sku,
   nombre,
   sinCambiosPendientes,
+  usarBorrador = false,
 }: {
   sku: string;
   nombre: string;
   /** Falso si hay ediciones sin guardar: la prueba usa lo último guardado. */
   sinCambiosPendientes: boolean;
+  /** Probar con el borrador de las instrucciones de Victoria (Parámetros → Instrucciones), no con las publicadas. */
+  usarBorrador?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -185,17 +187,19 @@ export function ProbarConVictoria({
   const [borrador, setBorrador] = useState("");
   const [pendiente, setPendiente] = useState<string | null>(null);
   const [error, setError] = useState<{ mensaje: string; motivos: string[] } | null>(null);
-  const [usoLocal, setUsoLocal] = useState<UsoIA | null>(null);
+  const [usoLocal, setUsoLocal] = useState<UsoPruebas | null>(null);
   const [escenario, setEscenario] = useState<(typeof ESCENARIOS)[number] | null>(null);
   const registro = useRef<HTMLDivElement>(null);
 
-  const usoApi = useApi<UsoIA>(abierto ? "/productos-bot/pruebas/uso" : null);
+  const usoApi = useApi<UsoPruebas>(abierto ? "/productos-bot/pruebas/uso" : null);
   const uso = usoLocal ?? usoApi.data;
   const sinUsos = uso != null && uso.restantes <= 0;
 
   const enviando = pendiente !== null;
   const despachado = estado?.estado === "despachado";
-  const llegoAlMaximo = turnos.length >= MAX_MENSAJES_POR_PRUEBA;
+  // El máximo es un parámetro del sistema (Parámetros → «Mensajes por prueba»): llega del servidor.
+  const maxMensajes = uso?.maxMensajes ?? null;
+  const llegoAlMaximo = maxMensajes !== null && turnos.length >= maxMensajes;
   const terminada = escalada || despachado || llegoAlMaximo;
   const bloqueada = terminada || sinUsos;
 
@@ -211,7 +215,7 @@ export function ProbarConVictoria({
     setPendiente(mensaje);
     setError(null);
     setBorrador("");
-    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada };
+    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada, ...(usarBorrador ? { usarBorrador: true } : {}) };
     try {
       const res = await apiFetch<TurnoSimulado>(`/productos-bot/${encodeURIComponent(sku)}/probar`, {
         method: "POST",
@@ -257,10 +261,15 @@ export function ProbarConVictoria({
   const hayPrueba = turnos.length > 0;
 
   return (
-    <SectionCard titulo="Probar con Victoria" descripcion="Conversa como un cliente antes de publicar. No se envía nada real.">
+    <SectionCard
+      titulo={usarBorrador ? "Probar el borrador con Victoria" : "Probar con Victoria"}
+      descripcion={usarBorrador ? "Conversa con las instrucciones del borrador antes de publicarlas. Los clientes no ven nada." : "Conversa como un cliente antes de publicar. No se envía nada real."}
+    >
       <div className="space-y-3 p-4 sm:p-5">
         <p className="text-sm text-muted-foreground">
-          Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe.
+          {usarBorrador
+            ? "Mira cómo responde Victoria con tu borrador de instrucciones y la ficha del producto que elegiste: si mantiene el tono, si respeta tus reglas y si sigue cerrando bien la venta."
+            : "Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe."}
         </p>
 
         <Dialog open={abierto} onOpenChange={setAbierto}>
@@ -280,7 +289,8 @@ export function ProbarConVictoria({
             <DialogHeader>
               <DialogTitle>Probar con Victoria</DialogTitle>
               <DialogDescription>
-                Es una conversación de ensayo con «{nombre}» tal como está guardado.{" "}
+                Es una conversación de ensayo con «{nombre}» tal como está guardado
+                {usarBorrador && <>, usando <strong className="font-medium text-foreground">tu borrador de instrucciones</strong></>}.{" "}
                 <strong className="font-medium text-foreground">No se envía nada a Rocketfy, WhatsApp ni Telegram, y la conversación no se guarda.</strong> Cada mensaje usa la IA y cuenta para tu tope diario.
               </DialogDescription>
             </DialogHeader>
@@ -406,7 +416,7 @@ export function ProbarConVictoria({
                 {llegoAlMaximo && !escalada && !despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-info-soft p-3 text-sm text-status-info-ink">
                     <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    La prueba llegó a {MAX_MENSAJES_POR_PRUEBA} mensajes. Reiníciala para empezar de nuevo.
+                    La prueba llegó a {maxMensajes} mensajes. Reiníciala para empezar de nuevo.
                   </p>
                 )}
 

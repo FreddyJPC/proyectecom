@@ -33,6 +33,46 @@ def _checker(productos=None, error=None, ttl=300):
     return StockChecker(client=cliente, ttl_segundos=ttl, reloj=reloj), cliente, reloj
 
 
+class TestTiempoDeRecuerdoEsUnParametro:
+    """Sin fijar `ttl_segundos`, el StockChecker lo consulta en cada uso (parámetro «Cuánto se
+    recuerda el stock consultado»)."""
+
+    @staticmethod
+    def _checker_sin_fijar(monkeypatch, segundos):
+        from src.config.parametros import parametros
+
+        real = parametros.valor
+        valores = {"stock.cache_segundos": segundos}
+        monkeypatch.setattr(parametros, "valor", lambda clave: valores[clave] if clave in valores else real(clave))
+        cliente = ClienteRocketfyFalso([{"sku": "DEMO-1", "stock": 7}])
+        reloj = Reloj()
+        return StockChecker(client=cliente, reloj=reloj), cliente, reloj, valores
+
+    def test_por_defecto_recuerda_cinco_minutos(self):
+        cliente = ClienteRocketfyFalso([{"sku": "DEMO-1", "stock": 7}])
+        reloj = Reloj()
+        checker = StockChecker(client=cliente, reloj=reloj)
+        checker.stock_de("DEMO-1")
+        reloj.ahora += 299
+        checker.stock_de("DEMO-1")
+        assert len(cliente.consultas) == 1
+        reloj.ahora += 2
+        checker.stock_de("DEMO-1")
+        assert len(cliente.consultas) == 2
+
+    def test_cambiar_el_parametro_se_nota_sin_reconstruir_el_checker(self, monkeypatch):
+        checker, cliente, reloj, valores = self._checker_sin_fijar(monkeypatch, 60)
+        checker.stock_de("DEMO-1")
+        reloj.ahora += 90
+        checker.stock_de("DEMO-1")
+        assert len(cliente.consultas) == 2  # 90 s > 60 s: vuelve a preguntar
+
+        valores["stock.cache_segundos"] = 600  # el dueño sube el tiempo desde la app
+        reloj.ahora += 90
+        checker.stock_de("DEMO-1")
+        assert len(cliente.consultas) == 2  # 90 s < 600 s: ahora lo recuerda
+
+
 class TestStockDe:
     def test_devuelve_el_stock_del_sku_exacto_ignorando_otros_resultados_de_la_busqueda(self):
         checker, cliente, _ = _checker(

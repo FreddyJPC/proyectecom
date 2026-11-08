@@ -20,6 +20,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
+from src.config.parametros import parametros
 from src.integrations.rocketfy import get_rocketfy_client
 from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.routes.ajustes.services import AjustesService
@@ -48,7 +49,6 @@ from .verificacion import bloqueos_de_contenido, metodos_de_pago, verificar_prod
 
 logger = logging.getLogger(__name__)
 
-UMBRAL_STOCK_AL_PUBLICAR = 5
 # Ventana de «pedidos por producto» en la lista y estados que muestran la insignia de margen.
 DIAS_DE_PEDIDOS_EN_LA_LISTA = 30
 ESTADOS_CON_INSIGNIA_DE_MARGEN = ("listo", "activo", "pausado", "agotado")
@@ -365,6 +365,7 @@ class ProductosBotService:
             existe_en_rocketfy=en_vivo is not None,
             stock=_entero(en_vivo.get("stock")) if en_vivo is not None else None,
             envio_para_piso=self._envio_para_piso(),
+            umbral_stock_bajo=parametros.valor("stock.umbral_bajo"),
         )
         if verificacion.bloqueos:
             raise PublicacionBloqueadaError(verificacion.bloqueos)
@@ -377,7 +378,7 @@ class ProductosBotService:
         try:
             ya_vigilados = {m["sku"] for m in self._monitoreo.listar(solo_activos=True)}
             if sku not in ya_vigilados:
-                self._monitoreo.upsert(sku, UMBRAL_STOCK_AL_PUBLICAR)
+                self._monitoreo.upsert(sku, parametros.valor("stock.umbral_bajo"))
         except Exception:
             logger.exception("No se pudo agregar '%s' a Vigilados al publicar (la publicación sigue)", sku)
 
@@ -479,7 +480,9 @@ class ProductosBotService:
 
     def _a_detalle(self, fila: dict) -> ProductoBotDetalleDTO:
         # Sobre lo último guardado de Rocketfy, sin llamar a la red.
-        verificacion = verificar_producto(fila, envio_para_piso=self._envio_para_piso())
+        verificacion = verificar_producto(
+            fila, envio_para_piso=self._envio_para_piso(), umbral_stock_bajo=parametros.valor("stock.umbral_bajo")
+        )
         verificacion.avisos.extend(self._avisos_de_la_lista(fila))
         peso = fila.get("peso_kg")
         return ProductoBotDetalleDTO(

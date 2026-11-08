@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BarChart3, Boxes, LayoutDashboard, MessageCircle, Package, PlusCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, Boxes, LayoutDashboard, MessageCircle, Package, PlusCircle, SlidersHorizontal } from "lucide-react";
 
 /** Metadata y navegación del sitio. Única fuente de verdad: cualquier
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
@@ -35,6 +35,7 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
       { title: "Incidencias y alertas", short: "Alertas", url: "/incidencias", icon: AlertTriangle },
       { title: "Catálogo y stock", short: "Catálogo", url: "/catalogo", icon: Boxes },
       { title: "Métricas", short: "Métricas", url: "/metricas", icon: BarChart3 },
+      { title: "Parámetros", short: "Ajustes", url: "/parametros", icon: SlidersHorizontal },
     ],
   },
 ];
@@ -73,6 +74,9 @@ export function migasDe(pathname: string): Miga[] {
   }
   if (seccion.url === "/pedidos") return [{ label: seccion.title, href: seccion.url }, { label: `Pedido #${resto}` }];
   if (seccion.url === "/conversaciones") return [{ label: seccion.title, href: seccion.url }, { label: "Conversación" }];
+  if (seccion.url === "/parametros" && resto === "instrucciones") {
+    return [{ label: seccion.title, href: seccion.url }, { label: "Instrucciones de Victoria" }];
+  }
   if (seccion.url === "/catalogo" && resto.startsWith("producto/")) {
     return [{ label: seccion.title, href: `${seccion.url}?tab=mis-productos` }, { label: "Ficha del producto" }];
   }

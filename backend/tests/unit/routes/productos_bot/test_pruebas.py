@@ -23,10 +23,11 @@ from src.routes.productos_bot.exceptions import (
 from src.routes.productos_bot.generaciones import TIPO_SIMULACION
 from src.routes.productos_bot.pruebas import (
     ACCION_SIMULACION_COMPLETA,
-    MAX_MENSAJES_POR_PRUEBA,
     PruebasService,
     faltantes_para_probar,
 )
+from src.config.parametros import definicion
+from src.routes.productos_bot import pruebas as pruebas_modulo
 from tests.unit.routes.productos_bot.test_simulacion import (
     CERRAR,
     CONTRAENTREGA,
@@ -40,6 +41,9 @@ from tests.unit.routes.productos_bot.test_simulacion import (
 )
 
 SKU = "SIM-1"
+
+# Mensajes que admite una prueba por defecto (parámetro `pruebas.max_mensajes`).
+MAX_MENSAJES_POR_PRUEBA = definicion("pruebas.max_mensajes").defecto
 
 
 class RepoFalso:
@@ -101,6 +105,62 @@ class TestUso:
     def test_nunca_devuelve_restantes_negativos(self):
         s, _, _ = servicio(usadas=150, tope=100)
         assert s.uso().restantes == 0
+
+
+class RepoDeInstrucciones:
+    """Doble del repositorio de las instrucciones de Victoria: solo importa el borrador."""
+
+    def __init__(self, borrador=None):
+        self._borrador = borrador
+
+    def borrador(self):
+        return self._borrador
+
+
+def _servicio_con_borrador(llm, borrador):
+    from src.routes.whatsapp.instrucciones import secciones_originales
+
+    fila = None if borrador is None else {"secciones": {**secciones_originales(), **borrador}}
+    return PruebasService(
+        repo=RepoFalso(ficha()), generaciones=GeneracionesFalsas(), ajustes_service=AjustesFalsos(100), llm=llm,
+        modelo="modelo-x", instrucciones_repo=RepoDeInstrucciones(fila),
+    )
+
+
+class TestProbarElBorradorDeLasInstrucciones:
+    """Se prueba lo que se está por publicar, sin que los clientes reales lo vean todavía."""
+
+    def test_con_usar_borrador_victoria_recibe_las_instrucciones_del_borrador(self):
+        llm = LLMGuionado(texto("ok"))
+        s = _servicio_con_borrador(llm, {"personalidad": "Hablas como un pirata."})
+        s.probar(SKU, "Hola", [], None, False, False, "ana@ejemplo.com", usar_borrador=True)
+
+        system = llm.llamadas[0]["system"]
+        assert "Hablas como un pirata." in system and "Hablas como una persona real" not in system
+        assert "Audifonos" in system or "{" not in system  # los huecos se rellenaron
+
+    def test_sin_usar_borrador_se_prueba_con_las_que_rigen_hoy(self):
+        llm = LLMGuionado(texto("ok"))
+        s = _servicio_con_borrador(llm, {"personalidad": "Hablas como un pirata."})
+        s.probar(SKU, "Hola", [], None, False, False, "ana@ejemplo.com")
+        assert "Hablas como un pirata." not in llm.llamadas[0]["system"]
+
+    def test_pedir_el_borrador_sin_tenerlo_se_avisa_y_no_gasta_nada(self):
+        llm = LLMGuionado(texto("no debe llegar"))
+        s = _servicio_con_borrador(llm, None)
+        with pytest.raises(PruebaInvalidaError, match="No hay un borrador de instrucciones"):
+            s.probar(SKU, "Hola", [], None, False, False, "ana@ejemplo.com", usar_borrador=True)
+        assert llm.llamadas == []
+
+    def test_un_borrador_invalido_en_la_base_se_rechaza_con_un_mensaje(self):
+        llm = LLMGuionado(texto("no debe llegar"))
+        s = PruebasService(
+            repo=RepoFalso(ficha()), generaciones=GeneracionesFalsas(), ajustes_service=AjustesFalsos(100), llm=llm,
+            modelo="modelo-x", instrucciones_repo=RepoDeInstrucciones({"secciones": {"intro": "solo una"}}),
+        )
+        with pytest.raises(PruebaInvalidaError, match="El borrador de instrucciones no es válido"):
+            s.probar(SKU, "Hola", [], None, False, False, "ana@ejemplo.com", usar_borrador=True)
+        assert llm.llamadas == []
 
 
 class TestUnTurno:
@@ -170,6 +230,20 @@ class TestTopes:
         with pytest.raises(PruebaInvalidaError, match="20 mensajes"):
             probar(s, historial=historial)
         assert llm.llamadas == []
+
+    def test_el_uso_informa_cuantos_mensajes_admite_cada_prueba(self):
+        s, _, _ = servicio(LLMGuionado(texto("ok")))
+        assert s.uso().max_mensajes == MAX_MENSAJES_POR_PRUEBA
+
+    def test_el_maximo_de_mensajes_es_el_parametro_y_se_nota_al_cambiarlo(self, monkeypatch):
+        historial = [{"rol": "cliente", "contenido": "hola"}] * 6
+        s, _, _ = servicio(LLMGuionado(texto("ok")))
+        assert probar(s, historial=historial).respuesta == "ok"  # con 20 todavía cabe
+
+        monkeypatch.setattr(pruebas_modulo.parametros, "valor", lambda clave: 5 if clave == "pruebas.max_mensajes" else None)
+        s, _, _ = servicio(LLMGuionado(texto("no debe llegar")))
+        with pytest.raises(PruebaInvalidaError, match="5 mensajes"):
+            probar(s, historial=historial)
 
     def test_los_mensajes_del_bot_no_cuentan_para_el_maximo(self):
         historial = [{"rol": "bot", "contenido": "hola"}] * 50 + [{"rol": "cliente", "contenido": "hola"}] * (MAX_MENSAJES_POR_PRUEBA - 1)

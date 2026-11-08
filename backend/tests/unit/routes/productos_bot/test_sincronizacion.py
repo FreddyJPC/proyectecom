@@ -218,6 +218,38 @@ class TestAutoPausaPorAgotado:
         assert len(alertas.alertas) == 1 and len(telegram.avisos) == 1
 
 
+class TestLosAutomatismosSeApaganDesdeParametros:
+    @staticmethod
+    def _apagar(monkeypatch, *claves):
+        from src.config.parametros import parametros
+
+        real = parametros.valor
+        monkeypatch.setattr(parametros, "valor", lambda clave: False if clave in claves else real(clave))
+
+    def test_sin_autopausa_un_producto_agotado_sigue_activo_pero_los_datos_se_actualizan(self, monkeypatch):
+        self._apagar(monkeypatch, "sync.autopausa_agotado")
+        s, repo, alertas, telegram, _ = armar([activo()], RocketfyPorSku([en_rocketfy(stock=0)]))
+        r = s.sincronizar_todos()
+
+        fila = repo.filas["DEMO-1"]
+        assert (fila["estado"], fila["stock_ultimo"]) == ("activo", 0)  # no se pausó, pero el stock se refrescó
+        assert r.actualizados == 1 and r.pausados_por_agotado == 0
+        assert alertas.alertas == [] and telegram.avisos == []
+
+    def test_sin_alerta_de_margen_no_se_avisa_aunque_el_margen_caiga(self, monkeypatch):
+        self._apagar(monkeypatch, "sync.alerta_margen")
+        s, repo, alertas, telegram, _ = armar([activo()], RocketfyPorSku([en_rocketfy(costo="22.00")]))
+        r = s.sincronizar_todos()
+
+        assert repo.filas["DEMO-1"]["costo_rocketfy"] == Decimal("22.00")  # el costo sí se actualiza
+        assert r.alertas_de_margen == 0 and alertas.alertas == [] and telegram.avisos == []
+
+    def test_apagar_una_no_apaga_la_otra(self, monkeypatch):
+        self._apagar(monkeypatch, "sync.alerta_margen")
+        s, repo, _, _, _ = armar([activo()], RocketfyPorSku([en_rocketfy(stock=0)]))
+        assert s.sincronizar_todos().pausados_por_agotado == 1
+
+
 class TestAlertaDeMargenEnRiesgo:
     # Con los ajustes de prueba (envío $5, mínimo 25 %) y precio $34.90:
     #   costo 10 -> ganancia 19.90 (57 %)   costo 22 -> ganancia 7.90 (22.6 %, bajo el mínimo)

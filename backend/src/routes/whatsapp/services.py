@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from src.config.parametros import parametros
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.whatsapp import WhatsAppClient, WhatsAppError, get_whatsapp_client
 
@@ -20,11 +21,6 @@ from .worker import BotWorker
 logger = logging.getLogger(__name__)
 
 FEP_VENTANA_HORAS = 72
-
-_MENSAJE_POSTVENTA = "¡Hola de nuevo! Ya te conecto con nuestro equipo de atención, en un momento te responden 🙋"
-_MENSAJE_COMPROBANTE_RECIBIDO = (
-    "¡Gracias! Ya recibimos tu comprobante, en un momento uno de nuestros asesores lo confirma ✅"
-)
 
 
 class WebhookService:
@@ -110,7 +106,7 @@ class WebhookService:
                 telefono=dto.telefono,
                 modo="fijo",
                 mensaje_id=mensaje["id"],
-                texto_fijo=_MENSAJE_POSTVENTA,
+                texto_fijo=parametros.valor("bot.texto_postventa"),
             )
             return
 
@@ -125,7 +121,7 @@ class WebhookService:
                 telefono=dto.telefono,
                 modo="fijo",
                 mensaje_id=mensaje["id"],
-                texto_fijo=_MENSAJE_COMPROBANTE_RECIBIDO,
+                texto_fijo=parametros.valor("bot.texto_comprobante_recibido"),
             )
             return
 

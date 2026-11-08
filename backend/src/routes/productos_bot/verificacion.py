@@ -21,7 +21,6 @@ from typing import List, Optional
 from src.integrations.rocketfy import RECAUDO_MINIMO_CONTRAENTREGA
 
 METODOS_PAGO_VALIDOS = ("contraentrega", "transferencia")
-STOCK_BAJO = 5
 LARGO_DESCRIPCION_LARGA = 1200
 
 
@@ -113,7 +112,9 @@ def bloqueos_de_disponibilidad(existe_en_rocketfy: Optional[bool], stock: Option
     return bloqueos
 
 
-def avisos_de(producto: dict, stock: Optional[int]) -> List[str]:
+def avisos_de(producto: dict, stock: Optional[int], umbral_stock_bajo: int) -> List[str]:
+    """`umbral_stock_bajo` es el parámetro «Qué cuenta como stock bajo» (`stock.umbral_bajo`): se
+    recibe de quien llama para que esta función siga siendo pura."""
     avisos: List[str] = []
 
     if "transferencia" in metodos_de_pago(producto.get("metodos_pago_aceptados")):
@@ -121,7 +122,7 @@ def avisos_de(producto: dict, stock: Optional[int]) -> List[str]:
             "Incluye pago por transferencia: Victoria no puede ver imágenes, así que pasará la "
             "conversación a una persona para verificar el comprobante."
         )
-    if stock is not None and 0 < stock <= STOCK_BAJO:
+    if stock is not None and 0 < stock <= umbral_stock_bajo:
         avisos.append(f"Quedan pocas unidades en Rocketfy ({stock}).")
     if not (producto.get("preguntas_frecuentes") or "").strip():
         avisos.append(
@@ -151,6 +152,8 @@ def verificar_producto(
     existe_en_rocketfy: Optional[bool] = None,
     stock: Optional[int] = None,
     envio_para_piso: Optional[Decimal] = None,
+    *,
+    umbral_stock_bajo: int,
 ) -> Verificacion:
     """`stock` en vivo (si se consultó Rocketfy ahora); si no, se usa el último
     guardado en el producto. `existe_en_rocketfy=None` significa "no se
@@ -159,5 +162,5 @@ def verificar_producto(
     return Verificacion(
         bloqueos=bloqueos_de_contenido(producto, envio_para_piso)
         + bloqueos_de_disponibilidad(existe_en_rocketfy, stock_efectivo),
-        avisos=avisos_de(producto, stock_efectivo),
+        avisos=avisos_de(producto, stock_efectivo, umbral_stock_bajo),
     )

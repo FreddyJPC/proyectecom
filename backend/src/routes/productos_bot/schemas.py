@@ -209,6 +209,10 @@ class UsoIASchema(Schema):
     restantes = fields.Int()
 
 
+class UsoPruebasSchema(UsoIASchema):
+    max_mensajes = fields.Int(data_key="maxMensajes")
+
+
 class BorradorContenidoSchema(Schema):
     campos = fields.Nested(CamposContenidoSchema)
     fuentes = fields.Nested(CamposContenidoSchema)
@@ -300,6 +304,8 @@ class ProbarInputSchema(Schema):
     estado = fields.Nested(EstadoDeLaPruebaSchema, load_default=None, allow_none=True)
     desde_anuncio = fields.Bool(data_key="desdeAnuncio", load_default=False)
     escalada = fields.Bool(load_default=False)
+    # Probar con el borrador de las instrucciones de Victoria en vez de con las que rigen hoy.
+    usar_borrador = fields.Bool(data_key="usarBorrador", load_default=False)
 
     @post_load
     def _limpiar(self, data, **kwargs):
@@ -338,7 +344,7 @@ class TurnoSimuladoSchema(Schema):
     escalada = fields.Bool()
     pedido = fields.Nested(PedidoSimuladoSchema, allow_none=True)
     avisos = fields.List(fields.Nested(AvisoSimuladoSchema))
-    uso = fields.Nested(UsoIASchema)
+    uso = fields.Nested(UsoPruebasSchema)
     fotos = fields.List(fields.Nested(FotoSimuladaSchema))
 
 
@@ -352,3 +358,4 @@ probar_input_schema = ProbarInputSchema()
 turno_simulado_schema = TurnoSimuladoSchema()
 borrador_contenido_schema = BorradorContenidoSchema()
 uso_ia_schema = UsoIASchema()
+uso_pruebas_schema = UsoPruebasSchema()
