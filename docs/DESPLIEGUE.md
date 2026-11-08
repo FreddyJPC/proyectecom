@@ -60,7 +60,7 @@ Los **valores** los pones tú en el panel; no van en el repo.
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Token propio para el handshake GET de Meta |
 | **`WHATSAPP_APP_SECRET`** | **Obligatoria en producción**: sin ella el webhook rechaza todo POST (401) |
 | `ANTHROPIC_API_KEY`, `LLM_PROVIDER` | Cerebro de Victoria (el **modelo** de IA se elige desde la app: Control → Parámetros) |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Avisos de escalada al dueño |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Avisos al dueño: escaladas y, con productos propios, «Pedido cerrado, gestionar envío» y los «cierres previos» (ADR-012). Si faltan, los avisos no salen pero **nada se pierde**: todo queda en «Por gestionar» |
 | **`ENABLE_SCHEDULER`** | **`true`**: enciende las tareas automáticas (cada cuántos minutos corre cada una se cambia desde Control → Parámetros) |
 | `FRONTEND_ORIGIN` | La URL de Vercel (paso 2), sin `/` final. Es el origen permitido por CORS |
 | `LOG_LEVEL` | Opcional |
@@ -76,9 +76,22 @@ curl https://<dominio-railway>/health
 Si `scheduler` sale `false`, falta `ENABLE_SCHEDULER=true`.
 
 ### Aplicar migraciones a la base
-Las 11 migraciones (`backend/migrations/`) ya están aplicadas en tu Supabase
-actual. Si usas un proyecto de Supabase nuevo, hay que correr
-`backend/tools/apply_migrations.py` contra él.
+Las migraciones (`backend/migrations/`) ya están aplicadas en tu Supabase
+actual (ver `PROGRESS.md` para la última). Si usas un proyecto de Supabase
+nuevo, hay que correr `backend/tools/apply_migrations.py` contra él.
+
+**Orden de despliegue de una migración:** primero la **migración** (los cambios
+son aditivos, el código anterior los ignora) y **después** el código. Al revés,
+el código nuevo fallaría buscando tablas que no existen.
+
+**Fotos de productos (migración 021).** Crea el bucket público `productos` de
+Supabase Storage (solo si existe el esquema `storage`, es decir, en Supabase y no
+en una base local) y sus políticas: solo quien inició sesión en la app puede
+subir, reemplazar o borrar; cualquiera puede **leer** una foto por su enlace
+(Meta lo necesita). No requiere ninguna variable nueva: las fotos se suben desde
+el navegador con la sesión del dueño. **No dejes abierto el registro de usuarios
+nuevos en Supabase Auth** (Authentication → Sign In / Providers → desactivar
+«Allow new users to sign up»): cualquier cuenta con sesión podría subir archivos.
 
 ---
 

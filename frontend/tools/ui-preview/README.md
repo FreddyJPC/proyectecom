@@ -31,7 +31,7 @@ npx next dev -p 3100
 # 4) capturas / auditoría (desde frontend/tools/ui-preview)
 node shots.mjs                    # -> shots/*.png  (OUT=carpeta, ONLY=resumen,pedidos, THEME=dark, FULL=0)
 node interact.mjs                 # -> shots/*.png
-node axe.mjs                      # -> lista de problemas, o SIN VIOLACIONES
+node axe.mjs                      # -> lista de problemas, o SIN VIOLACIONES (ONLY=/gestion,/catalogo/propio para auditar solo algunas rutas)
 ```
 
 Si Playwright no encuentra el navegador, indica uno con `CHROMIUM_PATH=/ruta/a/chrome`
@@ -40,6 +40,9 @@ Si Playwright no encuentra el navegador, indica uno con `CHROMIUM_PATH=/ruta/a/c
 Notas:
 - El login del servidor falso acepta cualquier correo y contraseña.
 - Si cambias la forma de un endpoint del backend, actualiza también `server.mjs`.
+- Productos propios (ADR-012): el servidor falso trae `PROP-0001` (zapatos, activo, 3 opciones de entrega, 2 fotos) y `PROP-0002`
+  (camiseta, borrador, sin control de stock), categorías, «Por gestionar» (`/gestion`) y imita Supabase Storage
+  (`/storage/v1/object/...`): las fotos «subidas» se sirven como imágenes de relleno.
 - `parametros-catalogo.json` e `instrucciones-secciones.json` salen del backend (catálogo de Parámetros y secciones de las instrucciones de Victoria) en la forma que devuelve la API
   (así la pantalla se ve con las explicaciones y rangos reales). Si cambias `backend/src/config/parametros/catalogo.py`,
   regénéralo desde `backend/` con el entorno de pruebas activo: `python tools/exportar_para_preview.py`.
