@@ -59,11 +59,12 @@ Los **valores** los pones tú en el panel; no van en el repo.
 | `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID` | Del número real del negocio |
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Token propio para el handshake GET de Meta |
 | **`WHATSAPP_APP_SECRET`** | **Obligatoria en producción**: sin ella el webhook rechaza todo POST (401) |
-| `ANTHROPIC_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL` | Cerebro de Victoria |
+| `ANTHROPIC_API_KEY`, `LLM_PROVIDER` | Cerebro de Victoria (el **modelo** de IA se elige desde la app: Control → Parámetros) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Avisos de escalada al dueño |
-| **`ENABLE_SCHEDULER`** | **`true`**: enciende reconciliación y stock watcher |
+| **`ENABLE_SCHEDULER`** | **`true`**: enciende las tareas automáticas (cada cuántos minutos corre cada una se cambia desde Control → Parámetros) |
 | `FRONTEND_ORIGIN` | La URL de Vercel (paso 2), sin `/` final. Es el origen permitido por CORS |
-| `LOG_LEVEL`, `BOT_MAX_TURNOS_HERRAMIENTAS`, `BOT_MAX_MENSAJES_HISTORIAL` | Opcionales |
+| `LOG_LEVEL` | Opcional |
+| `LLM_MODEL`, `BOT_MAX_MENSAJES_HISTORIAL`, `BOT_MAX_TURNOS_HERRAMIENTAS`, `BOT_ENVIAR_FOTOS` | Opcionales: **solo respaldo** de los parámetros que se cambian desde la app (rigen si nadie guardó un valor ahí) |
 
 **No** definas `WHATSAPP_SKIP_SIGNATURE` en producción.
 

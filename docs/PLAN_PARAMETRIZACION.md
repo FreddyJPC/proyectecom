@@ -1,12 +1,16 @@
 # Plan: parámetros del sistema controlados desde la app
 
-> **Estado: PROPUESTA (2026-11-08), a la espera de las decisiones de la sección 9.**
+> **Estado: IMPLEMENTADO (2026-11-08) — fases P1, P2 y P3.** Freddy aprobó el plan y las
+> decisiones D1–D3 («sí a lo recomendado») el 2026-11-08. Lo escrito abajo es el análisis
+> original; donde la implementación se apartó de él, hay una nota **«Implementado así»**. La
+> descripción de cómo funciona hoy está en `docs/CONCEPTOS_TECNICOS.md` §34 y §35 y en
+> `PROGRESS.md` (ADR-011 y entradas 0.0.100 a 0.0.103).
 > Pedido por Freddy el 2026-11-08: poder cambiar con un par de clics lo que hoy está
 > fijo en variables del servidor o dentro del código, con la explicación de para qué
 > sirve cada cosa, un valor de respaldo si algo falta, y —con un análisis previo mío—
 > también las instrucciones de Victoria. Escrito por Claude a partir del inventario del
 > código (`backend/src/**`, `backend/migrations/*`, `frontend/src/config/site.ts`),
-> leído el 2026-11-08. Nada de esto está construido todavía.
+> leído el 2026-11-08.
 
 ## 1. Hacemos esto para…
 
@@ -44,10 +48,10 @@ guardes un valor. Y «Restaurar original» borra el valor de la app y vuelve al 
 
 ### 3.2 El catálogo de parámetros vive en el código
 
-Cada parámetro se declara una vez en un registro (`backend/src/config/parametros.py`)
-con: clave, categoría, nombre, **«¿para qué sirve?»**, tipo (entero, sí/no, texto, opción),
+Cada parámetro se declara una vez en un registro (`backend/src/config/parametros/catalogo.py`; el servicio con la memoria de 30 s está en `servicio.py` y el SQL en `repository.py`)
+con: clave, grupo, nombre, **«¿para qué sirve?»**, tipo (entero, sí/no, texto, opción),
 mínimo/máximo, valor por defecto, unidad, **cuándo se aplica** (al siguiente mensaje /
-en la próxima corrida / al reiniciar) y si es **sensible** (pide confirmación). La app
+en la próxima corrida / al guardar) y si es **sensible** (pide confirmación). La app
 lee esa lista por API, así la explicación vive en un solo lugar y nunca queda
 desactualizada respecto al código. Una clave que no esté en el registro **no se puede
 guardar** (lista blanca, igual que `COLUMNAS_GUARDABLES` en ajustes).
@@ -98,10 +102,12 @@ guardar** (lista blanca, igual que `COLUMNAS_GUARDABLES` en ajustes).
 | `bot.max_mensajes_historial` | 40 (variable) | 10–100 | Cuántos mensajes anteriores se le entregan a la IA en cada respuesta. Más = recuerda más y cuesta más; menos = más barato y olvida antes. | Siguiente mensaje |
 | `bot.max_turnos_herramientas` | 5 (variable) | 2–10 | Cuántas «vueltas» puede dar Victoria usando herramientas para un solo mensaje antes de pasar a una persona. | Siguiente mensaje |
 | `bot.enviar_fotos` | apagado (variable) | sí/no | Que Victoria pueda mandar la foto del producto. **Sensible**: primero verificar #58. | Siguiente mensaje |
-| `bot.modelo_llm` | `claude-sonnet-5` (variable) | lista cerrada | Qué modelo de IA responde (calidad contra costo). **Sensible**; ver decisión D1. | Siguiente mensaje |
+| `llm.modelo` | `claude-sonnet-5` (variable) | lista cerrada | Qué modelo de IA responde (calidad contra costo). **Sensible**; ver decisión D1. *Implementado así: la clave es `llm.modelo` porque vale para todo el sistema (Victoria, «Redactar con IA» y «Probar con Victoria»).* | Siguiente mensaje |
 | `bot.texto_postventa` | fijo en `services.py` | 1–300 car. | Lo que se responde al cliente con pedido ya despachado antes de pasarlo a una persona. | Siguiente mensaje |
 | `bot.texto_comprobante_recibido` | fijo en `services.py` | 1–300 car. | Lo que se responde cuando el cliente manda una imagen mientras se espera el pago. | Siguiente mensaje |
 | `bot.texto_limite_alcanzado` | fijo en `conversation_service.py` | 1–300 car. | Lo que se responde si Victoria se pasa del límite de vueltas y se escala. | Siguiente mensaje |
+
+*Implementado así: los tres textos fijos forman su propio grupo en la pantalla, «Mensajes fijos al cliente».*
 
 **Stock y productos**
 
@@ -172,6 +178,10 @@ esta etapa se afina Victoria casi a diario.
 
 1. **Validación antes de guardar:** exige los tres huecos, rechaza llaves sueltas y
    limita el largo (propuesta: 8 000 caracteres, mostrando el aproximado en tokens). *(R1, R2, R5)*
+   *Implementado así (mejor que lo propuesto): los huecos viven en secciones **bloqueadas** que no se pueden
+   borrar, y las llaves del texto editado se **escapan** al armar el prompt en vez de rechazarse, de modo
+   que ningún error de tipeo puede romper `str.format`. Sí se validan el largo por sección y el total
+   (8 000), que no esté vacía ninguna sección y que no se usen títulos «#».*
 2. **Borrador y publicado separados:** editas un borrador, **lo pruebas con «Probar con
    Victoria»** (la simulación de la Fase E, que no toca clientes reales), y recién
    entonces publicas con confirmación. *(R3)*
@@ -181,7 +191,7 @@ esta etapa se afina Victoria casi a diario.
    archivo del código; **nunca queda sin instrucciones**. *(R1, R2)*
 5. **La sección «Cómo usar tus herramientas» queda solo de lectura en la primera versión**
    (se ve, pero no se edita): está atada al código (nombres de herramientas, flujo de
-   cierre). Editables: personalidad, objetivo, reglas que nunca rompe y variantes. Ver D2. *(R4)*
+   cierre). Editables: quién es Victoria, personalidad, objetivo, reglas que nunca rompe y variantes. Ver D2. *(R4)*
 
 **Rendimiento:** una lectura de la base como máximo cada 30 s (misma caché de la sección
 3.3). Hoy el archivo se lee una vez al arrancar; el costo añadido es imperceptible frente
@@ -243,6 +253,14 @@ oscuro, y **confirmación tuya antes de aplicar cada migración y de desplegar**
 | Crecimiento del módulo (todo «parametrizable») | Solo entra lo que tiene dueño y utilidad de negocio; la sección 4.3 documenta lo que se queda fuera |
 
 ## 9. Decisiones
+
+> **Resueltas el 2026-11-08: Freddy aceptó todo lo recomendado.** Para D1 la lista cerrada de modelos
+> quedó así: `claude-sonnet-5` (el actual y el único probado con este sistema), `claude-haiku-5-5`
+> (el más barato) y `claude-opus-5` (el más capaz); los dos últimos van marcados «sin probar» y hay que
+> probarlos en «Probar con Victoria» antes de usarlos con clientes. **No** están `claude-sonnet-5-5`,
+> `claude-opus-5-5` ni `claude-fable-5-1`: rechazan la herramienta forzada con que «Redactar con IA» pide el
+> borrador y manejan el pensamiento de otra forma; hay que adaptar el cliente de la IA y probarlo antes de
+> ofrecerlos (pendiente #60).
 
 **Las tomé yo (dime si quieres cambiar alguna):**
 - Orden de prioridad app > servidor > código (compatible con lo que hoy hay en Railway).
