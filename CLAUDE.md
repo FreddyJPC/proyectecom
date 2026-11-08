@@ -204,7 +204,7 @@ posible y rotarlos.
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
   conectado, **backend desplegado y sano** (2026-10-30; `/health` →
   `scheduler: true`). **Ojo:** el despliegue automático NO se ha podido comprobar (pendiente #48; no se
-  disparó en 13 fusiones seguidas hasta el 2026-11-08). Tras fusionar a `main` algo de `backend/`, reconectar la
+  disparó en 14 fusiones seguidas hasta el 2026-11-08). Tras fusionar a `main` algo de `backend/`, reconectar la
   fuente con `connect-service-source` y verificar el despliegue en los logs.
 - Vercel: `proyectecom-dashboard` **desplegado en producción**
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel
@@ -236,10 +236,12 @@ posible y rotarlos.
   había siguen siendo de Rocketfy. **Aún no se ha probado una venta propia real** (pendiente
   #61); las fotos por WhatsApp siguen apagadas (pendiente #58). Hay una sola cuenta en
   Supabase Auth: no abrir el registro de usuarios (pendiente #65).
-- **Cancelar y cobrar ventas propias (ADR-012, entrada 0.0.106): implementado, SIN desplegar.**
-  La migración 022 (`ventas.cobrada_*`, `cancelada_*`, `ventas_lineas.stock_descontado`) está
-  aplicada solo en la base local; **en producción no**. Al desplegarla: migración primero,
-  código después (el código nuevo lee columnas que el anterior no usa).
+- **Cancelar y cobrar ventas propias (ADR-012, desplegado 2026-11-08, PR #21):** migración 022
+  (`ventas.cobrada_*`, `cancelada_*`, `ventas_lineas.stock_descontado`) aplicada en Supabase
+  (22 migraciones). Botones «Marcar cobrada», «Deshacer cobro» y «Cancelar venta» en cada
+  tarjeta de «Por gestionar». **Aún no se ha cancelado ni cobrado una venta real** (no hay
+  ventas de productos propios todavía; pendiente #61). Al desplegar una migración: primero la
+  migración, después el código.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
