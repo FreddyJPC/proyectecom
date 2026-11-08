@@ -55,7 +55,7 @@ function CatalogoContenido() {
     <>
       <PageHeader
         title="Catálogo y stock"
-        description="Explora el catálogo de Rocketfy, prepara los productos que Victoria venderá y elige cuáles vigilar para no pagar publicidad de algo agotado."
+        description="Explora el catálogo de Rocketfy, prepara los productos que Victoria venderá (de Rocketfy o propios) y elige cuáles vigilar para no pagar publicidad de algo agotado."
       />
 
       <Tabs value={pestana} onValueChange={cambiarPestana} className="gap-5">

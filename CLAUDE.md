@@ -59,6 +59,9 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
 - **Validar la dirección (ciudad/cantón) antes** de enviar a Rocketfy.
 - El webhook de Rocketfy **siempre responde 200** a una petición autenticada
   (más de 10 fallos acumulados y Rocketfy deja de avisar para siempre).
+- **Un producto de cierre manual (producto propio, ADR-012) NUNCA crea un pedido en
+  Rocketfy:** su venta se guarda en `ventas` y pasa al dueño («Por gestionar»). El
+  total (subtotal + envío) y el stock los calcula el código, nunca la IA.
 - El webhook de WhatsApp exige la firma `X-Hub-Signature-256`
   (`WHATSAPP_APP_SECRET`); falla cerrado.
 - Un solo worker de gunicorn (el bot y los jobs viven en el mismo proceso).
@@ -102,7 +105,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **1163 tests pasando**.
+   desde `backend/`. Estado actual: **1428 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -225,6 +228,11 @@ posible y rotarlos.
   (tablas `parametros_sistema`, `parametros_historial`, `victoria_instrucciones_versiones`).
   Pantalla Control → Parámetros (+ Instrucciones de Victoria). Mientras no se guarde nada
   en la app, todo vale lo mismo que antes (variable del servidor o valor del código).
+- **Productos propios (ADR-012, ver `PROGRESS.md` 0.0.104/0.0.105 para el estado de
+  despliegue):** migraciones 020 (proveedores, categorías, envío por producto, ventas,
+  «Por gestionar») y 021 (galería y bucket público `productos` de Supabase Storage).
+  Menú «Por gestionar»; «Publicar producto propio» en Catálogo → Mis productos.
+  Parámetros del sistema: ya son 16 (nuevo `bot.max_fotos_por_envio`).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

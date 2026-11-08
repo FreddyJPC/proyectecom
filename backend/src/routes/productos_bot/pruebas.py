@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 from src.config.parametros import parametros
 from src.integrations.llm import LLMAuthError, LLMError, LLMRateLimitError
 from src.routes.ajustes.services import AjustesService
+from src.routes.entregas.repository import EntregaRepository
+from src.routes.imagenes.repository import ImagenRepository
 from src.routes.whatsapp.instrucciones import InstruccionesInvalidas, ensamblar, validar
 from src.routes.whatsapp.instrucciones_repository import InstruccionesRepository
 
@@ -47,6 +49,10 @@ from .verificacion import metodos_de_pago
 logger = logging.getLogger(__name__)
 
 _A_CAMEL = {
+    "entrega_opcion_id": "entregaOpcionId",
+    "entrega_nombre": "entregaNombre",
+    "entrega_tipo": "entregaTipo",
+    "costo_envio": "costoEnvio",
     "nombre_cliente": "nombreCliente",
     "producto_sku": "productoSku",
     "producto_nombre": "productoNombre",
@@ -81,8 +87,13 @@ def faltantes_para_probar(ficha: dict) -> List[str]:
 
 
 class PruebasService:
-    def __init__(self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None, instrucciones_repo=None):
+    def __init__(
+        self, repo=None, generaciones=None, ajustes_service=None, llm=None, modelo=None, instrucciones_repo=None, entregas_repo=None,
+        imagenes_repo=None,
+    ):
         self._instrucciones = instrucciones_repo or InstruccionesRepository()
+        self._entregas = entregas_repo or EntregaRepository()
+        self._imagenes = imagenes_repo or ImagenRepository()
         self._repo = repo or ProductoBotGestionRepository()
         self._generaciones = generaciones or GeneracionesIARepository()
         self._ajustes = ajustes_service or AjustesService()
@@ -129,6 +140,8 @@ class PruebasService:
 
         llm = self._cliente_llm()
         modelo = self._nombre_del_modelo()
+        entregas = self._entregas.listar(ficha["sku"], solo_activas=True)
+        imagenes = self._imagenes.listar(ficha["sku"])
         try:
             turno = simular_turno(
                 producto=ficha,
@@ -138,6 +151,9 @@ class PruebasService:
                 desde_anuncio=desde_anuncio,
                 llm=llm,
                 plantilla=plantilla,
+                # Se leen ANTES de la simulación (que no abre la base): son las opciones de envío guardadas.
+                entregas=entregas,
+                imagenes=imagenes,
             )
         except LLMAuthError as exc:
             self._registrar(ficha["sku"], usuario, modelo, "fallo")
@@ -156,7 +172,8 @@ class PruebasService:
             raise
 
         self._registrar(ficha["sku"], usuario, modelo, "ok")
-        if turno.pedido is not None and turno.pedido["confirmado"]:
+        # Una compra de prueba «completa» es un pedido confirmado en Rocketfy, o el cierre manual de un producto propio.
+        if (turno.pedido is not None and turno.pedido["confirmado"]) or turno.venta_manual is not None:
             self._anotar_simulacion_completa(ficha["sku"], usuario)
 
         return TurnoSimuladoDTO(
@@ -172,6 +189,8 @@ class PruebasService:
             else None,
             avisos=[AvisoSimuladoDTO(canal=a["canal"], texto=a["texto"]) for a in turno.avisos],
             fotos=[FotoSimuladaDTO(mensaje=f["mensaje"], url=f["url"], descripcion=f["descripcion"]) for f in turno.fotos],
+            venta_manual=turno.venta_manual,
+            solicitudes=turno.solicitudes,
             uso=UsoPruebasDTO(
                 tope=uso.tope, usadas=uso.usadas + 1, restantes=max(0, uso.restantes - 1), max_mensajes=uso.max_mensajes
             ),
@@ -185,7 +204,7 @@ class PruebasService:
                 "Victoria ya pasó esta conversación a una persona: en la vida real no seguiría respondiendo. "
                 "Reinicia la prueba para empezar otra."
             )
-        if (estado or {}).get("estado") == "despachado":
+        if (estado or {}).get("estado") in ("despachado", "por_gestionar"):
             raise PruebaInvalidaError(
                 "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende "
                 "una persona. Reinicia la prueba para empezar otra."

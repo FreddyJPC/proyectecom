@@ -48,6 +48,11 @@
 33. [Variantes: por qué no es solo «un texto más»](#33-variantes-por-qué-no-es-solo-un-texto-más)
 34. [Parámetros: cambiar el sistema sin tocar el servidor](#34-parámetros-cambiar-el-sistema-sin-tocar-el-servidor)
 35. [Las instrucciones de Victoria, editables sin que se rompan](#35-las-instrucciones-de-victoria-editables-sin-que-se-rompan)
+36. [Productos propios: quién cierra la venta (proveedor y «cierre manual»)](#36-productos-propios-quién-cierra-la-venta-proveedor-y-cierre-manual)
+37. [El envío es de cada producto: opciones, cobertura y total calculado por el sistema](#37-el-envío-es-de-cada-producto-opciones-cobertura-y-total-calculado-por-el-sistema)
+38. [Ventas medibles: una «foto» de cada venta y la ganancia real](#38-ventas-medibles-una-foto-de-cada-venta-y-la-ganancia-real)
+39. [«Por gestionar» y la conversación «en gestión»: que ningún cliente se pierda](#39-por-gestionar-y-la-conversación-en-gestión-que-ningún-cliente-se-pierda)
+40. [Fotos propias: el bucket de Supabase y por qué se suben desde la app](#40-fotos-propias-el-bucket-de-supabase-y-por-qué-se-suben-desde-la-app)
 
 ---
 
@@ -1166,3 +1171,151 @@ saltarse esas reglas.
 **El costo.** Todo el texto viaja en **cada** mensaje: más largo = más lento y más caro. Hay un máximo por
 sección y de 8 000 caracteres en total, y la pantalla muestra una estimación en «tokens» (≈ 4 caracteres cada
 uno).
+
+
+---
+
+## 36. Productos propios: quién cierra la venta (proveedor y «cierre manual»)
+
+**Para qué sirve.** Hasta ahora todo producto era de Rocketfy: cuando el cliente confirmaba, el sistema
+**creaba el pedido solo** en Rocketfy y Rocketfy se encargaba del envío. Un producto **propio** (zapatos, ropa,
+lo que tengas tú en casa) no pasa por Rocketfy: **no hay a quién mandarle el pedido**, lo gestionas tú. Para que
+Victoria venda ambos con la misma app, cada producto dice **de dónde viene**.
+
+**Cómo funciona.**
+- **Proveedor.** Cada producto tiene un proveedor (hoy dos: *Rocketfy* y *Producto propio*; se pueden agregar
+  otros sin tocar el código de las ventas). El proveedor decide el **cierre**:
+  - *cierre Rocketfy* → el sistema crea el pedido en Rocketfy (como siempre);
+  - *cierre manual* → el sistema **no crea ningún pedido en Rocketfy** (hay pruebas que lo exigen) y **te lo pasa a
+    ti**: «Pedido cerrado, gestionar envío».
+- **Victoria hace lo mismo hasta el final**: saluda, resuelve dudas, toma los datos (nombre, dirección, cantón,
+  provincia, producto, variante, cantidad, entrega y forma de pago) y confirma el total. Solo cambia el último
+  paso: en vez de «pedido creado», dice que una persona del equipo coordinará la entrega y el pago.
+- **Lo que Victoria NO hace con un producto propio:** no da cuentas bancarias, no confirma pagos, no promete
+  fechas, no ofrece rebajas. Todo eso lo haces tú.
+- **El stock lo lleva la app** (en uno de Rocketfy lo lleva Rocketfy): cada venta descuenta unidades y cuando
+  llegan a cero el producto se pausa solo. Si no quieres llevar la cuenta, se apaga por producto («Sin control»:
+  siempre disponible). El stock es el total del producto; las variantes son texto.
+- **Seguridad:** el total, la cantidad máxima y el stock los decide el código, no la IA (las mismas reglas de
+  ADR-010). Cerrar una venta es **una sola operación atómica**: o se guarda todo (stock, venta, estado y solicitud)
+  o nada, y no se puede cerrar dos veces.
+
+**Dónde se ve.** «Catálogo y stock → Mis productos» (chips *Rocketfy / Propios*), botón «Publicar producto
+propio», y en la ficha la tarjeta «Producto propio».
+
+---
+
+## 37. El envío es de cada producto: opciones, cobertura y total calculado por el sistema
+
+**Para qué sirve.** No todos los productos se envían igual: unos zapatos pueden costar $2 dentro de Cuenca, $5 al
+resto del país, o retirarse en tu local. Un producto de Rocketfy suele traer «envío incluido en el precio». Por eso
+el envío se define **en la ficha de cada producto** (sección «Envío»), no en un ajuste general.
+
+**Dos modos por producto.**
+- **Envío incluido en el precio** (lo normal en Rocketfy): no se cobra nada aparte y no hay opciones que elegir.
+- **Envío aparte**: el producto tiene una lista de **opciones de entrega** y el cliente elige una.
+
+**Una opción de entrega** tiene: nombre, tipo (*envío a domicilio* o *retiro*), lo que paga el cliente, lo que te
+cuesta a ti (opcional, para saber tu ganancia), a quién se le ofrece, tiempo de entrega y si está activa.
+- *Retiro:* se ofrece a cualquiera y lleva la dirección donde se retira.
+- *Envío con cobertura explícita* (cantones y/o provincias): solo si el destino del cliente está en la lista.
+- *Envío «al resto del país»:* solo si **ningún** envío con cobertura explícita cubre el destino. Así «Cuenca $2» y
+  «resto del país $5» **nunca** se ofrecen juntos a alguien de Cuenca.
+
+**Cómo la usa Victoria.** Cuando conoce el cantón y la provincia, usa la herramienta `registrar_entrega`: el
+**sistema** le devuelve solo las opciones que aplican y, cuando el cliente elige, vuelve a validar que esa opción
+siga activa y le aplique. El **total final = subtotal + envío** lo calcula el sistema; Victoria solo repite ese
+monto. Si ninguna opción cubre el destino, Victoria no inventa: pasa el caso a ti («Destino sin cobertura»).
+
+**Costo de flete estimado por producto (opcional).** Para calcular el margen se resta un flete. Si el envío se
+cobra **aparte**, no se resta nada (no sale de tu precio). Si el envío va **incluido**, manda el flete que anotes en
+**ese** producto (un kit de 4 kg no cuesta lo mismo que unos audífonos); si no anotas nada, se usa el envío estimado
+general de «Ajustes de precios».
+
+**Un producto no se puede publicar sin envío definido** si lo cobras aparte (falta al menos una opción activa).
+
+---
+
+## 38. Ventas medibles: una «foto» de cada venta y la ganancia real
+
+**Para qué sirve.** Los pedidos de Rocketfy tienen su propia tabla, pero los productos propios no crean pedido. Para
+medir **todo** de la misma manera (cuánto vendes de cada origen, qué categoría deja más, qué forma de venta
+funciona) hay una tabla común de **ventas**.
+
+**Qué guarda.** Cada venta cerrada guarda **una foto del momento** (un *snapshot*): precio, costo del producto, lo
+que pagó el cliente de envío, lo que te costó el envío, el total, la ganancia, el proveedor, la categoría y el
+canal. Se guarda como foto —y no se calcula al vuelo— porque el precio o el costo de mañana no deben cambiar lo que
+ya vendiste. Cada venta tiene sus **líneas** (producto, variante, cantidad, precio y costo).
+
+**De dónde sale la ganancia.** Ganancia = lo que cobraste − (costo del producto × cantidad) − lo que te costó el
+envío. Si falta algún costo, la ganancia queda **vacía** («no se puede calcular») en vez de inventar un número.
+
+**Las ventas anteriores.** Las 3 ventas que ya estaban despachadas se copiaron a esta tabla una sola vez
+(idempotente: repetir la migración no las duplica). Una venta de Rocketfy se registra «a mejor esfuerzo»: **si el
+registro falla, el pedido igual se creó** y el fallo queda en el log; un pedido real nunca se pone en riesgo por
+una estadística.
+
+**Para qué quedan preparadas las tablas.** Reportes futuros: ventas propias vs. Rocketfy, rentabilidad por
+categoría y por forma de venta. Hoy los datos ya se guardan; las pantallas de reportes se construyen cuando las
+pidas.
+
+**Categorías.** Cada producto puede tener una categoría (calzado, ropa…). Se crean desde el mismo formulario;
+no se pueden repetir (sin importar mayúsculas o espacios).
+
+---
+
+## 39. «Por gestionar» y la conversación «en gestión»: que ningún cliente se pierda
+
+**Para qué sirve.** Con un producto propio, la venta termina en **ti**. Si dependiera solo de un aviso de Telegram
+y no lo ves, el cliente se pierde. Por eso hay **dos cosas distintas**:
+- el **registro** (la lista «Por gestionar» en la app): no se pierde, queda ahí hasta que lo marques atendido;
+- el **aviso** de Telegram: es solo el timbre (si falla, no se pierde nada porque el registro ya existe).
+
+**Cuándo aparece una solicitud.** En cuanto el cliente muestra una intención de compra, **desde la primera**, no solo
+al cerrar: «quiere comprar», «quiere pagar», «pide envío», «quiere ver el producto», «quiere negociar», «destino sin
+cobertura» y, al final, **«Pedido cerrado, gestionar envío»** (con el resumen completo). Hay **una sola solicitud
+pendiente por conversación**: si el cliente avanza, la solicitud sube de prioridad (de «quiere comprar» a «pedido
+cerrado») en vez de crear otra repetida.
+
+**La conversación «en gestión».** Cuando pasa a ti, el chat queda en el estado *en gestión*: **Victoria deja de
+responder** (para no pisar lo que tú estás hablando) y verás un aviso con el botón **«Devolver a Victoria»**. Al
+marcar la solicitud como atendida, el chat vuelve a *activa*. Esto se parece a una **escalada** pero no es
+lo mismo: escalar es «Victoria no sabe»; en gestión es «el cliente quiere comprar y lo cierras tú».
+
+**Dónde se ve.** Menú **«Por gestionar»** (con contador rojo en el menú y en la barra de móvil), tarjeta con lo
+necesario para actuar (qué quiere, a dónde enviar, entrega, pago, total) y botones *Ver conversación*, *Abrir en
+WhatsApp* y *Marcar como atendida* (con nota opcional). Filtro «En gestión» en Conversaciones.
+
+---
+
+## 40. Fotos propias: el bucket de Supabase y por qué se suben desde la app
+
+**Para qué sirve.** Un producto propio no tiene la foto de Rocketfy. Además, la foto de Rocketfy nunca se pudo
+verificar (pendiente #58). Ahora **cada producto, de cualquier proveedor**, puede tener su **galería** de hasta 8 fotos.
+Si no tiene fotos subidas, Victoria usa la de Rocketfy (si existe); si tampoco, le dice al cliente que **por el
+momento no hay imágenes** (no promete fotos).
+
+**Dónde se guardan.** En un **bucket** (una carpeta en la nube) de **Supabase Storage** llamado `productos`.
+- Es **público para leer**: cada foto tiene un enlace `https` que Meta necesita poder abrir para entregársela al
+  cliente (§32).
+- Solo acepta **JPEG y PNG** hasta **5 MB** (WhatsApp no acepta otros formatos).
+- **Solo quien inició sesión en la app** puede subir, reemplazar o borrar archivos; el público anónimo no puede ni
+  listarlos (se verificó con los roles `authenticated` y `anon`).
+
+**Por qué se sube desde el navegador y no desde el servidor.** El navegador ya tiene tu sesión de login: sube el
+archivo directamente a Supabase con ella, y luego le avisa al servidor «esta foto es de este producto». Así **el
+servidor no necesita ninguna clave nueva** (no hay otro secreto que cuidar). Antes de subir, la app **reduce la
+foto y la convierte a JPG** (una foto de celular pesa varios MB y WhatsApp la comprime igual).
+
+**Cómo se evita desorden o abuso.**
+- Cada producto tiene su carpeta `p<id>` (se usa el número interno, no el SKU, porque un SKU puede traer
+  caracteres inseguros para una ruta). El servidor **solo acepta** rutas dentro de la carpeta de **ese** producto y
+  construye el enlace él mismo: lo que escriba el cliente web no se usa como enlace.
+- Si el archivo se subió pero no se pudo anotar, la app lo borra para no dejar archivos huérfanos.
+- **Victoria manda pocas fotos por vez** (parámetro «Fotos por envío», 3 por defecto) y, si el cliente quiere más,
+  las **siguientes** de la galería, sin repetir. El envío de fotos sigue controlado por el interruptor «Enviar fotos
+  del producto» (apagado hasta verificarlo con un envío real).
+
+**Qué NO se pudo probar sin producción.** Que Meta descargue de verdad una foto del bucket y la entregue en un
+WhatsApp real: se prueba cuando enciendas ese interruptor (pendiente #58).
+

@@ -5,7 +5,8 @@ const require = createRequire(import.meta.url);
 const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/metricas", "/parametros", "/parametros/instrucciones"];
+const SOLO = (process.env.ONLY || "").split(",").filter(Boolean);
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/metricas", "/parametros", "/parametros/instrucciones"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 for (const theme of ["light", "dark"]) {
@@ -19,6 +20,7 @@ for (const theme of ["light", "dark"]) {
     await Promise.all([page.waitForURL((u) => !u.pathname.startsWith("/login")), page.click("button[type=submit]")]);
     for (const r of rutas) {
       if (r === "/login") continue;
+      if (SOLO.length && !SOLO.some((x) => r.startsWith(x))) continue; // ONLY=/gestion,/catalogo/propio para auditar solo algunas rutas
       await page.goto(BASE + r, { waitUntil: "networkidle" });
       await page.waitForTimeout(500);
       await page.evaluate(axeSrc);
@@ -164,6 +166,49 @@ for (const theme of ["light", "dark"]) {
         await page.getByRole("alertdialog").waitFor({ state: "detached" });
         await page.getByText("Instrucciones originales").first().waitFor();
         await page.waitForTimeout(300);
+      }
+      // ADR-012: «Por gestionar», atender una solicitud (cuadro con nota) y la lista de atendidas.
+      if (r === "/gestion") {
+        await page.getByRole("button", { name: "Marcar como atendida" }).first().click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [atender]");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: /Atendidas/ }).click();
+        await page.getByText("Se coordinó el envío por Servientrega").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [atendidas]");
+      }
+      // Producto propio nuevo: errores de validación del formulario y las opciones de entrega abiertas.
+      if (r === "/catalogo/propio/nuevo") {
+        await page.getByRole("button", { name: "Agregar envío" }).click();
+        await page.getByRole("button", { name: "Agregar retiro" }).click();
+        await page.waitForTimeout(300);
+        await auditar(r + " [opciones de entrega]");
+        await page.getByRole("button", { name: /Publicar|Crear|Guardar/ }).last().click();
+        await page.waitForTimeout(500);
+        await auditar(r + " [errores de validacion]");
+      }
+      // Ficha de un producto propio: la galería con fotos y una prueba completa con su cierre manual.
+      if (r === "/catalogo/producto/PROP-0001") {
+        await page.getByText("Fotos del producto").first().waitFor();
+        await page.getByRole("button", { name: "Abrir la prueba" }).click();
+        await page.getByRole("button", { name: "Quiero comprarlo" }).click();
+        await page.getByText("Herramientas que usó").first().waitFor();
+        await page.getByLabel("Mensaje del cliente de prueba").fill("Soy Ana Pérez, vivo en Av. Remigio Crespo 3-45, Cuenca, Azuay. Pago contra entrega");
+        await page.getByRole("button", { name: "Enviar" }).click();
+        await page.getByText("Para tu pedido tengo estas opciones de entrega").waitFor();
+        await page.getByLabel("Mensaje del cliente de prueba").fill("1");
+        await page.getByRole("button", { name: "Enviar" }).click();
+        await page.getByText("Pedido que te habría llegado para gestionar").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba cierre manual]");
+        await page.getByRole("button", { name: "Reiniciar prueba" }).click();
+        await page.getByRole("button", { name: "Quiero verlo en persona" }).click();
+        await page.getByText("Lo que te habría llegado en «Por gestionar»").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [prueba ver producto]");
+        await page.keyboard.press("Escape");
       }
       if (r === "/catalogo/producto/AUD-BT-001") {
         await page.getByRole("button", { name: "Abrir la prueba" }).click();

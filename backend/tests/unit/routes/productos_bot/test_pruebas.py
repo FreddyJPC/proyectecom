@@ -85,10 +85,23 @@ class AjustesFalsos:
         return AjustesNegocio(tope_pruebas_dia=self.tope)
 
 
-def servicio(llm=None, fila="por-defecto", usadas=0, tope=100, **kw):
+class EntregasFalsas:
+    """Las opciones de entrega guardadas del producto (por defecto, ninguna)."""
+
+    def __init__(self, entregas=()):
+        self.entregas = list(entregas)
+
+    def listar(self, sku, solo_activas=False):
+        return [e for e in self.entregas if not solo_activas or e.get("activo", True)]
+
+
+def servicio(llm=None, fila="por-defecto", usadas=0, tope=100, entregas=(), **kw):
     repo = RepoFalso(ficha() if fila == "por-defecto" else fila, falla_historial=kw.pop("falla_historial", False))
     generaciones = GeneracionesFalsas(usadas, falla_registro=kw.pop("falla_registro", False))
-    s = PruebasService(repo=repo, generaciones=generaciones, ajustes_service=AjustesFalsos(tope), llm=llm, modelo="modelo-x")
+    s = PruebasService(
+        repo=repo, generaciones=generaciones, ajustes_service=AjustesFalsos(tope), llm=llm, modelo="modelo-x",
+        entregas_repo=EntregasFalsas(entregas),
+    )
     return s, repo, generaciones
 
 

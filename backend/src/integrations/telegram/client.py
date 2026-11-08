@@ -37,6 +37,35 @@ class TelegramNotifier:
         por falta de stock). Igual que el escalado: best-effort, nunca lanza."""
         self._enviar(f"{titulo}\n\n{detalle}", {}, "un aviso")
 
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "") -> None:
+        """«Cierre previo»: el cliente mostró una intención de compra y el dueño tiene que intervenir
+        (ADR-012). El registro que no se pierde es la solicitud en la base («Por gestionar»); este aviso
+        es solo el timbre, por eso es best-effort como todos."""
+        partes = [f"🟡 Cierre previo: {etiqueta}", "", f"Teléfono: {telefono}"]
+        if detalle:
+            partes.append(f"Detalle: {detalle}")
+        partes += [f"Conversación ID: {conversacion_id}", "", "Míralo en la app: Por gestionar."]
+        self._enviar("\n".join(partes), {"conversacion_id": conversacion_id}, "una gestión pendiente")
+
+    def notificar_pedido_cerrado(self, datos: dict) -> None:
+        """El cliente cerró la compra de un producto propio: el pedido no se crea solo, hay que gestionar
+        el envío. `datos` ya viene con textos listos (ver `VictoriaTools._avisar_pedido_cerrado`)."""
+        lineas = [
+            "🟢 Pedido cerrado, gestionar envío",
+            "",
+            f"Cliente: {datos.get('cliente', '—')}",
+            f"Teléfono: {datos.get('telefono', '—')}",
+            f"Dirección: {datos.get('direccion', '—')}",
+            f"Producto: {datos.get('producto', '—')}",
+            f"Entrega: {datos.get('entrega', '—')}",
+            f"Total a cobrar: ${datos.get('total', '—')}",
+            f"Pago: {datos.get('pago', '—')}",
+        ]
+        if datos.get("aviso"):
+            lineas.append(f"⚠️ {datos['aviso']}")
+        lineas += ["", f"Conversación ID: {datos.get('conversacion_id', '—')}", "Míralo en la app: Por gestionar."]
+        self._enviar("\n".join(lineas), {"conversacion_id": datos.get("conversacion_id")}, "un pedido cerrado")
+
     def _enviar(self, texto: str, extra: dict, que: str) -> None:
         if not self._bot_token or not self._chat_id:
             if not self._advertido:

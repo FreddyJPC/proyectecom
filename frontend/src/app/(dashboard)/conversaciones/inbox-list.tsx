@@ -76,6 +76,7 @@ export function InboxList() {
       tone: totales && totales.escaladasSinRevisar > 0 ? "danger" : "default",
     },
     { value: "esperando_pago", label: "Esperando pago", count: totales?.esperandoPago },
+    { value: "en_gestion", label: "En gestión", count: totales?.enGestion },
   ];
 
   const hayFiltros = vista !== "todas" || origen !== "todos" || busqueda !== "";

@@ -4,14 +4,14 @@ import { Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useEscaladasSinRevisar } from "@/components/escaladas-context";
+import { useEscaladasSinRevisar, useGestionPendiente } from "@/components/escaladas-context";
 import { useSidebar } from "@/components/ui/sidebar";
 import { NAV_GRUPOS, esRutaActiva } from "@/config/site";
 import { cn } from "@/lib/utils";
 
-// Las 4 secciones que se usan todos los días van a un toque del pulgar; el
+// Las 5 secciones que se usan todos los días van a un toque del pulgar; el
 // resto (Catálogo, Métricas, Nuevo pedido) vive en "Más", que abre el menú.
-const URLS_PRINCIPALES = ["/", "/conversaciones", "/pedidos", "/incidencias"];
+const URLS_PRINCIPALES = ["/", "/conversaciones", "/pedidos", "/gestion", "/incidencias"];
 
 /** Barra de navegación inferior, solo en móvil. En un celular el menú lateral
  * queda lejos del pulgar y oculto: esta barra deja lo esencial siempre a la
@@ -19,6 +19,7 @@ const URLS_PRINCIPALES = ["/", "/conversaciones", "/pedidos", "/incidencias"];
 export function MobileNav() {
   const pathname = usePathname();
   const escaladas = useEscaladasSinRevisar();
+  const gestion = useGestionPendiente();
   const { setOpenMobile } = useSidebar();
 
   const items = NAV_GRUPOS.flatMap((g) => g.items).filter((i) => URLS_PRINCIPALES.includes(i.url));
@@ -28,10 +29,10 @@ export function MobileNav() {
       aria-label="Navegación principal"
       className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:hidden"
     >
-      <ul className="mx-auto grid max-w-lg grid-cols-5">
+      <ul className="mx-auto grid max-w-lg grid-cols-6">
         {items.map((item) => {
           const activo = esRutaActiva(pathname, item.url);
-          const contador = item.url === "/conversaciones" ? escaladas : 0;
+          const contador = item.url === "/conversaciones" ? escaladas : item.url === "/gestion" ? gestion : 0;
           return (
             <li key={item.url}>
               <Link

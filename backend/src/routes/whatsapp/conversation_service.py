@@ -20,6 +20,9 @@ from typing import List, Optional
 from src.config.parametros import parametros
 from src.integrations.llm.contratos import LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
+from src.routes.entregas.repository import EntregaRepository
+from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
+from src.routes.ventas.origen import es_de_cierre_manual
 
 from .ficha import formatear_ficha_producto
 from .instrucciones import instrucciones_vigentes
@@ -53,6 +56,7 @@ class VictoriaConversationService:
         max_mensajes_historial: Optional[int] = None,
         enviar_fotos: Optional[bool] = None,
         plantilla: Optional[str] = None,
+        entrega_repo: Optional[EntregaRepository] = None,
     ):
         # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
         # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
@@ -65,6 +69,7 @@ class VictoriaConversationService:
         self._mensajes = mensaje_repo or MensajeRepository()
         self._productos = producto_repo or ProductoBotRepository()
         self._ejecutor = ejecutor_herramientas or HerramientasVictoria()
+        self._entregas = entrega_repo or EntregaRepository()
         self._max_turnos_fijo = max_turnos_herramientas
         self._max_historial_fijo = max_mensajes_historial
         self._enviar_fotos_fijo = enviar_fotos
@@ -81,7 +86,7 @@ class VictoriaConversationService:
         system_prompt = plantilla.format(
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
             + self._formatear_contexto_producto(producto_contexto),
-            contexto_lead_actual=self._formatear_contexto_lead(lead),
+            contexto_lead_actual=self._formatear_contexto_lead(lead, producto_contexto),
             fecha_actual=_fecha_legible_ecuador(),
         )
 
@@ -129,6 +134,11 @@ class VictoriaConversationService:
                 if llamada.nombre == "escalar_a_humano":
                     ya_escalo = True
 
+            # ADR-012: la conversación también pasa a manos del dueño sin escalar (un producto propio:
+            # intención de compra que él debe atender, o pedido cerrado). Se mira el estado real.
+            if ya_escalo or self._pasó_a_manos_de_una_persona(conversacion_id):
+                ya_escalo = True
+
             mensajes.append(MensajeLLM(rol="user", resultados_herramientas=resultados))
 
             if ya_escalo:
@@ -157,6 +167,10 @@ class VictoriaConversationService:
 
         self._mensajes.crear(conversacion_id=conversacion_id, rol="bot", contenido=texto_final, tipo="texto", wamid=None)
         return texto_final
+
+    def _pasó_a_manos_de_una_persona(self, conversacion_id: int) -> bool:
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        return bool(conversacion) and conversacion.get("estado") in ESTADOS_EN_MANOS_DEL_DUENO
 
     def _construir_historial(self, conversacion_id: int, max_historial: int) -> List[MensajeLLM]:
         """Excluye la última fila a propósito: para cuando procesar_turno()
@@ -206,12 +220,15 @@ class VictoriaConversationService:
 
     def _formatear_contexto_producto(self, producto: Optional[dict]) -> str:
         if producto:
-            return formatear_ficha_producto(producto)
+            return formatear_ficha_producto(producto, self._entregas.listar(producto["sku"], solo_activas=True))
 
         activos = self._productos.listar_activos()
         if not activos:
             return "Todavía no hay productos cargados en el catálogo. Si el cliente pregunta por algo, usa escalar_a_humano."
-        lista = "\n".join(f"- {p['nombre']} (SKU {p['sku']}): ${p['precio']}" for p in activos)
+        lista = "\n".join(
+            f"- {p['nombre']} (SKU {p['sku']}): ${p['precio']}" + (" [cierre manual: lo gestiona el dueño]" if es_de_cierre_manual(p) else "")
+            for p in activos
+        )
         return (
             "Todavía no se identificó un producto específico para esta conversación. "
             "Estos son los productos disponibles -- identifica cuál le interesa al cliente "
@@ -220,7 +237,7 @@ class VictoriaConversationService:
         )
 
     @staticmethod
-    def _formatear_contexto_lead(lead: dict) -> str:
+    def _formatear_contexto_lead(lead: dict, producto: Optional[dict] = None) -> str:
         campos = {
             "Nombre": lead.get("nombre_cliente"),
             "Dirección": lead.get("direccion"),
@@ -229,6 +246,9 @@ class VictoriaConversationService:
             "Producto": lead.get("producto_nombre"),
             "Método de pago": lead.get("metodo_pago"),
         }
+        # La entrega solo se pide si el envío NO va incluido en el precio del producto (ADR-012).
+        if producto is not None and not producto.get("envio_incluido", True):
+            campos["Entrega"] = lead.get("entrega_nombre")
         conocidos = [f"{etiqueta}: {valor}" for etiqueta, valor in campos.items() if valor]
         faltantes = [etiqueta for etiqueta, valor in campos.items() if not valor]
 

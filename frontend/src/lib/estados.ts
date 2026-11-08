@@ -69,9 +69,30 @@ export const ESTADOS_CONVERSACION: Record<string, EstadoInfo> = {
   activa: { label: "Activa", variant: "success" },
   esperando_pago: { label: "Esperando pago", variant: "warning" },
   escalada: { label: "Escalada", variant: "danger" },
+  // ADR-012: el dueño la atiende (producto propio): Victoria ya no responde.
+  en_gestion: { label: "En gestión", variant: "info" },
   cerrada: { label: "Cerrada", variant: "neutral" },
   fria: { label: "Fría", variant: "neutral" },
 };
+
+/**
+ * Tipos de solicitud de gestión («Por gestionar», ADR-012). Espejo de
+ * `backend/src/routes/gestion/tipos.py`. Un pedido cerrado es lo más urgente de gestionar.
+ */
+export const TIPOS_SOLICITUD: Record<string, EstadoInfo> = {
+  pedido_cerrado: { label: "Pedido cerrado", variant: "success" },
+  quiere_comprar: { label: "Quiere comprar", variant: "info" },
+  quiere_pagar: { label: "Quiere pagar", variant: "info" },
+  pide_envio: { label: "Pide envío o retiro", variant: "info" },
+  quiere_ver_producto: { label: "Quiere ver el producto", variant: "warning" },
+  quiere_negociar: { label: "Quiere negociar", variant: "warning" },
+  sin_cobertura: { label: "Destino sin cobertura", variant: "danger" },
+  otro: { label: "Otra gestión", variant: "neutral" },
+};
+
+export function tipoSolicitudInfo(tipo: string): EstadoInfo {
+  return TIPOS_SOLICITUD[tipo] ?? { label: tipo, variant: "neutral" };
+}
 
 /**
  * Estados de `productos_bot.estado` (Fase B de la gestión de productos).
@@ -146,6 +167,14 @@ export const CAMPOS_HISTORIAL: Record<string, string> = {
   costo_rocketfy: "Costo en Rocketfy",
   precio_sugerido_rocketfy: "Precio sugerido por Rocketfy",
   estado: "Estado",
+  categoria_id: "Categoría",
+  envio_incluido: "Envío incluido en el precio",
+  costo_flete_estimado: "Flete estimado del producto",
+  costo_propio: "Lo que te cuesta",
+  controla_stock: "Control de stock",
+  stock_ultimo: "Stock",
+  entregas: "Opciones de entrega",
+  fotos: "Fotos",
 };
 
 export function estadoConversacionInfo(estado: string): EstadoInfo {

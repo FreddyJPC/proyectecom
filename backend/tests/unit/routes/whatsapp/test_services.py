@@ -74,7 +74,7 @@ class FakeLeadRepository:
         self._despachados = set(despachados_por_telefono or [])
         self._leads_por_conversacion = leads_por_conversacion or {}
 
-    def existe_despachado_por_telefono(self, telefono):
+    def existe_pedido_previo_por_telefono(self, telefono):
         return telefono in self._despachados
 
     def obtener_por_conversacion(self, conversacion_id):
@@ -273,3 +273,29 @@ class TestToleranciaAFallos:
         conv_repo.obtener_por_telefono.side_effect = RuntimeError("boom")
 
         _service(conv_repo=conv_repo).procesar_mensaje_entrante(_dto())  # no debe lanzar
+
+
+class TestConversacionEnGestion:
+    """ADR-012: «en gestión» = el dueño está a cargo de un producto propio, igual que una escalada."""
+
+    def test_una_conversacion_en_gestion_no_recibe_respuesta_automatica(self):
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "en_gestion"}}
+        )
+        bot_worker = MagicMock()
+
+        _service(conv_repo=conv_repo, bot_worker=bot_worker).procesar_mensaje_entrante(_dto())
+
+        bot_worker.encolar.assert_not_called()
+
+    def test_quien_tiene_un_pedido_previo_por_gestionar_recibe_la_respuesta_fija_de_postventa(self):
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
+        )
+        # El repositorio real devuelve True tanto para `despachado` como para `por_gestionar`.
+        lead_repo = FakeLeadRepository(despachados_por_telefono={"593987654321"})
+        bot_worker = MagicMock()
+
+        _service(conv_repo=conv_repo, lead_repo=lead_repo, bot_worker=bot_worker).procesar_mensaje_entrante(_dto())
+
+        assert bot_worker.encolar.call_args.kwargs["modo"] == "fijo"

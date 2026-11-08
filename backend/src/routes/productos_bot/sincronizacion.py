@@ -3,7 +3,8 @@ Operación continua de los productos publicados (Fase F del plan de gestión de
 productos): cada hora vuelve a leer Rocketfy y mantiene la ficha al día sin que
 nadie tenga que vigilarla.
 
-Qué hace, por cada producto `activo` o `agotado`:
+Qué hace, por cada producto de ROCKETFY `activo` o `agotado` (los productos propios no están en
+Rocketfy y no se sincronizan):
   1. Refresca costo, precio sugerido, stock, peso e imagen desde Rocketfy.
   2. AUTO-PAUSA por agotado (parámetro «Pausar solo un producto agotado»): si un producto `activo` queda con 0 unidades pasa a
      `agotado` (Victoria deja de ofrecerlo, igual que con una pausa manual), se
@@ -32,6 +33,7 @@ from src.jobs._locks import acquire_lock, release_lock
 from src.jobs.stock_watcher.repository import StockWatcherRepository
 from src.routes.ajustes.services import AjustesService
 from src.routes.productos.repository import SkuMonitoreadoRepository
+from src.routes.ventas.origen import es_de_cierre_manual
 
 from .calculadora import margen_en_riesgo
 from .repository import ProductoBotGestionRepository
@@ -77,7 +79,11 @@ class SincronizacionProductosService:
 
     def sincronizar_todos(self) -> ResultadoSincronizacion:
         resultado = ResultadoSincronizacion()
-        filas = [f for f in self._repo.listar() if f["estado"] in ESTADOS_QUE_SE_SINCRONIZAN]
+        # Los productos propios no están en Rocketfy: su stock lo lleva la propia app (ADR-012).
+        filas = [
+            f for f in self._repo.listar()
+            if f["estado"] in ESTADOS_QUE_SE_SINCRONIZAN and not es_de_cierre_manual(f)
+        ]
         if not filas:
             logger.info("Sincronización de productos: no hay productos activos ni agotados")
             return resultado

@@ -7,14 +7,26 @@ _COLUMNAS_CONVERSACION = (
     "estado, vista_en, notas_internas, creada_en, actualizada_en"
 )
 _COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en"
+# Lo que Victoria necesita saber de un producto. Además de la ficha, el proveedor (ADR-012: de él depende CÓMO
+# se cierra la venta), el costo, el stock propio y el envío.
 _COLUMNAS_PRODUCTO_BOT = (
     "id, sku, nombre, descripcion, precio, variantes, tiempo_entrega, "
     "metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder, "
-    "max_unidades_por_pedido, activo, imagen_url, creado_en, actualizado_en"
+    "max_unidades_por_pedido, activo, imagen_url, estado, proveedor_id, categoria_id, "
+    "costo_rocketfy, costo_propio, controla_stock, stock_ultimo, envio_incluido, costo_flete_estimado, "
+    "creado_en, actualizado_en"
+)
+_SELECT_PRODUCTO_BOT = (
+    "select "
+    + ", ".join(f"p.{c.strip()}" for c in _COLUMNAS_PRODUCTO_BOT.split(","))
+    + ", pr.clave as proveedor_clave, pr.cierre as proveedor_cierre, c.nombre as categoria_nombre "
+    "from productos_bot p join proveedores pr on pr.id = p.proveedor_id "
+    "left join categorias_producto c on c.id = p.categoria_id"
 )
 _COLUMNAS_LEAD = (
     "id, conversacion_id, nombre_cliente, telefono, direccion, canton, provincia, "
-    "producto_sku, producto_nombre, producto_variante, cantidad, total, metodo_pago, estado_pago, "
+    "producto_sku, producto_nombre, producto_variante, cantidad, subtotal, total, metodo_pago, estado_pago, "
+    "entrega_opcion_id, entrega_nombre, entrega_tipo, costo_envio, "
     "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en"
 )
 
@@ -89,6 +101,19 @@ class ConversacionRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     "update conversaciones set estado = 'escalada', vista_en = null, actualizada_en = now() where id = %s",
+                    (conversacion_id,),
+                )
+
+    @staticmethod
+    def marcar_en_gestion(conversacion_id: int) -> None:
+        """La conversación pasa a manos del dueño (ADR-012): un producto propio no crea el pedido solo,
+        así que ante una intención de compra que Victoria no puede resolver, o al cerrar la venta, la
+        conversación queda «en gestión» y Victoria deja de responder (igual que con una escalada).
+        También limpia vista_en: debe aparecer como «sin revisar»."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update conversaciones set estado = 'en_gestion', vista_en = null, actualizada_en = now() where id = %s",
                     (conversacion_id,),
                 )
 
@@ -201,7 +226,8 @@ class ConversacionRepository:
                     select
                         count(*) filter (where estado = 'escalada') as escaladas,
                         count(*) filter (where estado = 'escalada' and vista_en is null) as escaladas_sin_revisar,
-                        count(*) filter (where estado = 'esperando_pago') as esperando_pago
+                        count(*) filter (where estado = 'esperando_pago') as esperando_pago,
+                        count(*) filter (where estado = 'en_gestion') as en_gestion
                     from conversaciones
                     """
                 )
@@ -219,22 +245,21 @@ class MensajeRepository:
                 return cur.fetchone() is not None
 
     @staticmethod
-    def existe_foto(conversacion_id: int, sku: str) -> bool:
-        """¿Ya se le mandó a este cliente la foto de este producto? Las fotos
-        quedan como mensajes del bot con tipo 'imagen' y el SKU entre paréntesis
-        (lo escribe `tools.py`): así no hace falta una tabla aparte. `strpos` y no
+    def contar_fotos(conversacion_id: int, sku: str) -> int:
+        """¿Cuántas fotos de este producto se le mandaron ya a este cliente? Cada foto queda como un
+        mensaje del bot con tipo 'imagen' y el SKU entre paréntesis (lo escribe `tools.py`): así no hace
+        falta una tabla aparte y la próxima tanda de fotos sigue donde quedó la anterior. `strpos` y no
         `like`, para que un SKU con `%` o `_` no se interprete como comodín."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    select 1 from mensajes
+                    select count(*) from mensajes
                     where conversacion_id = %s and rol = 'bot' and tipo = 'imagen' and strpos(contenido, %s) > 0
-                    limit 1
                     """,
                     (conversacion_id, f"({sku})"),
                 )
-                return cur.fetchone() is not None
+                return int(cur.fetchone()[0])
 
     @staticmethod
     def crear(conversacion_id: Optional[int], rol: str, contenido: str, tipo: str = "texto", wamid: Optional[str] = None) -> dict:
@@ -359,10 +384,7 @@ class ProductoBotRepository:
     def obtener_por_sku(sku: str) -> Optional[dict]:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"select {_COLUMNAS_PRODUCTO_BOT} from productos_bot where sku = %s",
-                    (sku,),
-                )
+                cur.execute(f"{_SELECT_PRODUCTO_BOT} where p.sku = %s", (sku,))
                 row = cur.fetchone()
                 if row is None:
                     return None
@@ -371,16 +393,11 @@ class ProductoBotRepository:
 
     @staticmethod
     def obtener_por_id_anuncio(id_anuncio: str) -> Optional[dict]:
-        columnas_prefijadas = ", ".join(f"p.{c.strip()}" for c in _COLUMNAS_PRODUCTO_BOT.split(","))
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    select {columnas_prefijadas}
-                    from anuncios_productos ap
-                    join productos_bot p on p.sku = ap.producto_sku
-                    where ap.id_anuncio = %s
-                    """,
+                    f"{_SELECT_PRODUCTO_BOT} join anuncios_productos ap on ap.producto_sku = p.sku "
+                    "where ap.id_anuncio = %s",
                     (id_anuncio,),
                 )
                 row = cur.fetchone()
@@ -393,9 +410,7 @@ class ProductoBotRepository:
     def listar_activos() -> List[dict]:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"select {_COLUMNAS_PRODUCTO_BOT} from productos_bot where activo = true order by nombre asc"
-                )
+                cur.execute(f"{_SELECT_PRODUCTO_BOT} where p.activo = true order by p.nombre asc")
                 cols = [d[0] for d in cur.description]
                 return [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -570,33 +585,58 @@ class LeadRepository:
         # haya guardado en una llamada anterior. `cantidad` y `total` sí se
         # reemplazan siempre: el total lo calcula el sistema (precio x
         # cantidad) cada vez que se registra el producto.
+        #
+        # ADR-012: `total` aquí es el SUBTOTAL (solo el producto). Cambiar de producto o de
+        # cantidad borra la entrega elegida antes: el envío se vuelve a elegir con registrar_entrega
+        # y el total vuelve a ser subtotal + envío.
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     update leads set
-                        producto_sku = %s, producto_nombre = %s, total = %s,
+                        producto_sku = %s, producto_nombre = %s, total = %s, subtotal = %s,
                         cantidad = %s,
                         producto_variante = coalesce(%s, producto_variante),
+                        entrega_opcion_id = null, entrega_nombre = null, entrega_tipo = null, costo_envio = 0,
                         actualizado_en = now()
                     where id = %s
                     """,
-                    (producto_sku, producto_nombre, total, cantidad, variante, lead_id),
+                    (producto_sku, producto_nombre, total, total, cantidad, variante, lead_id),
                 )
 
     @staticmethod
-    def actualizar_metodo_pago(lead_id: int, metodo_pago: str) -> None:
+    def actualizar_entrega(
+        lead_id: int, opcion_id: Optional[int], nombre: str, tipo: str, costo_envio, total
+    ) -> None:
+        """Guarda la entrega elegida y el total ya con el envío (lo calcula el sistema, no Victoria)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update leads set
+                        entrega_opcion_id = %s, entrega_nombre = %s, entrega_tipo = %s,
+                        costo_envio = %s, total = %s, actualizado_en = now()
+                    where id = %s
+                    """,
+                    (opcion_id, nombre, tipo, costo_envio, total, lead_id),
+                )
+
+    @staticmethod
+    def actualizar_metodo_pago(lead_id: int, metodo_pago: str, esperar_comprobante: bool = True) -> None:
+        """`esperar_comprobante=False` es para productos propios: allí el dueño verifica el pago a mano,
+        así que la transferencia NO deja el lead «esperando_pago» (ese estado dispara la regla de Rocketfy
+        que le pide el comprobante a Victoria)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     update leads set
                         metodo_pago = %s,
-                        estado = case when %s = 'transferencia' then 'esperando_pago' else estado end,
+                        estado = case when %s and %s = 'transferencia' then 'esperando_pago' else estado end,
                         actualizado_en = now()
                     where id = %s
                     """,
-                    (metodo_pago, metodo_pago, lead_id),
+                    (metodo_pago, esperar_comprobante, metodo_pago, lead_id),
                 )
 
     @staticmethod
@@ -613,11 +653,13 @@ class LeadRepository:
                 )
 
     @staticmethod
-    def existe_despachado_por_telefono(telefono: str) -> bool:
+    def existe_pedido_previo_por_telefono(telefono: str) -> bool:
+        """¿Este teléfono ya tiene un pedido cerrado? `despachado` (Rocketfy lo creó) o `por_gestionar`
+        (producto propio: el dueño lo está gestionando)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "select 1 from leads where telefono = %s and estado = 'despachado' limit 1",
+                    "select 1 from leads where telefono = %s and estado in ('despachado', 'por_gestionar') limit 1",
                     (telefono,),
                 )
                 return cur.fetchone() is not None

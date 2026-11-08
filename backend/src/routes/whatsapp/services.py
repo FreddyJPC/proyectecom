@@ -13,6 +13,8 @@ from src.config.parametros import parametros
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.whatsapp import WhatsAppClient, WhatsAppError, get_whatsapp_client
 
+from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
+
 from .dto import MensajeEntranteDTO
 from .factory import get_bot_worker
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository
@@ -90,16 +92,16 @@ class WebhookService:
     def _encolar_respuesta(self, conversacion: dict, mensaje: dict, dto: MensajeEntranteDTO) -> None:
         conversacion_id = conversacion["id"]
 
-        # Regla 1: la conversación ya está escalada -- un humano ya está a
-        # cargo, no se genera ninguna respuesta automática más.
-        if conversacion["estado"] == "escalada":
+        # Regla 1: la conversación ya está en manos del dueño -- escalada, o en gestión (ADR-012:
+        # intención de compra de un producto propio) --, no se genera ninguna respuesta automática más.
+        if conversacion["estado"] in ESTADOS_EN_MANOS_DEL_DUENO:
             return
 
-        # Regla 2: postventa mínimo -- un teléfono con un lead ya
-        # despachado (pedido previo) que vuelve a escribir se escala
+        # Regla 2: postventa mínimo -- un teléfono con un pedido previo (despachado por Rocketfy, o de un
+        # producto propio que el dueño está gestionando) que vuelve a escribir se escala
         # directo, nunca pasa por Victoria (versión mínima del "Flujo 3"
         # de docs/BotPlanifiacion.md -- no el árbol completo de postventa).
-        if self._leads.existe_despachado_por_telefono(dto.telefono):
+        if self._leads.existe_pedido_previo_por_telefono(dto.telefono):
             self._escalar(conversacion_id, dto.telefono, motivo="Cliente con pedido previo escribió de nuevo")
             self._bot_worker.encolar(
                 conversacion_id=conversacion_id,

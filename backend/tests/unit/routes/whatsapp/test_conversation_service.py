@@ -513,3 +513,50 @@ class TestInstruccionesDeVictoria:
         monkeypatch.setattr(modulo, "instrucciones_vigentes", InstruccionesVigentes(repo=Repo()))
         system = self._system_del_turno()  # no debe lanzar KeyError/ValueError
         assert "{esto}" in system and "aquello {" in system
+
+
+class TestConversacionEnManosDelDueno:
+    """ADR-012: si una herramienta deja la conversación «en gestión» (aviso que traspasa o pedido cerrado),
+    Victoria tiene UNA vuelta más para despedirse y después se corta, igual que con una escalada."""
+
+    def test_en_gestion_permite_una_iteracion_mas_para_la_despedida(self):
+        llm = LLMProviderFalso([
+            RespuestaLLM(
+                texto="",
+                llamadas_herramientas=[LlamadaHerramienta(id="t1", nombre="cerrar_venta", entrada={})],
+                razon_de_parada="necesita_herramientas",
+            ),
+            RespuestaLLM(texto="¡Gracias! El dueño te escribe pronto.", llamadas_herramientas=[], razon_de_parada="fin"),
+        ])
+        conversaciones = FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None, "estado": "activa"}})
+
+        class EjecutorQueTraspasa(EjecutorHerramientasFalso):
+            def ejecutar(self, nombre, lead_id, conversacion_id, entrada, id_llamada):
+                conversaciones._tabla[1]["estado"] = "en_gestion"  # lo que hace el cierre manual en la base
+                return super().ejecutar(nombre, lead_id, conversacion_id, entrada, id_llamada)
+
+        servicio = VictoriaConversationService(
+            llm_client=llm, lead_repo=FakeLeadRepository(), conversacion_repo=conversaciones,
+            mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "listo"}]),
+            producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorQueTraspasa(),
+            max_turnos_herramientas=5, max_mensajes_historial=40,
+        )
+
+        resultado = servicio.procesar_turno(conversacion_id=1, mensaje_cliente="listo")
+
+        assert resultado == "¡Gracias! El dueño te escribe pronto."
+        assert len(llm.llamadas) == 2
+
+    def test_el_contexto_del_lead_pide_la_entrega_solo_si_el_envio_no_va_incluido(self):
+        lead = {"nombre_cliente": "Ana", "producto_nombre": "Zapatos", "entrega_nombre": None}
+        sin_incluir = VictoriaConversationService._formatear_contexto_lead(lead, {"envio_incluido": False})
+        incluido = VictoriaConversationService._formatear_contexto_lead(lead, {"envio_incluido": True})
+        sin_producto = VictoriaConversationService._formatear_contexto_lead(lead, None)
+
+        assert "Entrega" in sin_incluir.split("falta:")[1]
+        assert "Entrega" not in incluido and "Entrega" not in sin_producto
+
+    def test_con_la_entrega_elegida_ya_figura_entre_lo_que_se_sabe(self):
+        lead = {"nombre_cliente": "Ana", "entrega_nombre": "Envío en Cuenca"}
+        texto = VictoriaConversationService._formatear_contexto_lead(lead, {"envio_incluido": False})
+        assert "Entrega: Envío en Cuenca" in texto.split("Todavía falta")[0]

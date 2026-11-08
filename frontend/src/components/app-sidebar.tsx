@@ -4,7 +4,7 @@ import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useEscaladasSinRevisar } from "@/components/escaladas-context";
+import { useEscaladasSinRevisar, useGestionPendiente } from "@/components/escaladas-context";
 import { BrandMark } from "@/components/brand-mark";
 import {
   Sidebar,
@@ -25,6 +25,7 @@ import { NAV_GRUPOS, NAV_NUEVO_PEDIDO, SITE, esRutaActiva } from "@/config/site"
 export function AppSidebar() {
   const pathname = usePathname();
   const escaladasSinRevisar = useEscaladasSinRevisar();
+  const gestionPendiente = useGestionPendiente();
   const { setOpenMobile, state, toggleSidebar } = useSidebar();
   const contraido = state === "collapsed";
 
@@ -75,7 +76,8 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {grupo.items.map((item) => {
-                  const mostrarContador = item.url === "/conversaciones" && escaladasSinRevisar > 0;
+                  const contador = item.url === "/conversaciones" ? escaladasSinRevisar : item.url === "/gestion" ? gestionPendiente : 0;
+                  const mostrarContador = contador > 0;
                   return (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={esRutaActiva(pathname, item.url)} tooltip={item.title}>
@@ -85,9 +87,9 @@ export function AppSidebar() {
                           {mostrarContador && (
                             <span
                               className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-status-danger px-1.5 text-xs font-semibold text-status-danger-foreground group-data-[collapsible=icon]:hidden"
-                              aria-label={`${escaladasSinRevisar} escaladas sin revisar`}
+                              aria-label={item.url === "/gestion" ? `${contador} por gestionar` : `${contador} escaladas sin revisar`}
                             >
-                              {escaladasSinRevisar}
+                              {contador}
                             </span>
                           )}
                         </Link>

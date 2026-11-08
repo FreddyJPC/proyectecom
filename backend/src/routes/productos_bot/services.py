@@ -3,17 +3,22 @@ Gestión de los productos que Victoria puede vender, desde el dashboard (Fase B
 del plan de gestión de productos, docs/PLAN_GESTION_PRODUCTOS.md).
 
 Reglas que este servicio hace cumplir:
-- Un producto nace SIEMPRE como borrador desde un SKU que existe EXACTAMENTE
-  igual en Rocketfy (se usa el SKU tal como lo escribe Rocketfy, no como lo
-  tecleó la persona): un SKU inventado fue la causa del primer fallo real de
-  una venta.
-- Nada llega a Victoria hasta pulsar publicar (o reanudar), y para eso se
-  vuelve a consultar Rocketfy EN VIVO. Si Rocketfy no responde, no se publica
-  a ciegas (a diferencia de la venta, que sí sigue sin saber el stock).
+- Un producto de ROCKETFY nace SIEMPRE como borrador desde un SKU que existe
+  EXACTAMENTE igual en Rocketfy (se usa el SKU tal como lo escribe Rocketfy, no
+  como lo tecleó la persona): un SKU inventado fue la causa del primer fallo
+  real de una venta.
+- Un producto PROPIO (ADR-012) lo crea el dueño con todos sus datos y su SKU lo
+  genera el sistema (`PROP-0001`…): no existe en Rocketfy, así que nada de lo que
+  depende de Rocketfy (verificar el SKU, el stock en vivo, la sincronización
+  horaria) se le aplica; su stock lo lleva la propia app.
+- Nada llega a Victoria hasta pulsar publicar (o reanudar). Si es de Rocketfy,
+  para eso se vuelve a consultar Rocketfy EN VIVO. Si Rocketfy no responde, no
+  se publica a ciegas (a diferencia de la venta, que sí sigue sin saber el stock).
 - `estado` y `activo` cambian juntos en un único lugar
   (ProductoBotGestionRepository.cambiar_estado).
 - Todo cambio queda en el historial con el correo de quien lo hizo.
 """
+import dataclasses
 import html
 import logging
 import re
@@ -21,11 +26,18 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from src.config.parametros import parametros
-from src.integrations.rocketfy import get_rocketfy_client
+from src.config.settings import load_settings
+from src.integrations.rocketfy import RECAUDO_MINIMO_CONTRAENTREGA, get_rocketfy_client
 from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.routes.ajustes.services import AjustesService
+from src.routes.categorias.repository import CategoriaRepository
+from src.routes.entregas.logica import limpiar_y_validar
+from src.routes.entregas.repository import EntregaRepository
+from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, carpeta_de, url_publica, validar_ruta
+from src.routes.imagenes.repository import ImagenRepository, ImagenYaRegistradaError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
+from src.routes.ventas.origen import controla_su_stock, costo_unitario, es_de_cierre_manual, flete_estimado
 
 from .calculadora import envio_para_piso, ganancia_por_unidad, margen_en_riesgo, margen_pct, recomendar
 from .dto import (
@@ -38,13 +50,14 @@ from .dto import (
     VerificacionDTO,
 )
 from .exceptions import (
+    DatosDeProductoInvalidosError,
     ProductoBotNoEncontradoError,
     ProductoBotYaExisteError,
     PublicacionBloqueadaError,
     SkuInvalidoError,
     TransicionInvalidaError,
 )
-from .repository import ACCION_SIMULACION_COMPLETA, ProductoBotGestionRepository
+from .repository import ACCION_SIMULACION_COMPLETA, COLUMNAS_SOLO_DE_PRODUCTO_PROPIO, ProductoBotGestionRepository
 from .verificacion import bloqueos_de_contenido, metodos_de_pago, verificar_producto
 
 logger = logging.getLogger(__name__)
@@ -106,6 +119,10 @@ def _limpiar_texto_de_rocketfy(texto: Optional[str]) -> str:
     return plano
 
 
+def _cuantas(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
 def _valor_para_historial(valor):
     if isinstance(valor, str) and len(valor) > LARGO_MAXIMO_VALOR_EN_HISTORIAL:
         return valor[: LARGO_MAXIMO_VALOR_EN_HISTORIAL - 1] + "…"
@@ -113,11 +130,17 @@ def _valor_para_historial(valor):
 
 
 class ProductosBotService:
-    def __init__(self, client=None, repo=None, monitoreo_repo=None, ajustes_service=None):
+    def __init__(
+        self, client=None, repo=None, monitoreo_repo=None, ajustes_service=None, entregas_repo=None, categorias_repo=None,
+        imagenes_repo=None,
+    ):
         self._client = client
         self._repo = repo or ProductoBotGestionRepository()
         self._monitoreo = monitoreo_repo or SkuMonitoreadoRepository()
         self._ajustes = ajustes_service or AjustesService()
+        self._entregas = entregas_repo or EntregaRepository()
+        self._categorias = categorias_repo or CategoriaRepository()
+        self._imagenes = imagenes_repo or ImagenRepository()
 
     @property
     def _rocketfy(self):
@@ -157,15 +180,23 @@ class ProductosBotService:
             logger.exception("No se pudieron leer los ajustes para el margen (la lista sigue)")
             return None
 
-    @staticmethod
-    def _tiene_margen_en_riesgo(fila: dict, ajustes) -> bool:
+    @classmethod
+    def _tiene_margen_en_riesgo(cls, fila: dict, ajustes) -> bool:
         """Solo para productos que ya se venden o se pueden reanudar: un borrador
         todavía está en preparación (su margen sale en la lista de verificación)."""
         if ajustes is None or fila["estado"] not in ESTADOS_CON_INSIGNIA_DE_MARGEN:
             return False
         precio = _decimal(fila.get("precio"), "0.01")
-        costo = _decimal(fila.get("costo_rocketfy"), "0.01")
-        return margen_en_riesgo(precio, costo, ajustes) is not None
+        return margen_en_riesgo(precio, costo_unitario(fila), cls._ajustes_del_producto(fila, ajustes)) is not None
+
+    @staticmethod
+    def _ajustes_del_producto(fila: dict, ajustes):
+        """Los ajustes de precios con el flete de ESTE producto en lugar del general (ADR-012): el flete
+        que el dueño anotó para el producto, o el general si el envío va incluido en el precio, o cero si
+        el envío se cobra aparte. Si el dueño anotó el flete del producto, cuenta como confirmado."""
+        flete = flete_estimado(fila, ajustes.envio_estimado)
+        propio = _decimal(fila.get("costo_flete_estimado"), "0.01") is not None
+        return dataclasses.replace(ajustes, envio_estimado=flete, confirmado=ajustes.confirmado or propio)
 
     def obtener_detalle(self, sku: str) -> ProductoBotDetalleDTO:
         return self._a_detalle(self._obtener_o_error(sku))
@@ -211,25 +242,64 @@ class ProductosBotService:
         self._repo.registrar_historial(sku_real, "creado", usuario, {"desde": "rocketfy"})
         return self._a_detalle(fila)
 
+    def crear_propio(self, datos: Dict[str, Any], entregas: List[Dict[str, Any]], usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """Un producto PROPIO (ADR-012): lo crea el dueño con todos sus datos. Nace como borrador y
+        Victoria no lo ve hasta que se publique. El SKU lo genera el sistema (`PROP-0001`…)."""
+        limpias, errores = limpiar_y_validar(entregas)
+        errores += self._errores_de_categoria(datos.get("categoria_id"))
+        if errores:
+            raise DatosDeProductoInvalidosError(errores)
+        fila = self._repo.crear_propio(datos, limpias)
+        self._repo.registrar_historial(fila["sku"], "creado", usuario, {"desde": "propio"})
+        return self._a_detalle(fila)
+
+    def _errores_de_categoria(self, categoria_id: Optional[int]) -> List[str]:
+        if categoria_id is None:
+            return []
+        categoria = self._categorias.obtener(categoria_id)
+        if categoria is None or not categoria["activo"]:
+            return ["Esa categoría no existe o está desactivada."]
+        return []
+
+    def _exigir_que_no_empeore(self, actual: dict, nuevo: dict, entregas_antes: int, entregas_despues: int) -> None:
+        """Un producto que Victoria está vendiendo no puede quedar peor por una edición. Se bloquea solo
+        lo que la edición EMPEORA: si ya tenía un problema de antes, otras ediciones no quedan bloqueadas."""
+        antes = set(bloqueos_de_contenido(actual, self._envio_para_piso(actual), entregas_antes))
+        despues = bloqueos_de_contenido(nuevo, self._envio_para_piso(nuevo), entregas_despues)
+        empeora = [b for b in despues if b not in antes]
+        if empeora:
+            raise PublicacionBloqueadaError(empeora)
+
+    def _cantidad_de_entregas_activas(self, sku: str) -> int:
+        return len(self._entregas.listar(sku, solo_activas=True))
+
     def editar(self, sku: str, cambios: Dict[str, Any], usuario: Optional[str]) -> ProductoBotDetalleDTO:
         actual = self._obtener_o_error(sku)
         if actual["estado"] == "archivado":
             raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
 
+        propio = es_de_cierre_manual(actual)
+        solo_propios = sorted(set(cambios) & COLUMNAS_SOLO_DE_PRODUCTO_PROPIO)
+        if solo_propios and not propio:
+            raise DatosDeProductoInvalidosError(
+                ["El costo y el stock de un producto de Rocketfy vienen de Rocketfy: solo los productos propios se editan a mano."]
+            )
+        if "categoria_id" in cambios:
+            errores = self._errores_de_categoria(cambios["categoria_id"])
+            if errores:
+                raise DatosDeProductoInvalidosError(errores)
+
         nuevos = {campo: valor for campo, valor in cambios.items() if actual.get(campo) != valor}
         if not nuevos:
             return self._a_detalle(actual)
 
+        combinado = {**actual, **nuevos}
+        if propio and combinado.get("controla_stock") and combinado.get("stock_ultimo") is None:
+            raise DatosDeProductoInvalidosError(["Indica cuántas unidades tienes, o desactiva el control de stock."])
+
         if actual["estado"] == "activo":
-            # Un producto que Victoria está vendiendo no puede quedar peor por
-            # una edición. Se bloquea solo lo que la edición EMPEORA: si ya
-            # tenía un problema de antes, otras ediciones no quedan bloqueadas.
-            envio = self._envio_para_piso()
-            antes = set(bloqueos_de_contenido(actual, envio))
-            despues = bloqueos_de_contenido({**actual, **nuevos}, envio)
-            empeora = [b for b in despues if b not in antes]
-            if empeora:
-                raise PublicacionBloqueadaError(empeora)
+            entregas = self._cantidad_de_entregas_activas(actual["sku"])
+            self._exigir_que_no_empeore(actual, combinado, entregas, entregas)
 
         fila = self._repo.actualizar_campos(actual["sku"], nuevos)
         self._repo.registrar_historial(
@@ -245,6 +315,8 @@ class ProductosBotService:
 
     def actualizar_desde_rocketfy(self, sku: str, usuario: Optional[str]) -> ProductoBotDetalleDTO:
         actual = self._obtener_o_error(sku)
+        if es_de_cierre_manual(actual):
+            raise TransicionInvalidaError("Un producto propio no está en Rocketfy: sus datos los editas tú.")
         producto = self._buscar_en_rocketfy(actual["sku"])
         if producto is None:
             raise SkuNoExisteEnRocketfyError(f"El SKU '{actual['sku']}' ya no existe en el catálogo de Rocketfy.")
@@ -271,13 +343,16 @@ class ProductosBotService:
         `competencia` sustituye al precio de la competencia guardado (para ver
         el efecto de lo que se está tecleando antes de guardarlo)."""
         fila = self._obtener_o_error(sku)
-        ajustes = self._ajustes.obtener_ajustes()
-        costo = _decimal(fila.get("costo_rocketfy"), "0.01")
+        ajustes = self._ajustes_del_producto(fila, self._ajustes.obtener_ajustes())
+        costo = costo_unitario(fila)
         sugerido = _decimal(fila.get("precio_sugerido_rocketfy"), "0.01")
         if competencia is None:
             competencia = _decimal(fila.get("precio_competencia"), "0.01")
 
-        resultado = recomendar(costo, sugerido, ajustes, precio_evaluado=precio, precio_competencia=competencia)
+        resultado = recomendar(
+            costo, sugerido, ajustes, precio_evaluado=precio, precio_competencia=competencia,
+            recaudo_minimo=Decimal("0.00") if es_de_cierre_manual(fila) else RECAUDO_MINIMO_CONTRAENTREGA,
+        )
         ev = resultado.evaluacion
         return RecomendacionPrecioDTO(
             ajustes_confirmados=ajustes.confirmado,
@@ -314,8 +389,81 @@ class ProductosBotService:
             avisos=resultado.avisos,
         )
 
-    def _envio_para_piso(self) -> Optional[Decimal]:
-        return envio_para_piso(self._ajustes.obtener_ajustes())
+    def _envio_para_piso(self, fila: dict) -> Optional[Decimal]:
+        """El envío que cuenta para BLOQUEAR una publicación de ESTE producto (ver `envio_para_piso`)."""
+        return envio_para_piso(self._ajustes_del_producto(fila, self._ajustes.obtener_ajustes()))
+
+    # ------------------------------------------------------------------
+    # Envío por producto (ADR-012)
+    # ------------------------------------------------------------------
+    def guardar_entregas(self, sku: str, entregas: List[Dict[str, Any]], usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """Reemplaza TODAS las opciones de entrega del producto por estas. Si el producto está a la venta y
+        cobra el envío aparte, no puede quedarse sin ninguna."""
+        actual = self._obtener_o_error(sku)
+        if actual["estado"] == "archivado":
+            raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
+        limpias, errores = limpiar_y_validar(entregas)
+        if errores:
+            raise DatosDeProductoInvalidosError(errores)
+        anteriores = self._entregas.listar(actual["sku"])
+        if actual["estado"] == "activo":
+            antes = len([o for o in anteriores if o["activo"]])
+            despues = len([o for o in limpias if o["activo"]])
+            self._exigir_que_no_empeore(actual, actual, antes, despues)
+        self._entregas.reemplazar(actual["sku"], limpias)
+        self._repo.registrar_historial(
+            actual["sku"], "editado", usuario, {"entregas": [_cuantas(len(anteriores), "opción", "opciones"), _cuantas(len(limpias), "opción", "opciones")]}
+        )
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    # ------------------------------------------------------------------
+    # Fotos (ADR-012, entrega 2)
+    # ------------------------------------------------------------------
+    def registrar_imagen(self, sku: str, ruta: str, usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """La app ya subió el archivo al bucket; aquí se anota en la galería del producto. La URL la arma el
+        servidor a partir de la ruta: no se acepta una escrita por el cliente."""
+        actual = self._obtener_o_error(sku)
+        if actual["estado"] == "archivado":
+            raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
+        try:
+            ruta = validar_ruta(carpeta_de(actual["id"]), ruta)
+        except RutaDeImagenInvalida as exc:
+            raise DatosDeProductoInvalidosError([str(exc)]) from exc
+        cuantas = len(self._imagenes.listar(actual["sku"]))
+        if cuantas >= MAXIMO_POR_PRODUCTO:
+            raise DatosDeProductoInvalidosError([f"Máximo {MAXIMO_POR_PRODUCTO} fotos por producto: quita alguna antes de subir otra."])
+        try:
+            self._imagenes.agregar(actual["sku"], url_publica(load_settings().supabase_url, ruta), ruta, usuario)
+        except ImagenYaRegistradaError as exc:
+            raise DatosDeProductoInvalidosError([str(exc)]) from exc
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": [_cuantas(cuantas, "foto", "fotos"), _cuantas(cuantas + 1, "foto", "fotos")]})
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    def quitar_imagen(self, sku: str, imagen_id: int, usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        actual = self._obtener_o_error(sku)
+        cuantas = len(self._imagenes.listar(actual["sku"]))
+        if self._imagenes.quitar(actual["sku"], imagen_id) is None:
+            raise ProductoBotNoEncontradoError("Esa foto no existe en este producto.")
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": [_cuantas(cuantas, "foto", "fotos"), _cuantas(cuantas - 1, "foto", "fotos")]})
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    def ordenar_imagenes(self, sku: str, ids: List[int], usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """Deja las fotos en este orden (la primera es la principal). Tiene que incluir EXACTAMENTE las que hay."""
+        actual = self._obtener_o_error(sku)
+        existentes = {i["id"] for i in self._imagenes.listar(actual["sku"])}
+        if len(ids) != len(set(ids)) or set(ids) != existentes:
+            raise DatosDeProductoInvalidosError(["El orden debe incluir todas las fotos del producto, una sola vez cada una."])
+        self._imagenes.reordenar(actual["sku"], ids)
+        return self._a_detalle(self._repo.obtener(actual["sku"]))
+
+    def copiar_entregas(self, sku: str, desde_sku: str, usuario: Optional[str]) -> ProductoBotDetalleDTO:
+        """Copia el envío de otro producto (para no repetir los mismos datos en cada ficha)."""
+        origen = self._obtener_o_error(desde_sku)
+        copiadas = [
+            {k: v for k, v in o.items() if k not in ("id", "producto_sku", "orden")}
+            for o in self._entregas.listar(origen["sku"])
+        ]
+        return self.guardar_entregas(sku, copiadas, usuario)
 
     # ------------------------------------------------------------------
     # Estados
@@ -349,14 +497,26 @@ class ProductosBotService:
         fila = self._repo.cambiar_estado(actual["sku"], destino, usuario)
         self._repo.registrar_historial(actual["sku"], accion_historial, usuario, {"estado": [actual["estado"], destino]})
 
-        if destino == "activo":
+        if destino == "activo" and not es_de_cierre_manual(actual):
             self._asegurar_vigilado(actual["sku"])
         return self._a_detalle(fila)
 
     def _verificar_antes_de_activar(self, actual: dict) -> dict:
-        """Consulta Rocketfy EN VIVO, refresca la foto guardada y exige que el
+        """Si es de Rocketfy, consulta Rocketfy EN VIVO, refresca la foto guardada y exige que el
         producto cumpla lo mínimo. Si Rocketfy falla, la excepción sube (502):
-        no se publica sin confirmarlo."""
+        no se publica sin confirmarlo. Un producto propio no se consulta a Rocketfy: se verifica con lo
+        que tiene guardado (precio, stock propio, envío definido…)."""
+        entregas = self._cantidad_de_entregas_activas(actual["sku"])
+        if es_de_cierre_manual(actual):
+            verificacion = verificar_producto(
+                actual,
+                envio_para_piso=self._envio_para_piso(actual),
+                umbral_stock_bajo=parametros.valor("stock.umbral_bajo"),
+                entregas_activas=entregas,
+            )
+            if verificacion.bloqueos:
+                raise PublicacionBloqueadaError(verificacion.bloqueos)
+            return actual
         en_vivo = self._buscar_en_rocketfy(actual["sku"])
         if en_vivo is not None:
             actual = self._repo.guardar_datos_rocketfy(actual["sku"], self._datos_de_rocketfy(en_vivo))
@@ -364,8 +524,9 @@ class ProductosBotService:
             actual,
             existe_en_rocketfy=en_vivo is not None,
             stock=_entero(en_vivo.get("stock")) if en_vivo is not None else None,
-            envio_para_piso=self._envio_para_piso(),
+            envio_para_piso=self._envio_para_piso(actual),
             umbral_stock_bajo=parametros.valor("stock.umbral_bajo"),
+            entregas_activas=entregas,
         )
         if verificacion.bloqueos:
             raise PublicacionBloqueadaError(verificacion.bloqueos)
@@ -432,6 +593,11 @@ class ProductosBotService:
             actualizado_en=_iso(fila.get("actualizado_en")),
             pedidos_30d=pedidos_30d,
             margen_en_riesgo=con_margen_en_riesgo,
+            proveedor=fila.get("proveedor_clave") or "rocketfy",
+            proveedor_nombre=fila.get("proveedor_nombre") or "Rocketfy",
+            categoria=fila.get("categoria_nombre"),
+            controla_stock=controla_su_stock(fila) if es_de_cierre_manual(fila) else True,
+            envio_incluido=bool(fila.get("envio_incluido", True)),
         )
 
     def _avisos_de_la_lista(self, fila: dict) -> List[str]:
@@ -442,8 +608,8 @@ class ProductosBotService:
         bloquean nada. Si falla la consulta, la ficha se muestra igual."""
         avisos: List[str] = []
         try:
-            ajustes = self._ajustes.obtener_ajustes()
-            costo = _decimal(fila.get("costo_rocketfy"), "0.01")
+            ajustes = self._ajustes_del_producto(fila, self._ajustes.obtener_ajustes())
+            costo = costo_unitario(fila)
             precio = _decimal(fila.get("precio"), "0.01")
             # Con ajustes de partida (sin confirmar) el margen sería inventado: no se avisa.
             if ajustes.confirmado and costo is not None and precio is not None and precio > 0:
@@ -480,8 +646,12 @@ class ProductosBotService:
 
     def _a_detalle(self, fila: dict) -> ProductoBotDetalleDTO:
         # Sobre lo último guardado de Rocketfy, sin llamar a la red.
+        entregas = self._entregas.listar(fila["sku"])
         verificacion = verificar_producto(
-            fila, envio_para_piso=self._envio_para_piso(), umbral_stock_bajo=parametros.valor("stock.umbral_bajo")
+            fila,
+            envio_para_piso=self._envio_para_piso(fila),
+            umbral_stock_bajo=parametros.valor("stock.umbral_bajo"),
+            entregas_activas=len([e for e in entregas if e["activo"]]),
         )
         verificacion.avisos.extend(self._avisos_de_la_lista(fila))
         peso = fila.get("peso_kg")
@@ -517,4 +687,34 @@ class ProductosBotService:
                 )
                 for h in self._repo.listar_historial(fila["sku"])
             ],
+            proveedor=fila.get("proveedor_clave") or "rocketfy",
+            proveedor_nombre=fila.get("proveedor_nombre") or "Rocketfy",
+            categoria_id=fila.get("categoria_id"),
+            categoria=fila.get("categoria_nombre"),
+            costo_propio=_dinero(fila.get("costo_propio")),
+            controla_stock=controla_su_stock(fila) if es_de_cierre_manual(fila) else True,
+            envio_incluido=bool(fila.get("envio_incluido", True)),
+            costo_flete_estimado=_dinero(fila.get("costo_flete_estimado")),
+            entregas=[self._entrega_a_dto(e) for e in entregas],
+            imagenes=[
+                {"id": i["id"], "url": i["url"], "storage_path": i["storage_path"], "orden": i["orden"]}
+                for i in self._imagenes.listar(fila["sku"])
+            ],
+            carpeta_fotos=carpeta_de(fila["id"]),
         )
+
+    @staticmethod
+    def _entrega_a_dto(entrega: dict) -> dict:
+        return {
+            "id": entrega["id"],
+            "nombre": entrega["nombre"],
+            "tipo": entrega["tipo"],
+            "costo_cliente": _dinero(entrega["costo_cliente"]),
+            "costo_negocio": _dinero(entrega.get("costo_negocio")),
+            "cantones": list(entrega.get("cantones") or []),
+            "provincias": list(entrega.get("provincias") or []),
+            "resto_del_pais": bool(entrega.get("resto_del_pais")),
+            "direccion_retiro": entrega.get("direccion_retiro"),
+            "tiempo_entrega": entrega.get("tiempo_entrega"),
+            "activo": bool(entrega.get("activo", True)),
+        }

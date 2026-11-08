@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from src.integrations.rocketfy import RECAUDO_MINIMO_CONTRAENTREGA
+from src.routes.ventas.origen import controla_su_stock, costo_unitario, es_de_cierre_manual
 
 METODOS_PAGO_VALIDOS = ("contraentrega", "transferencia")
 LARGO_DESCRIPCION_LARGA = 1200
@@ -42,7 +43,9 @@ def metodos_de_pago(texto: Optional[str]) -> List[str]:
     return vistos
 
 
-def piso_de_precio(costo: Optional[Decimal], envio: Optional[Decimal] = None) -> Decimal:
+def piso_de_precio(
+    costo: Optional[Decimal], envio: Optional[Decimal] = None, recaudo_minimo: Decimal = RECAUDO_MINIMO_CONTRAENTREGA
+) -> Decimal:
     """El precio más bajo con el que se puede publicar: el mayor entre
     `costo + envío estimado` y el recaudo mínimo de Rocketfy en contraentrega
     ($10.00). Rocketfy no tiene cotizador de flete, por eso el envío es un
@@ -50,18 +53,25 @@ def piso_de_precio(costo: Optional[Decimal], envio: Optional[Decimal] = None) ->
 
     `envio=None` significa "no contar el envío": es lo que se hace mientras el
     dueño no haya confirmado sus ajustes, para que un envío de PARTIDA no
-    bloquee publicaciones por un número que nadie revisó."""
-    return max((costo or Decimal("0.00")) + (envio or Decimal("0.00")), RECAUDO_MINIMO_CONTRAENTREGA)
+    bloquee publicaciones por un número que nadie revisó.
+
+    `recaudo_minimo`: el de Rocketfy salvo en un producto propio, que no pasa por Rocketfy (ahí es 0:
+    solo importa no vender bajo el costo)."""
+    return max((costo or Decimal("0.00")) + (envio or Decimal("0.00")), recaudo_minimo)
 
 
 def _dinero(valor: Decimal) -> str:
     return f"{valor:.2f}"
 
 
-def bloqueos_de_contenido(producto: dict, envio_para_piso: Optional[Decimal] = None) -> List[str]:
+def bloqueos_de_contenido(
+    producto: dict, envio_para_piso: Optional[Decimal] = None, entregas_activas: Optional[int] = None
+) -> List[str]:
     """`envio_para_piso`: el envío estimado ya confirmado por el dueño, o None
-    si no se debe contar (ver `piso_de_precio`)."""
+    si no se debe contar (ver `piso_de_precio`). `entregas_activas`: cuántas opciones de entrega activas
+    tiene el producto (None = no se sabe: no se exige)."""
     bloqueos: List[str] = []
+    propio = es_de_cierre_manual(producto)
 
     if not (producto.get("nombre") or "").strip():
         bloqueos.append("Falta el nombre del producto.")
@@ -85,10 +95,17 @@ def bloqueos_de_contenido(producto: dict, envio_para_piso: Optional[Decimal] = N
         bloqueos.append("El precio de venta debe ser mayor que cero.")
     else:
         precio = Decimal(str(precio))
-        costo = producto.get("costo_rocketfy")
-        piso = piso_de_precio(Decimal(str(costo)) if costo is not None else None, envio_para_piso)
+        costo = costo_unitario(producto)
+        recaudo = Decimal("0.00") if propio else RECAUDO_MINIMO_CONTRAENTREGA
+        piso = piso_de_precio(costo, envio_para_piso, recaudo)
         if precio < piso:
-            if envio_para_piso:
+            if propio:
+                explicacion = (
+                    f"no cubre tu costo (${_dinero(costo or Decimal('0'))})"
+                    + (f" más el flete estimado (${_dinero(envio_para_piso)})" if envio_para_piso else "")
+                    + "."
+                )
+            elif envio_para_piso:
                 explicacion = (
                     f"no cubre tu costo más el envío estimado (${_dinero(envio_para_piso)}), y Rocketfy exige al "
                     f"menos ${_dinero(RECAUDO_MINIMO_CONTRAENTREGA)} en contraentrega."
@@ -100,15 +117,24 @@ def bloqueos_de_contenido(producto: dict, envio_para_piso: Optional[Decimal] = N
                 )
             bloqueos.append(f"El precio (${_dinero(precio)}) está por debajo del mínimo (${_dinero(piso)}): {explicacion}")
 
+    if entregas_activas is not None and not producto.get("envio_incluido", True) and entregas_activas == 0:
+        bloqueos.append(
+            "Falta definir el envío: agrega al menos una opción de entrega o marca que el envío va incluido en el precio."
+        )
+
     return bloqueos
 
 
-def bloqueos_de_disponibilidad(existe_en_rocketfy: Optional[bool], stock: Optional[int]) -> List[str]:
+def bloqueos_de_disponibilidad(existe_en_rocketfy: Optional[bool], stock: Optional[int], propio: bool = False) -> List[str]:
     bloqueos: List[str] = []
     if existe_en_rocketfy is False:
         bloqueos.append("El SKU no existe en el catálogo de Rocketfy: Rocketfy rechazaría los pedidos.")
     if stock is not None and stock <= 0:
-        bloqueos.append("No hay stock en Rocketfy (0 unidades).")
+        bloqueos.append(
+            "No hay stock (0 unidades): carga las unidades que tienes en la ficha."
+            if propio
+            else "No hay stock en Rocketfy (0 unidades)."
+        )
     return bloqueos
 
 
@@ -116,14 +142,25 @@ def avisos_de(producto: dict, stock: Optional[int], umbral_stock_bajo: int) -> L
     """`umbral_stock_bajo` es el parámetro «Qué cuenta como stock bajo» (`stock.umbral_bajo`): se
     recibe de quien llama para que esta función siga siendo pura."""
     avisos: List[str] = []
+    propio = es_de_cierre_manual(producto)
 
     if "transferencia" in metodos_de_pago(producto.get("metodos_pago_aceptados")):
-        avisos.append(
-            "Incluye pago por transferencia: Victoria no puede ver imágenes, así que pasará la "
-            "conversación a una persona para verificar el comprobante."
-        )
+        if propio:
+            avisos.append(
+                "Incluye pago por transferencia: Victoria no da cuentas ni confirma pagos. Te avisa para que "
+                "tú pases los datos y verifiques el comprobante."
+            )
+        else:
+            avisos.append(
+                "Incluye pago por transferencia: Victoria no puede ver imágenes, así que pasará la "
+                "conversación a una persona para verificar el comprobante."
+            )
     if stock is not None and 0 < stock <= umbral_stock_bajo:
-        avisos.append(f"Quedan pocas unidades en Rocketfy ({stock}).")
+        avisos.append(f"Quedan pocas unidades ({stock})." if propio else f"Quedan pocas unidades en Rocketfy ({stock}).")
+    if propio and not controla_su_stock(producto):
+        avisos.append("No llevas el control de stock: Victoria siempre lo ofrecerá como disponible.")
+    if propio and costo_unitario(producto) is None:
+        avisos.append("No anotaste lo que te cuesta el producto: no se podrá calcular tu ganancia.")
     if not (producto.get("preguntas_frecuentes") or "").strip():
         avisos.append(
             "No tiene preguntas frecuentes: si el cliente pregunta algo que no está en la ficha, "
@@ -134,10 +171,16 @@ def avisos_de(producto: dict, stock: Optional[int], umbral_stock_bajo: int) -> L
             "La descripción es muy larga: va en cada mensaje que procesa Victoria. Conviene acortarla."
         )
     if (producto.get("variantes") or "").strip():
-        avisos.append(
-            "Tiene variantes: hoy viajan como texto en el nombre de la línea del pedido (el SKU es el "
-            "mismo). Revisa tú la primera venta."
-        )
+        if propio:
+            avisos.append(
+                "Tiene variantes: el stock es el total del producto, no por talla o color. Al gestionar cada "
+                "pedido, verifica tú que esa variante esté disponible."
+            )
+        else:
+            avisos.append(
+                "Tiene variantes: hoy viajan como texto en el nombre de la línea del pedido (el SKU es el "
+                "mismo). Revisa tú la primera venta."
+            )
     if int(producto.get("max_unidades_por_pedido") or 1) > 1:
         avisos.append(
             "Permite más de una unidad por pedido: el envío de varias unidades puede costar más y bajar "
@@ -154,13 +197,20 @@ def verificar_producto(
     envio_para_piso: Optional[Decimal] = None,
     *,
     umbral_stock_bajo: int,
+    entregas_activas: Optional[int] = None,
 ) -> Verificacion:
     """`stock` en vivo (si se consultó Rocketfy ahora); si no, se usa el último
     guardado en el producto. `existe_en_rocketfy=None` significa "no se
-    consultó": no bloquea."""
-    stock_efectivo = stock if stock is not None else producto.get("stock_ultimo")
+    consultó": no bloquea. Un producto propio no se compara con Rocketfy: su stock es el que lleva la
+    propia app (y si no lo controla, no hay stock que exigir)."""
+    propio = es_de_cierre_manual(producto)
+    if propio:
+        existe_en_rocketfy = None
+        stock_efectivo = producto.get("stock_ultimo") if controla_su_stock(producto) else None
+    else:
+        stock_efectivo = stock if stock is not None else producto.get("stock_ultimo")
     return Verificacion(
-        bloqueos=bloqueos_de_contenido(producto, envio_para_piso)
-        + bloqueos_de_disponibilidad(existe_en_rocketfy, stock_efectivo),
+        bloqueos=bloqueos_de_contenido(producto, envio_para_piso, entregas_activas)
+        + bloqueos_de_disponibilidad(existe_en_rocketfy, stock_efectivo, propio),
         avisos=avisos_de(producto, stock_efectivo, umbral_stock_bajo),
     )

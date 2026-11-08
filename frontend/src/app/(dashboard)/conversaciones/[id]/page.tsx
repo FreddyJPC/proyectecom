@@ -363,6 +363,25 @@ export default function ConversacionDetallePage() {
           </div>
         )}
 
+        {/* ADR-012: un producto propio no crea el pedido solo; el dueño atiende la conversación. */}
+        {conversacion.estado === "en_gestion" && (
+          <div className="flex items-center justify-between gap-3 border-b bg-status-info-soft px-4 py-2.5 text-status-info-ink">
+            <p className="text-sm">
+              <strong className="font-semibold">Este chat está en gestión: lo atiendes tú.</strong>
+              <span className="hidden opacity-85 md:inline"> Victoria ya no responde. Mira «Por gestionar» para ver qué pidió el cliente.</span>
+            </p>
+            <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
+              {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
+              {reactivando ? "Devolviendo…" : (
+                <>
+                  <span className="hidden sm:inline">Devolver a Victoria</span>
+                  <span className="sm:hidden">Devolver</span>
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
         {/* Estado de la ventana de mensajería de WhatsApp */}
         {conversacion.ventanaAbierta ? (
           <div className="flex items-center gap-2 border-b bg-status-success-soft px-4 py-2 text-xs text-status-success-ink sm:text-sm">

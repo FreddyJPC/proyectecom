@@ -23,6 +23,8 @@ Qué es real y qué es de mentira:
             - Stock: lo último guardado en la ficha (no se consulta Rocketfy).
             - Catálogo: el producto de la prueba es el único disponible, aunque
               esté en borrador (se le fuerza `activo=True` solo en la copia).
+            - Producto PROPIO (ADR-012): el cierre manual se ensaya en memoria. Se ve la venta que se
+              habría guardado y los avisos que habrían llegado al dueño; no se descuenta stock ni se guarda nada.
   NUNCA     se llama a WhatsApp, a Rocketfy, a Telegram ni a la base de datos.
             Un test lo vigila (tests/unit/routes/productos_bot/test_simulacion.py):
             falla si una compra simulada abre una conexión o hace una petición HTTP.
@@ -37,7 +39,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from src.integrations.llm.contratos import LLMProvider
+from src.routes.gestion.repository import ResultadoUpsert
+from src.routes.gestion.services import ResultadoSolicitud
+from src.routes.gestion.tipos import tipo as tipo_de_solicitud
 from src.routes.pedidos.services import PedidoService
+from src.routes.ventas.snapshot import armar_venta, ganancia_de
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
 from src.routes.whatsapp.tools import HerramientasVictoria
 
@@ -50,9 +56,13 @@ ID_ANUNCIO_DE_PRUEBA = "anuncio-de-prueba"
 ID_PEDIDO_SIMULADO_INICIAL = 9_000_001
 
 # Campos del lead que viajan de ida y vuelta (y sus tipos al volver).
-CAMPOS_TEXTO = ("nombre_cliente", "direccion", "canton", "provincia", "producto_sku", "producto_nombre", "producto_variante")
+CAMPOS_TEXTO = (
+    "nombre_cliente", "direccion", "canton", "provincia", "producto_sku", "producto_nombre", "producto_variante",
+    "entrega_nombre", "entrega_tipo",
+)
 METODOS_DE_PAGO = ("contraentrega", "transferencia")
-ESTADOS_DEL_LEAD = ("recopilando_datos", "esperando_pago", "despachado")
+ESTADOS_DEL_LEAD = ("recopilando_datos", "esperando_pago", "despachado", "por_gestionar")
+CAMPOS_DINERO = ("total", "subtotal", "costo_envio")
 LARGO_MAXIMO_DE_UN_CAMPO = 500
 
 
@@ -73,6 +83,11 @@ def lead_inicial() -> Dict[str, Any]:
         "producto_variante": None,
         "cantidad": 1,
         "total": None,
+        "subtotal": None,
+        "entrega_opcion_id": None,
+        "entrega_nombre": None,
+        "entrega_tipo": None,
+        "costo_envio": Decimal("0.00"),
         "metodo_pago": None,
         "estado": "recopilando_datos",
         "id_pedido_local": None,
@@ -92,11 +107,15 @@ def lead_desde_estado(estado: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     cantidad = estado.get("cantidad")
     if isinstance(cantidad, int) and not isinstance(cantidad, bool) and 1 <= cantidad <= 1000:
         lead["cantidad"] = cantidad
-    if estado.get("total") not in (None, ""):
-        try:
-            lead["total"] = Decimal(str(estado["total"])).quantize(Decimal("0.01"))
-        except (InvalidOperation, ValueError):
-            pass
+    for campo in CAMPOS_DINERO:
+        if estado.get(campo) not in (None, ""):
+            try:
+                lead[campo] = Decimal(str(estado[campo])).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError):
+                pass
+    opcion = estado.get("entrega_opcion_id")
+    if isinstance(opcion, int) and not isinstance(opcion, bool):
+        lead["entrega_opcion_id"] = opcion
     if estado.get("metodo_pago") in METODOS_DE_PAGO:
         lead["metodo_pago"] = estado["metodo_pago"]
     if estado.get("estado") in ESTADOS_DEL_LEAD:
@@ -114,6 +133,9 @@ def estado_desde_lead(lead: Dict[str, Any]) -> Dict[str, Any]:
     salida.update(
         cantidad=int(lead.get("cantidad") or 1),
         total=f"{Decimal(str(lead['total'])):.2f}" if lead.get("total") is not None else None,
+        subtotal=f"{Decimal(str(lead['subtotal'])):.2f}" if lead.get("subtotal") is not None else None,
+        costo_envio=f"{Decimal(str(lead.get('costo_envio') or 0)):.2f}",
+        entrega_opcion_id=lead.get("entrega_opcion_id"),
         metodo_pago=lead.get("metodo_pago"),
         estado=lead.get("estado"),
         id_pedido_local=lead.get("id_pedido_local"),
@@ -130,17 +152,23 @@ class ConversacionesEnMemoria:
         self.id_anuncio = ID_ANUNCIO_DE_PRUEBA if desde_anuncio else None
         self.escalada = False
         self.esperando_pago = False
+        self.en_gestion = False
 
     def obtener_por_id(self, conversacion_id: int) -> Dict[str, Any]:
+        estado = "escalada" if self.escalada else "en_gestion" if self.en_gestion else "activa"
         return {
             "id": conversacion_id,
             "telefono": TELEFONO_DE_PRUEBA,
             "id_anuncio": self.id_anuncio,
-            "estado": "escalada" if self.escalada else "activa",
+            "origen": "fep" if self.id_anuncio else "directo",
+            "estado": estado,
         }
 
     def marcar_escalada(self, conversacion_id: int) -> None:
         self.escalada = True
+
+    def marcar_en_gestion(self, conversacion_id: int) -> None:
+        self.en_gestion = True
 
     def marcar_esperando_pago(self, conversacion_id: int) -> None:
         self.esperando_pago = True
@@ -171,13 +199,23 @@ class LeadsEnMemoria:
                 self.lead[campo] = valor
 
     def actualizar_producto(self, lead_id, producto_sku, producto_nombre, total, variante=None, cantidad=1) -> None:
-        self.lead.update(producto_sku=producto_sku, producto_nombre=producto_nombre, total=total, cantidad=cantidad)
+        # Igual que el UPDATE real: `total` es el subtotal y cambiar de producto borra la entrega elegida.
+        self.lead.update(
+            producto_sku=producto_sku, producto_nombre=producto_nombre, total=total, subtotal=total, cantidad=cantidad,
+            entrega_opcion_id=None, entrega_nombre=None, entrega_tipo=None, costo_envio=Decimal("0.00"),
+        )
         if variante is not None:
             self.lead["producto_variante"] = variante
 
-    def actualizar_metodo_pago(self, lead_id, metodo_pago) -> None:
+    def actualizar_entrega(self, lead_id, opcion_id, nombre, tipo, costo_envio, total) -> None:
+        self.lead.update(
+            entrega_opcion_id=opcion_id, entrega_nombre=nombre, entrega_tipo=tipo,
+            costo_envio=Decimal(str(costo_envio)), total=total,
+        )
+
+    def actualizar_metodo_pago(self, lead_id, metodo_pago, esperar_comprobante=True) -> None:
         self.lead["metodo_pago"] = metodo_pago
-        if metodo_pago == "transferencia":
+        if esperar_comprobante and metodo_pago == "transferencia":
             self.lead["estado"] = "esperando_pago"
 
     def actualizar_despacho(self, lead_id, id_pedido_local, id_pedido_rocketfy) -> None:
@@ -206,12 +244,13 @@ class MensajesEnMemoria:
             self.fotos_de_este_turno.append(contenido)
         return fila
 
-    def existe_foto(self, conversacion_id: int, sku: str) -> bool:
+    def contar_fotos(self, conversacion_id: int, sku: str) -> int:
         # El historial que manda la app no trae el tipo: una foto se reconoce por su texto,
         # que lo escribe `tools.py` («📷 Foto de <nombre> (<sku>)»).
-        return any(
-            f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
+        return sum(
+            1
             for f in self.filas
+            if f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
         )
 
 
@@ -230,6 +269,84 @@ class ProductosEnEnsayo:
 
     def listar_activos(self) -> List[Dict[str, Any]]:
         return [dict(self._producto)]
+
+
+class EntregasEnEnsayo:
+    """Las opciones de entrega del producto de la prueba, tal como están guardadas (se leen ANTES de la
+    simulación, no durante)."""
+
+    def __init__(self, entregas: Optional[List[Dict[str, Any]]]):
+        self._entregas = [dict(e) for e in (entregas or [])]
+
+    def listar(self, sku: str, solo_activas: bool = False) -> List[Dict[str, Any]]:
+        return [dict(e) for e in self._entregas if not solo_activas or e.get("activo", True)]
+
+    def obtener(self, opcion_id: int) -> Optional[Dict[str, Any]]:
+        return next((dict(e) for e in self._entregas if e.get("id") == opcion_id), None)
+
+
+class ImagenesEnEnsayo:
+    """La galería del producto, tal como está guardada (se lee ANTES de la simulación, no durante)."""
+
+    def __init__(self, imagenes: Optional[List[Dict[str, Any]]]):
+        self._imagenes = [dict(i) for i in (imagenes or [])]
+
+    def listar(self, sku: str) -> List[Dict[str, Any]]:
+        return [dict(i) for i in self._imagenes]
+
+
+class GestionEnEnsayo:
+    """«Por gestionar» de mentira: anota lo que se le habría avisado al dueño y no guarda nada."""
+
+    def __init__(self, telegram: "TelegramGrabador"):
+        self._telegram = telegram
+        self.solicitudes: List[Dict[str, Any]] = []
+        self._pendiente: Optional[str] = None
+
+    def solicitar(self, conversacion_id, lead_id, clave_tipo, detalle, telefono) -> ResultadoSolicitud:
+        tipo = tipo_de_solicitud(clave_tipo)
+        anterior = self._pendiente
+        gana = anterior is None or tipo.prioridad > tipo_de_solicitud(anterior).prioridad
+        final = tipo.clave if gana else anterior
+        self._pendiente = final
+        resultado = ResultadoUpsert(id=len(self.solicitudes) + 1, creada=anterior is None, tipo=final, tipo_anterior=anterior)
+        if resultado.creada or resultado.cambio_de_tipo:
+            etiqueta = tipo_de_solicitud(final).etiqueta
+            self.solicitudes.append({"tipo": final, "etiqueta": etiqueta, "detalle": detalle or ""})
+            self._telegram.notificar_gestion(etiqueta, conversacion_id, telefono, detalle or "")
+        return ResultadoSolicitud(solicitud=resultado, traspasa=tipo.traspasa, etiqueta=tipo.etiqueta)
+
+    def avisar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
+        self._telegram.notificar_pedido_cerrado(datos)
+
+
+class VentasEnEnsayo:
+    """El cierre manual de mentira: arma la venta que SE HABRÍA guardado (con precio y costo congelados) y
+    la deja a la vista, sin tocar la base, el stock ni nada."""
+
+    def __init__(self, lead: Dict[str, Any], gestion: GestionEnEnsayo, conversaciones: ConversacionesEnMemoria):
+        self._lead = lead
+        self._gestion = gestion
+        self._conversaciones = conversaciones
+        self.venta: Optional[Dict[str, Any]] = None
+
+    def registrar_venta_rocketfy(self, lead, producto, conversacion, entrega) -> None:
+        pass  # el pedido de Rocketfy ya se ve en «pedido»; la foto de la venta no se guarda en la prueba
+
+    def cerrar_manual(self, lead, producto, conversacion, entrega, controla_stock, detalle_solicitud) -> Dict[str, Any]:
+        venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", Decimal("0.00"))
+        self.venta = {**venta, "lineas": lineas, "ganancia": ganancia_de(venta)}
+        stock = producto.get("stock_ultimo")
+        restante = stock - int(lead.get("cantidad") or 1) if controla_stock and stock is not None else None
+        solicitud = ResultadoUpsert(id=1, creada=True, tipo="pedido_cerrado", tipo_anterior=None)
+        self._lead["estado"] = "por_gestionar"
+        self._conversaciones.en_gestion = True
+        return {
+            "venta_id": 0,
+            "solicitud": solicitud,
+            "stock_restante": restante,
+            "pausado_por_agotado": restante is not None and restante <= 0,
+        }
 
 
 class StockEnEnsayo:
@@ -255,6 +372,21 @@ class TelegramGrabador:
 
     def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str) -> None:
         self.avisos.append({"canal": "telegram", "texto": f"Victoria escaló la conversación. Motivo: {motivo}"})
+
+    def notificar_aviso(self, titulo: str, detalle: str) -> None:
+        self.avisos.append({"canal": "telegram", "texto": f"{titulo}. {detalle}"})
+
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "") -> None:
+        texto = f"Cierre previo: {etiqueta}" + (f". {detalle}" if detalle else "")
+        self.avisos.append({"canal": "telegram", "texto": texto})
+
+    def notificar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
+        resumen = (
+            f"Pedido cerrado, gestionar envío. {datos.get('producto')} · total ${datos.get('total')} · "
+            f"entrega: {datos.get('entrega')} · pago: {datos.get('pago')} · {datos.get('cliente')}, {datos.get('direccion')}"
+            + (f" · {datos['aviso']}" if datos.get("aviso") else "")
+        )
+        self.avisos.append({"canal": "telegram", "texto": resumen})
 
 
 class WhatsAppGrabador:
@@ -357,6 +489,9 @@ class ResultadoDelTurno:
     pedido: Optional[Dict[str, Any]]
     avisos: List[Dict[str, str]] = field(default_factory=list)
     fotos: List[Dict[str, str]] = field(default_factory=list)
+    # ADR-012: la venta de un producto propio que SE HABRÍA guardado, y las solicitudes de gestión que se habrían abierto.
+    venta_manual: Optional[Dict[str, Any]] = None
+    solicitudes: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def simular_turno(
@@ -367,6 +502,8 @@ def simular_turno(
     desde_anuncio: bool,
     llm: LLMProvider,
     plantilla: Optional[str] = None,
+    entregas: Optional[List[Dict[str, Any]]] = None,
+    imagenes: Optional[List[Dict[str, Any]]] = None,
 ) -> ResultadoDelTurno:
     """Procesa UN mensaje del cliente de mentira y devuelve lo que Victoria
     respondió, qué herramientas usó y cómo quedó la venta. `producto` es la
@@ -379,6 +516,8 @@ def simular_turno(
     rocketfy = RocketfyDeEnsayo()
     telegram = TelegramGrabador()
     whatsapp = WhatsAppGrabador()
+    gestion = GestionEnEnsayo(telegram)
+    ventas = VentasEnEnsayo(leads.lead, gestion, conversaciones)
 
     pedidos = PedidoService(client=rocketfy, repo=PedidosEnMemoria())
     herramientas = HerramientasConBitacora(
@@ -392,6 +531,10 @@ def simular_turno(
         mensaje_repo=mensajes,
         whatsapp_client=whatsapp,
         enviar_fotos=True,
+        entrega_repo=EntregasEnEnsayo(entregas),
+        gestion_service=gestion,
+        ventas_service=ventas,
+        imagen_repo=ImagenesEnEnsayo(imagenes),
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,
@@ -403,6 +546,7 @@ def simular_turno(
         # None = las instrucciones que rigen hoy con los clientes; un texto = las del borrador
         # (que se prueba aquí antes de publicarlo).
         plantilla=plantilla,
+        entrega_repo=EntregasEnEnsayo(entregas),
         # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
         # (parámetro «Enviar fotos»): así se puede ver cómo la usa Victoria antes de encenderla.
         enviar_fotos=True,
@@ -419,11 +563,38 @@ def simular_turno(
         respuesta=respuesta,
         herramientas=herramientas.bitacora,
         estado=estado_desde_lead(leads.lead),
-        escalada=conversaciones.escalada,
+        escalada=conversaciones.escalada or conversaciones.en_gestion,
         pedido=pedido,
         avisos=telegram.avisos,
+        venta_manual=_venta_para_mostrar(ventas.venta),
+        solicitudes=gestion.solicitudes,
         fotos=[
             {"mensaje": mensaje_de_la_foto, "url": enviada["url"], "descripcion": enviada["descripcion"]}
             for mensaje_de_la_foto, enviada in zip(mensajes.fotos_de_este_turno, whatsapp.enviadas)
         ],
     )
+
+
+def _venta_para_mostrar(venta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """La venta del cierre manual con el dinero como string (nunca float) y sin los ids internos."""
+    if venta is None:
+        return None
+
+    def dinero(valor):
+        return f"{Decimal(str(valor)):.2f}" if valor is not None else None
+
+    linea = venta["lineas"][0]
+    return {
+        "producto": linea["producto_nombre"],
+        "variante": linea["variante"],
+        "cantidad": linea["cantidad"],
+        "subtotal": dinero(venta["subtotal"]),
+        "costo_envio_cliente": dinero(venta["costo_envio_cliente"]),
+        "total": dinero(venta["total"]),
+        "costo_productos": dinero(venta["costo_productos"]),
+        "costo_envio_negocio": dinero(venta["costo_envio_negocio"]),
+        "ganancia": dinero(venta["ganancia"]),
+        "entrega": venta["entrega_nombre"],
+        "metodo_pago": venta["metodo_pago"],
+        "canal": venta["canal"],
+    }

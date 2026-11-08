@@ -19,7 +19,14 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import type { AccionProductoBot, EstadoProductoBot, ProductoBotDetalle, Verificacion } from "@/types/producto-bot";
 
-type ProductoMinimo = { sku: string; nombre: string; precio: string };
+type ProductoMinimo = { sku: string; nombre: string; precio: string; proveedor?: string };
+
+/** Qué se comprueba antes de publicar o reanudar: un producto de Rocketfy se consulta en vivo; uno propio se revisa por dentro. */
+function comprobacion(p: ProductoMinimo, texto: string): string {
+  return p.proveedor === "propio"
+    ? "Antes se comprueba que tenga lo mínimo para venderse (precio, stock y envío definidos)."
+    : `Antes se comprueba en Rocketfy que ${texto}.`;
+}
 
 type Config = {
   boton: string;
@@ -38,7 +45,7 @@ const CONFIG: Record<AccionProductoBot, Config> = {
     variant: "default",
     titulo: (p) => `¿Publicar «${p.nombre}»?`,
     descripcion: (p) =>
-      `Victoria empezará a vender «${p.nombre}» a ${formatMoney(p.precio)} en cuanto confirmes. Antes se comprueba en Rocketfy que exista y tenga stock.`,
+      `Victoria empezará a vender «${p.nombre}» a ${formatMoney(p.precio)} en cuanto confirmes. ${comprobacion(p, "exista y tenga stock")}`,
     confirmar: "Sí, publicar",
     exito: "Publicado: Victoria ya puede venderlo.",
   },
@@ -48,7 +55,7 @@ const CONFIG: Record<AccionProductoBot, Config> = {
     variant: "default",
     titulo: (p) => `¿Reanudar «${p.nombre}»?`,
     descripcion: (p) =>
-      `Victoria volverá a vender «${p.nombre}» a ${formatMoney(p.precio)}. Antes se comprueba en Rocketfy que siga existiendo y tenga stock.`,
+      `Victoria volverá a vender «${p.nombre}» a ${formatMoney(p.precio)}. ${comprobacion(p, "siga existiendo y tenga stock")}`,
     confirmar: "Sí, reanudar",
     exito: "Reanudado: Victoria vuelve a ofrecerlo.",
   },
