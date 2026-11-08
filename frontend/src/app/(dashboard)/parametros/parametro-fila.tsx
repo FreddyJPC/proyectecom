@@ -4,6 +4,7 @@ import { Loader2, RotateCcw, TriangleAlert } from "lucide-react";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 
+import { InfoAviso, InfoButton } from "@/components/app/info-button";
 import { StatusBadge } from "@/components/status-badge";
 import {
   AlertDialog,
@@ -32,8 +33,9 @@ const ORIGEN: Record<OrigenParametro, { label: string; variant: "info" | "neutra
   original: { label: "Valor original", variant: "neutral" },
 };
 
-/** Un parámetro: qué es, para qué sirve, su control y sus botones. Lo escrito es un
- * borrador hasta pulsar «Guardar»; los parámetros sensibles piden confirmación antes. */
+/** Un parámetro: su nombre, su control y sus botones. La explicación (para qué sirve, cuándo se aplica, valor
+ * original, último cambio) vive en el botón ⓘ para no saturar la pantalla. Lo escrito es un borrador hasta
+ * pulsar «Guardar»; los parámetros sensibles piden confirmación antes. */
 export function ParametroFila({ parametro: p, onCambiado }: { parametro: Parametro; onCambiado: () => void }) {
   const id = useId();
   const [borrador, setBorrador] = useState<Borrador>(() => borradorInicial(p));
@@ -78,9 +80,8 @@ export function ParametroFila({ parametro: p, onCambiado }: { parametro: Paramet
   }
 
   const idControl = `${id}-control`;
-  const idAyuda = `${id}-ayuda`;
   const idError = `${id}-error`;
-  const describedBy = [idAyuda, errorVisible ? idError : null].filter(Boolean).join(" ");
+  const describedBy = errorVisible ? idError : undefined;
 
   const notaDeLaOpcion = p.tipo === "opcion" ? p.opciones.find((o) => o.valor === borrador)?.nota : undefined;
   // Un valor que viene del servidor y no está en la lista cerrada igual debe poder mostrarse.
@@ -91,14 +92,27 @@ export function ParametroFila({ parametro: p, onCambiado }: { parametro: Paramet
 
   return (
     <li className="grid grid-cols-[minmax(0,1fr)] gap-3 px-4 py-4 sm:px-5">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
         <h3 className="text-sm font-semibold">{p.nombre}</h3>
-        <StatusBadge label={ORIGEN[p.origen].label} variant={ORIGEN[p.origen].variant} />
+        <InfoButton titulo={p.nombre}>
+          <p>{p.paraQueSirve}</p>
+          <h3>Cuándo se nota un cambio</h3>
+          <p>{p.aplica}</p>
+          <h3>Qué valor se usa</h3>
+          <p>
+            Valor original: <strong>{formatearValor(p, p.valorOriginal)}</strong>
+            {p.valorServidor !== null && p.variableServidor && <> (viene de la variable {p.variableServidor} del servidor)</>}. Si guardas un valor aquí, manda
+            sobre el original, y siempre puedes volver a él con «Restaurar original».
+          </p>
+          {p.origen === "app" && (
+            <p>
+              Último cambio: {p.actualizadoPor ?? "alguien"} · {tiempoRelativo(p.actualizadoEn)}.
+            </p>
+          )}
+          {p.sensible && p.aviso && <InfoAviso>{p.aviso}</InfoAviso>}
+        </InfoButton>
+        <StatusBadge label={ORIGEN[p.origen].label} variant={ORIGEN[p.origen].variant} className="ml-1" />
       </div>
-
-      <p id={idAyuda} className="text-sm text-pretty text-muted-foreground">
-        {p.paraQueSirve}
-      </p>
 
       {p.avisos.length > 0 && (
         <ul className="grid gap-1.5" aria-label="Avisos de este parámetro">
@@ -120,7 +134,6 @@ export function ParametroFila({ parametro: p, onCambiado }: { parametro: Paramet
               checked={borrador === true}
               onCheckedChange={(valor) => setBorrador(valor)}
               disabled={ocupado}
-              aria-describedby={idAyuda}
             />
             <Label htmlFor={idControl} className="text-sm font-medium">
               {borrador === true ? "Encendido" : "Apagado"}
@@ -180,7 +193,7 @@ export function ParametroFila({ parametro: p, onCambiado }: { parametro: Paramet
               {p.nombre}
             </Label>
             <Select value={String(borrador)} onValueChange={setBorrador} disabled={ocupado}>
-              <SelectTrigger id={idControl} className="w-full sm:w-80" aria-describedby={idAyuda}>
+              <SelectTrigger id={idControl} className="w-full sm:w-80">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -207,31 +220,8 @@ export function ParametroFila({ parametro: p, onCambiado }: { parametro: Paramet
         )}
       </div>
 
-      {p.sensible && p.aviso && (
-        <p className="flex items-start gap-2 text-xs text-status-warning-ink">
-          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span>{p.aviso}</span>
-        </p>
-      )}
-
-      {/* ------------------------------------------------------------- datos */}
-      <dl className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-[auto_minmax(0,1fr)]">
-        <dt className="font-medium">Valor original</dt>
-        <dd className="min-w-0 break-words">
-          {formatearValor(p, p.valorOriginal)}
-          {p.valorServidor !== null && p.variableServidor && <> (viene de la variable {p.variableServidor} del servidor)</>}
-        </dd>
-        <dt className="font-medium">Se aplica</dt>
-        <dd>{p.aplica}</dd>
-        {p.origen === "app" && (
-          <>
-            <dt className="font-medium">Último cambio</dt>
-            <dd className="min-w-0 break-words">
-              {p.actualizadoPor ?? "Alguien"} · {tiempoRelativo(p.actualizadoEn)}
-            </dd>
-          </>
-        )}
-      </dl>
+      {/* El aviso de un parámetro sensible, el valor original y cuándo se aplica están en el ⓘ; el aviso se repite
+          en el cuadro de confirmación, justo antes de guardar. */}
 
       {/* ----------------------------------------------------------- botones */}
       <div className="flex flex-wrap items-center gap-2">

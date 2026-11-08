@@ -4,6 +4,7 @@ import { Copy, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { InfoButton } from "@/components/app/info-button";
 import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -100,7 +101,17 @@ export function SeccionEnvio({ detalle, sinCambiosPendientes, onCambio }: { deta
   }
 
   return (
-    <SectionCard titulo="Envío" descripcion="Cómo se entrega ESTE producto y cuánto se cobra. Cada producto tiene el suyo.">
+    <SectionCard
+      titulo="Envío"
+      descripcion="Cómo se entrega y cuánto se cobra."
+      info={
+        <InfoButton titulo="Envío de este producto">
+          <p>Aquí defines cómo se entrega <strong>este</strong> producto y cuánto se le cobra al cliente. Cada producto tiene el suyo.</p>
+          <p>El envío se guarda aparte del resto de la ficha, con su propio botón «Guardar envío».</p>
+          <p>También puedes copiar las opciones de envío de otro producto para no escribirlas de nuevo.</p>
+        </InfoButton>
+      }
+    >
       <div className="space-y-4 p-4 sm:p-5">
         <EditorEntregas
           envioIncluido={incluido}

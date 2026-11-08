@@ -3,6 +3,7 @@
 import { CircleCheck, FlaskConical, Image as ImageIcon, Info, Loader2, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { InfoAviso, InfoButton } from "@/components/app/info-button";
 import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -97,7 +98,6 @@ function VentaEnCurso({ estado }: { estado: EstadoPrueba | null }) {
     <section aria-label="Venta en curso" className="grid gap-3 rounded-xl border bg-card p-3 sm:p-4">
       <div>
         <h3 className="text-sm font-semibold">Lo que Victoria ha anotado</h3>
-        <p className="text-xs text-muted-foreground">Así se iría armando el pedido de verdad.</p>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
         <Dato etiqueta="Cliente">{estado?.nombreCliente}</Dato>
@@ -124,7 +124,7 @@ function PedidoQueSeHabriaEnviado({ pedido }: { pedido: PedidoSimulado }) {
         <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Pedido que se habría enviado a Rocketfy</h3>
-          <p className="text-xs">Es una vista previa: no se envió nada. Estos son los datos tal como los recibiría Rocketfy.</p>
+          <p className="text-xs">Vista previa: no se envió nada.</p>
         </div>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
@@ -163,7 +163,7 @@ function VentaQueSeHabriaGuardado({ venta }: { venta: VentaManualSimulada }) {
         <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Pedido que te habría llegado para gestionar</h3>
-          <p className="text-xs">Es una vista previa: no se guardó nada, no se descontó stock y no se avisó a nadie. En la vida real aparecería en «Por gestionar» y te llegaría un aviso por Telegram.</p>
+          <p className="text-xs">Vista previa: no se guardó nada ni se avisó a nadie.</p>
         </div>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
@@ -196,6 +196,52 @@ function HerramientasUsadas({ herramientas }: { herramientas: LlamadaHerramienta
         ))}
       </ol>
     </details>
+  );
+}
+
+/** La explicación de la prueba (el cuadro ⓘ de la tarjeta y el del propio chat comparten este texto). */
+function ExplicacionPrueba({ nombre, usarBorrador, propio }: { nombre: string; usarBorrador: boolean; propio: boolean }) {
+  return (
+    <>
+      <p>
+        {usarBorrador
+          ? "Mira cómo responde Victoria con tu borrador de instrucciones y la ficha del producto que elegiste: si mantiene el tono, si respeta tus reglas y si sigue cerrando bien la venta."
+          : "Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe."}
+      </p>
+      <p>
+        Es una conversación de ensayo con «{nombre}» tal como está guardado
+        {usarBorrador && <>, usando tu borrador de instrucciones</>}. Victoria usa el mismo «cerebro» que habla con los clientes de verdad.
+      </p>
+      <InfoAviso>
+        <p>
+          <strong>No se envía nada</strong> a {propio ? "WhatsApp ni Telegram" : "Rocketfy, WhatsApp ni Telegram"}, no se guarda ninguna venta, no se descuenta stock y la conversación no se guarda.
+        </p>
+      </InfoAviso>
+      <h3>Qué verás</h3>
+      <ul>
+        <li>
+          <strong>Escenarios rápidos:</strong> frases típicas de un cliente para probar con un toque. Al elegir uno se te dice qué debería pasar.
+        </li>
+        <li>
+          <strong>El cliente llega desde un anuncio:</strong> así Victoria ya sabe de qué producto habla. Se elige antes del primer mensaje.
+        </li>
+        <li>
+          <strong>Lo que Victoria ha anotado:</strong> así se iría armando el pedido de verdad.
+        </li>
+        <li>
+          <strong>Pedido simulado:</strong> {propio ? "lo que te habría llegado a «Por gestionar» (con tu ganancia), más un aviso por Telegram." : "los datos tal como los recibiría Rocketfy."} Es solo una vista previa.
+        </li>
+        <li>
+          <strong>Avisos de Telegram:</strong> los que se habrían enviado para que una persona intervenga. No se envía ninguno.
+        </li>
+      </ul>
+      <h3>Qué cuenta</h3>
+      <ul>
+        <li>Cada mensaje usa la IA y cuenta para tu tope diario de mensajes de prueba.</li>
+        <li>El contador se reinicia a medianoche; el tope se sube en «Ajustes de precios».</li>
+        <li>Si Victoria pasa la conversación a una persona o la compra se cierra, en la vida real ya no seguiría respondiendo: reinicia la prueba para probar otro caso.</li>
+      </ul>
+    </>
   );
 }
 
@@ -309,15 +355,14 @@ export function ProbarConVictoria({
   return (
     <SectionCard
       titulo={usarBorrador ? "Probar el borrador con Victoria" : "Probar con Victoria"}
-      descripcion={usarBorrador ? "Conversa con las instrucciones del borrador antes de publicarlas. Los clientes no ven nada." : "Conversa como un cliente antes de publicar. No se envía nada real."}
+      descripcion={usarBorrador ? "Conversa con tu borrador antes de publicarlo." : "Conversa como un cliente antes de publicar."}
+      info={
+        <InfoButton titulo={usarBorrador ? "Probar el borrador con Victoria" : "Probar con Victoria"}>
+          <ExplicacionPrueba nombre={nombre} usarBorrador={usarBorrador} propio={propio} />
+        </InfoButton>
+      }
     >
       <div className="space-y-3 p-4 sm:p-5">
-        <p className="text-sm text-muted-foreground">
-          {usarBorrador
-            ? "Mira cómo responde Victoria con tu borrador de instrucciones y la ficha del producto que elegiste: si mantiene el tono, si respeta tus reglas y si sigue cerrando bien la venta."
-            : "Mira cómo responde Victoria con la ficha que guardaste: si cierra bien la venta, si respeta el máximo de unidades y si pasa a una persona lo que no sabe."}
-        </p>
-
         <Dialog open={abierto} onOpenChange={setAbierto}>
           <DialogTrigger asChild>
             <Button type="button" variant="outline" disabled={!sinCambiosPendientes} className="w-full sm:w-auto">
@@ -333,11 +378,15 @@ export function ProbarConVictoria({
 
           <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Probar con Victoria</DialogTitle>
+              <div className="flex items-center gap-1 pr-8">
+                <DialogTitle>Probar con Victoria</DialogTitle>
+                <InfoButton titulo="Cómo funciona la prueba">
+                  <ExplicacionPrueba nombre={nombre} usarBorrador={usarBorrador} propio={propio} />
+                </InfoButton>
+              </div>
               <DialogDescription>
-                Es una conversación de ensayo con «{nombre}» tal como está guardado
-                {usarBorrador && <>, usando <strong className="font-medium text-foreground">tu borrador de instrucciones</strong></>}.{" "}
-                <strong className="font-medium text-foreground">No se envía nada a Rocketfy, WhatsApp ni Telegram, no se guarda ninguna venta y la conversación no se guarda.</strong> Cada mensaje usa la IA y cuenta para tu tope diario.
+                Ensayo con «{nombre}»{usarBorrador && <> y <strong className="font-medium text-foreground">tu borrador de instrucciones</strong></>}:{" "}
+                <strong className="font-medium text-foreground">no se envía ni se guarda nada.</strong>
               </DialogDescription>
             </DialogHeader>
 
@@ -347,7 +396,6 @@ export function ProbarConVictoria({
                   <Checkbox id="prueba-anuncio" checked={desdeAnuncio} disabled={hayPrueba || enviando} onCheckedChange={(c) => setDesdeAnuncio(c === true)} className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">El cliente llega desde un anuncio de este producto</span>
-                    <span className="hidden text-xs text-muted-foreground sm:block">Así Victoria ya sabe de qué producto habla. Se elige antes del primer mensaje.</span>
                   </span>
                 </label>
 
@@ -416,7 +464,7 @@ export function ProbarConVictoria({
                               <a href={foto.url} target="_blank" rel="noopener noreferrer" className="rounded-sm text-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
                                 ver imagen
                               </a>
-                              <span className="block text-xs text-muted-foreground">No se envió nada: así se vería en WhatsApp.</span>
+                              <span className="block text-xs text-muted-foreground">Vista previa: no se envió.</span>
                             </span>
                           </p>
                         </div>
@@ -450,13 +498,13 @@ export function ProbarConVictoria({
                 {escalada && !despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
                     <UserRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    Victoria pasó la conversación a una persona. En la vida real ya no seguiría respondiendo: reinicia la prueba para probar otro caso.
+                    Victoria pasó la conversación a una persona. Reinicia la prueba para probar otro caso.
                   </p>
                 )}
                 {despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-success-soft p-3 text-sm text-status-success-ink">
                     <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    La compra se cerró. En la vida real, si el cliente vuelve a escribir lo atiende una persona. Reinicia la prueba para probar otro caso.
+                    La compra se cerró. Reinicia la prueba para probar otro caso.
                   </p>
                 )}
                 {llegoAlMaximo && !escalada && !despachado && (
@@ -507,7 +555,7 @@ export function ProbarConVictoria({
                   {uso == null
                     ? "Consultando cuántos mensajes de prueba te quedan hoy…"
                     : sinUsos
-                      ? `Llegaste al tope de hoy (${uso.tope} mensajes de prueba). Puedes subirlo en «Ajustes de precios»; el contador se reinicia a medianoche.`
+                      ? `Llegaste al tope de hoy (${uso.tope} mensajes de prueba). Puedes subirlo en «Ajustes de precios».`
                       : `Te quedan ${uso.restantes} de ${uso.tope} mensajes de prueba hoy.`}
                 </p>
               </div>
@@ -537,7 +585,7 @@ export function ProbarConVictoria({
                         <li key={i}>{a.texto}</li>
                       ))}
                     </ul>
-                    <p className="text-xs">No se envió ninguno: así sabrías en la vida real que una persona debe intervenir.</p>
+                    <p className="text-xs">Vista previa: no se envió ninguno.</p>
                   </section>
                 )}
               </div>

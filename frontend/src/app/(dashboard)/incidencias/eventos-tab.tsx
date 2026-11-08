@@ -1,11 +1,12 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, Info, TriangleAlert, Truck } from "lucide-react";
+import { CheckCircle2, ExternalLink, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterChips } from "@/components/app/filter-chips";
+import { InfoButton } from "@/components/app/info-button";
 import { ListSkeleton } from "@/components/app/list-skeleton";
 import { PaginationBar } from "@/components/app/pagination-bar";
 import { StatusBadge } from "@/components/status-badge";
@@ -48,14 +49,19 @@ export function EventosTab() {
           { value: "atencion", label: "Requieren atención" },
           { value: "todo", label: "Todo el historial" },
         ]}
+        trailing={
+          <InfoButton titulo="Qué eventos mostrar">
+            <ul>
+              <li>
+                <strong>Requieren atención:</strong> solo los envíos que reportan un problema o necesitan que hagas algo.
+              </li>
+              <li>
+                <strong>Todo el historial:</strong> una bitácora de cada cambio de estado que avisó Rocketfy. Un mismo pedido puede aparecer varias veces, una por cada cambio.
+              </li>
+            </ul>
+          </InfoButton>
+        }
       />
-
-      {historial && (
-        <p className="flex items-start gap-2 rounded-lg bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-          Es una bitácora: un mismo pedido puede aparecer varias veces, una por cada cambio de estado.
-        </p>
-      )}
 
       <Card className={cn("gap-0 overflow-hidden py-0 transition-opacity", actualizando && data && "opacity-70")}>
         {cargando ? (

@@ -3,6 +3,7 @@
 import { Check, Info, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { InfoButton } from "@/components/app/info-button";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,7 +52,7 @@ function TextoDeUso({ uso }: { uso: UsoIA | null }) {
   return (
     <p role="status" className={cn("text-xs", uso.restantes === 0 ? "font-medium text-status-warning-ink" : "text-muted-foreground")}>
       {uso.restantes === 0
-        ? `Llegaste al tope de hoy (${uso.tope} borradores). Puedes subirlo en «Ajustes de precios»; el contador se reinicia a medianoche.`
+        ? `Llegaste al tope de hoy (${uso.tope} borradores). Puedes subirlo en «Ajustes de precios».`
         : `Te quedan ${uso.restantes} de ${uso.tope} borradores hoy.`}
     </p>
   );
@@ -182,9 +183,25 @@ export function RedactarIADialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Redactar con IA</DialogTitle>
+          <div className="flex items-center gap-1 pr-8">
+            <DialogTitle>Redactar con IA</DialogTitle>
+            <InfoButton titulo="Cómo funciona «Redactar con IA»">
+              <p>La IA propone un borrador con lo que dice Rocketfy y lo que tú le cuentes. No inventa datos: marca de dónde sale cada texto y avisa de lo que no pudo comprobar.</p>
+              <ul>
+                <li>
+                  <strong>Nada cambia solo:</strong> cada campo que aceptas pasa al formulario de la ficha, y recién se guarda cuando guardas la ficha. La IA nunca publica ni guarda por su cuenta.
+                </li>
+                <li>
+                  <strong>Cuántos borradores:</strong> cada uno cuenta para un tope diario que se reinicia a medianoche. Puedes subirlo en «Ajustes de precios».
+                </li>
+                <li>
+                  <strong>La revisión final siempre es tuya:</strong> revisa los textos antes de aceptarlos.
+                </li>
+              </ul>
+            </InfoButton>
+          </div>
           <DialogDescription>
-            La IA propone un borrador con lo que dice Rocketfy y lo que le cuentes. No inventa datos: marca de dónde sale cada texto y avisa de lo que no pudo comprobar. <strong className="font-medium text-foreground">Nada cambia hasta que aceptes cada campo y guardes la ficha.</strong>
+            La IA propone un borrador. <strong className="font-medium text-foreground">Nada cambia hasta que aceptes cada campo y guardes la ficha.</strong>
           </DialogDescription>
         </DialogHeader>
 
@@ -203,19 +220,28 @@ export function RedactarIADialog({
               id="ia-otrosDatos"
               label="Otros datos que sepas del producto"
               opcional
-              ayuda="Medidas, qué incluye, garantía, materiales… Además de Rocketfy, esto es lo único que la IA puede usar como hechos: si no está aquí ni en Rocketfy, no lo dirá."
+              ayuda="Medidas, qué incluye, garantía, materiales…"
+              info={
+                <InfoButton titulo="Otros datos que sepas del producto">
+                  <p>Además de lo que dice Rocketfy, esto es lo único que la IA puede usar como hechos.</p>
+                  <p>Si un dato no está aquí ni en Rocketfy, la IA no lo dirá: así no inventa medidas, garantías ni materiales.</p>
+                </InfoButton>
+              }
               contador={{ actual: notas.otrosDatos.length, maximo: MAX_NOTA_LARGA }}
             >
               <Textarea id="ia-otrosDatos" rows={4} value={notas.otrosDatos} maxLength={MAX_NOTA_LARGA} onChange={(e) => setNotas({ ...notas, otrosDatos: e.target.value })} aria-describedby="ia-otrosDatos-ayuda" />
             </Campo>
 
-            <label htmlFor="ia-salud" className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3">
+            <div className="flex min-h-12 items-start gap-3 rounded-lg border bg-card p-3">
               <Checkbox id="ia-salud" checked={productoDeSalud} onCheckedChange={(c) => setProductoDeSalud(c === true)} className="mt-0.5" />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium">Es un producto de salud, bienestar o un suplemento</span>
-                <span className="block text-xs text-muted-foreground">Regla estricta: sin beneficios ni promesas de resultados, y la app marca cualquier frase de ese tipo. La revisión final siempre es tuya.</span>
-              </span>
-            </label>
+              <Label htmlFor="ia-salud" className="block min-w-0 flex-1 cursor-pointer text-sm font-medium leading-snug">
+                Es un producto de salud, bienestar o un suplemento
+              </Label>
+              <InfoButton titulo="Productos de salud o bienestar">
+                <p>Si marcas esta casilla, la IA aplica una regla estricta: nada de beneficios ni promesas de resultados.</p>
+                <p>Además, la app marca cualquier frase de ese tipo que se le cuele al borrador. La revisión final siempre es tuya.</p>
+              </InfoButton>
+            </div>
 
             {error && (
               <div role="alert" className="flex items-start gap-2.5 rounded-lg bg-status-danger-soft p-3 text-sm text-status-danger-ink">

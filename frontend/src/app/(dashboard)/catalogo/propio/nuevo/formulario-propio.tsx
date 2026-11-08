@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { InfoButton } from "@/components/app/info-button";
 import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +17,17 @@ import { normalizarMonto } from "@/lib/format";
 import { METODOS_PAGO, type CrearProductoPropioInput, type ProductoBotDetalle } from "@/types/producto-bot";
 
 import { Campo, descripcionDe } from "../../producto/[sku]/campo";
+import {
+  InfoCategoria,
+  InfoControlaStock,
+  InfoCostoPropio,
+  InfoDescripcion,
+  InfoMaxUnidades,
+  InfoMetodosPago,
+  InfoPreguntasFrecuentes,
+  InfoTemasNoResponder,
+  InfoTiempoEntrega,
+} from "../../producto/[sku]/info-campos";
 import { EditorEntregas, aOpciones, type EntregaBorrador } from "../../editor-entregas";
 import { SelectorCategoria } from "../../selector-categoria";
 
@@ -170,7 +182,18 @@ export function FormularioPropio() {
       <fieldset disabled={guardando} className="contents">
         <legend className="sr-only">Datos del producto propio</legend>
 
-        <SectionCard titulo="El producto" descripcion="Lo que Victoria sabe y le cuenta al cliente. Si algo no está aquí, ella no lo inventa.">
+        <SectionCard
+          titulo="El producto"
+          descripcion="Lo que Victoria sabe y le cuenta al cliente."
+          info={
+            <InfoButton titulo="El producto">
+              <p>
+                Todo lo de esta sección lo lee Victoria y <strong>se lo cuenta al cliente tal cual</strong>. Si algo no está aquí, ella no lo inventa: dice que no lo sabe y te pasa la conversación.
+              </p>
+              <p>Mientras más clara y verdadera sea la ficha, mejor vende Victoria.</p>
+            </InfoButton>
+          }
+        >
           <div className="space-y-5 p-4 sm:p-5">
             <Campo id="nombre" label="Nombre del producto" error={mostrar("nombre")} contador={{ actual: f.nombre.length, maximo: LIMITE.nombre }}>
               <Input id="nombre" value={f.nombre} maxLength={LIMITE.nombre} onChange={(e) => poner("nombre", e.target.value)} aria-invalid={Boolean(mostrar("nombre"))} aria-describedby={descripcionDe("nombre", false, mostrar("nombre"))} />
@@ -180,21 +203,27 @@ export function FormularioPropio() {
               id="descripcion"
               label="Descripción"
               error={mostrar("descripcion")}
-              ayuda="Qué es, de qué está hecho, para qué sirve y qué incluye. Escribe solo lo que sabes que es cierto: Victoria lo repetirá tal cual."
+              info={<InfoDescripcion />}
               contador={{ actual: f.descripcion.length, maximo: LIMITE.descripcion }}
             >
-              <Textarea id="descripcion" rows={5} value={f.descripcion} maxLength={LIMITE.descripcion} onChange={(e) => poner("descripcion", e.target.value)} aria-invalid={Boolean(mostrar("descripcion"))} aria-describedby={descripcionDe("descripcion", true, mostrar("descripcion"))} />
+              <Textarea id="descripcion" rows={5} value={f.descripcion} maxLength={LIMITE.descripcion} onChange={(e) => poner("descripcion", e.target.value)} aria-invalid={Boolean(mostrar("descripcion"))} aria-describedby={descripcionDe("descripcion", false, mostrar("descripcion"))} />
             </Campo>
 
-            <Campo id="categoria" label="Categoría" opcional ayuda="Para saber después qué tipo de producto te deja más (calzado, ropa…).">
-              <SelectorCategoria id="categoria" valor={f.categoriaId} onCambio={(v) => poner("categoriaId", v)} describedBy="categoria-ayuda" />
+            <Campo id="categoria" label="Categoría" opcional info={<InfoCategoria />}>
+              <SelectorCategoria id="categoria" valor={f.categoriaId} onCambio={(v) => poner("categoriaId", v)} />
             </Campo>
 
             <Campo
               id="variantes"
               label="Variantes"
               opcional
-              ayuda="Tallas, colores o modelos disponibles, separados por comas. Victoria le pregunta al cliente cuál prefiere; el stock es el total del producto, tú verificas la variante al gestionar el pedido."
+              ayuda="Separadas por comas."
+              info={
+                <InfoButton titulo="Variantes">
+                  <p>Las tallas, colores o modelos disponibles, separados por comas. Victoria le pregunta al cliente cuál prefiere.</p>
+                  <p>El stock es el total del producto: tú verificas la variante al gestionar el pedido.</p>
+                </InfoButton>
+              }
               contador={{ actual: f.variantes.length, maximo: LIMITE.variantes }}
             >
               <Input id="variantes" value={f.variantes} maxLength={LIMITE.variantes} placeholder="Talla 38, 39, 40, 41, 42" onChange={(e) => poner("variantes", e.target.value)} aria-describedby="variantes-ayuda" />
@@ -202,13 +231,23 @@ export function FormularioPropio() {
           </div>
         </SectionCard>
 
-        <SectionCard titulo="Precio, costo y stock" descripcion="El precio es lo que paga el cliente por unidad. El costo y el stock son para ti.">
+        <SectionCard
+          titulo="Precio, costo y stock"
+          descripcion="Lo que paga el cliente y lo que es para ti."
+          info={
+            <InfoButton titulo="Precio, costo y stock">
+              <p>
+                El <strong>precio</strong> es lo que paga el cliente por unidad. El <strong>costo</strong> y el <strong>stock</strong> son para ti: Victoria no los menciona.
+              </p>
+            </InfoButton>
+          }
+        >
           <div className="space-y-5 p-4 sm:p-5">
             <div className="grid gap-5 sm:grid-cols-2">
               <Campo id="precio" label="Precio de venta ($)" error={mostrar("precio")} ayuda="Por unidad, sin el envío.">
                 <Input id="precio" inputMode="decimal" value={f.precio} onChange={(e) => poner("precio", e.target.value)} placeholder="30.00" aria-invalid={Boolean(mostrar("precio"))} aria-describedby={descripcionDe("precio", true, mostrar("precio"))} className="tabular" />
               </Campo>
-              <Campo id="costoPropio" label="Lo que te cuesta ($)" opcional error={mostrar("costoPropio")} ayuda="Por unidad. Con esto se calcula tu ganancia real en cada venta.">
+              <Campo id="costoPropio" label="Lo que te cuesta ($)" opcional error={mostrar("costoPropio")} ayuda="Por unidad." info={<InfoCostoPropio />}>
                 <Input id="costoPropio" inputMode="decimal" value={f.costoPropio} onChange={(e) => poner("costoPropio", e.target.value)} placeholder="18.00" aria-invalid={Boolean(mostrar("costoPropio"))} aria-describedby={descripcionDe("costoPropio", true, mostrar("costoPropio"))} className="tabular" />
               </Campo>
             </div>
@@ -216,26 +255,36 @@ export function FormularioPropio() {
             <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
               <Switch id="controlaStock" checked={f.controlaStock} onCheckedChange={(c) => poner("controlaStock", c)} className="mt-0.5" aria-describedby="controlaStock-ayuda" />
               <div className="min-w-0">
-                <label htmlFor="controlaStock" className="text-sm font-medium">
-                  Llevar la cuenta de las unidades
-                </label>
+                <div className="flex items-center gap-1">
+                  <label htmlFor="controlaStock" className="text-sm font-medium">
+                    Llevar la cuenta de las unidades
+                  </label>
+                  <InfoControlaStock />
+                </div>
                 <p id="controlaStock-ayuda" className="text-xs text-muted-foreground">
-                  {f.controlaStock
-                    ? "Cada venta descuenta del stock y, cuando llega a cero, el producto se pausa solo."
-                    : "Victoria siempre lo ofrece como disponible. Úsalo si fabricas bajo pedido o no quieres llevar la cuenta."}
+                  {f.controlaStock ? "Cada venta descuenta del stock." : "Siempre disponible."}
                 </p>
               </div>
             </div>
 
             {f.controlaStock && (
-              <Campo id="stock" label="Unidades que tienes" error={mostrar("stock")} ayuda="El total del producto, sumando todas las variantes.">
+              <Campo id="stock" label="Unidades que tienes" error={mostrar("stock")} ayuda="Total, sumando todas las variantes.">
                 <Input id="stock" type="number" inputMode="numeric" min={0} max={MAX_STOCK} value={f.stock} onChange={(e) => poner("stock", e.target.value)} aria-invalid={Boolean(mostrar("stock"))} aria-describedby={descripcionDe("stock", true, mostrar("stock"))} className="tabular w-32" />
               </Campo>
             )}
           </div>
         </SectionCard>
 
-        <SectionCard titulo="Envío" descripcion="Defínelo para este producto: cuánto cobras, dónde entregas y si el cliente puede retirar.">
+        <SectionCard
+          titulo="Envío"
+          descripcion="Cómo se entrega y cuánto cobras."
+          info={
+            <InfoButton titulo="Envío de este producto">
+              <p>Defínelo para este producto: cuánto cobras, dónde entregas y si el cliente puede retirar. Cada producto tiene su propio envío.</p>
+              <p>Podrás cambiarlo después desde la ficha del producto.</p>
+            </InfoButton>
+          }
+        >
           <div className="p-4 sm:p-5">
             <EditorEntregas
               envioIncluido={f.envioIncluido}
@@ -252,25 +301,25 @@ export function FormularioPropio() {
 
         <SectionCard titulo="Reglas de venta" descripcion="Cómo y cuánto puede comprar el cliente.">
           <div className="space-y-5 p-4 sm:p-5">
-            <Campo id="tiempoEntrega" label="Tiempo de entrega" error={mostrar("tiempoEntrega")} ayuda="Cómo se lo dice Victoria al cliente, por ejemplo: «1 a 2 días en Cuenca, 3 a 5 días fuera»." contador={{ actual: f.tiempoEntrega.length, maximo: LIMITE.tiempoEntrega }}>
+            <Campo id="tiempoEntrega" label="Tiempo de entrega" error={mostrar("tiempoEntrega")} ayuda="Por ejemplo: «1 a 2 días en Cuenca, 3 a 5 días fuera»." info={<InfoTiempoEntrega />} contador={{ actual: f.tiempoEntrega.length, maximo: LIMITE.tiempoEntrega }}>
               <Input id="tiempoEntrega" value={f.tiempoEntrega} maxLength={LIMITE.tiempoEntrega} onChange={(e) => poner("tiempoEntrega", e.target.value)} aria-invalid={Boolean(mostrar("tiempoEntrega"))} aria-describedby={descripcionDe("tiempoEntrega", true, mostrar("tiempoEntrega"))} />
             </Campo>
 
-            <Campo id="maxUnidades" label="Unidades máximas por pedido" error={mostrar("maxUnidades")} ayuda="Cuántas unidades puede comprar una persona en un solo pedido.">
-              <Input id="maxUnidades" type="number" inputMode="numeric" min={1} max={MAX_UNIDADES} value={f.maxUnidades} onChange={(e) => poner("maxUnidades", e.target.value)} aria-invalid={Boolean(mostrar("maxUnidades"))} aria-describedby={descripcionDe("maxUnidades", true, mostrar("maxUnidades"))} className="tabular w-28" />
+            <Campo id="maxUnidades" label="Unidades máximas por pedido" error={mostrar("maxUnidades")} info={<InfoMaxUnidades />}>
+              <Input id="maxUnidades" type="number" inputMode="numeric" min={1} max={MAX_UNIDADES} value={f.maxUnidades} onChange={(e) => poner("maxUnidades", e.target.value)} aria-invalid={Boolean(mostrar("maxUnidades"))} aria-describedby={descripcionDe("maxUnidades", false, mostrar("maxUnidades"))} className="tabular w-28" />
             </Campo>
 
             <fieldset className="grid gap-1.5">
-              <legend className="mb-1.5 text-sm font-medium">Métodos de pago que acepta</legend>
+              <legend className="mb-1.5 flex items-center gap-1 text-sm font-medium">
+                Métodos de pago que acepta <InfoMetodosPago />
+              </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {METODOS_PAGO.map((m) => (
                   <label key={m.valor} htmlFor={`pago-${m.valor}`} className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3">
                     <Checkbox id={`pago-${m.valor}`} checked={f.metodosPago.includes(m.valor)} onCheckedChange={(c) => alternarMetodo(m.valor, c === true)} className="mt-0.5" />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium">{m.label}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {m.valor === "transferencia" ? "Tú pasas los datos de la cuenta y verificas el comprobante: Victoria no da cuentas ni confirma pagos." : m.ayuda}
-                      </span>
+                      <span className="block text-xs text-muted-foreground">{m.ayuda}</span>
                     </span>
                   </label>
                 ))}
@@ -286,11 +335,11 @@ export function FormularioPropio() {
 
         <SectionCard titulo="Para que Victoria conteste mejor" descripcion="Opcional. Puedes completarlo después en la ficha.">
           <div className="space-y-5 p-4 sm:p-5">
-            <Campo id="preguntasFrecuentes" label="Preguntas frecuentes" opcional ayuda="Escribe la pregunta y su respuesta. Así Victoria contesta con tu información y no con suposiciones." contador={{ actual: f.preguntasFrecuentes.length, maximo: LIMITE.preguntasFrecuentes }}>
-              <Textarea id="preguntasFrecuentes" rows={4} value={f.preguntasFrecuentes} maxLength={LIMITE.preguntasFrecuentes} onChange={(e) => poner("preguntasFrecuentes", e.target.value)} aria-describedby="preguntasFrecuentes-ayuda" />
+            <Campo id="preguntasFrecuentes" label="Preguntas frecuentes" opcional info={<InfoPreguntasFrecuentes />} contador={{ actual: f.preguntasFrecuentes.length, maximo: LIMITE.preguntasFrecuentes }}>
+              <Textarea id="preguntasFrecuentes" rows={4} value={f.preguntasFrecuentes} maxLength={LIMITE.preguntasFrecuentes} onChange={(e) => poner("preguntasFrecuentes", e.target.value)} />
             </Campo>
-            <Campo id="temasNoResponder" label="Temas que Victoria NO debe responder" opcional ayuda="Cosas sobre las que no quieres que opine ni prometa nada." contador={{ actual: f.temasNoResponder.length, maximo: LIMITE.temasNoResponder }}>
-              <Textarea id="temasNoResponder" rows={3} value={f.temasNoResponder} maxLength={LIMITE.temasNoResponder} onChange={(e) => poner("temasNoResponder", e.target.value)} aria-describedby="temasNoResponder-ayuda" />
+            <Campo id="temasNoResponder" label="Temas que Victoria NO debe responder" opcional info={<InfoTemasNoResponder />} contador={{ actual: f.temasNoResponder.length, maximo: LIMITE.temasNoResponder }}>
+              <Textarea id="temasNoResponder" rows={3} value={f.temasNoResponder} maxLength={LIMITE.temasNoResponder} onChange={(e) => poner("temasNoResponder", e.target.value)} />
             </Campo>
           </div>
         </SectionCard>

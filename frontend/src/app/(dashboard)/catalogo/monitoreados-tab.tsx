@@ -62,7 +62,7 @@ export function MonitoreadosTab({
         <EmptyState
           icon={ShieldCheck}
           title="Aún no vigilas ningún producto"
-          description="Ve a la pestaña Catálogo y pulsa «Vigilar» en los productos que anuncias. Te avisaremos cuando su stock baje del mínimo o cambie su precio."
+          description="Pulsa «Vigilar» en los productos que anuncias (en el Catálogo) y te avisaremos si su stock baja o cambia su precio."
         />
       ) : (
         <ul className="divide-y">

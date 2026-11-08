@@ -1356,3 +1356,36 @@ la ganancia de los reportes sea la de lo que de verdad se cobró y para saber qu
 Por eso, si en ese mismo chat el cliente pide otro pedido, Victoria **no cierra una segunda venta**: te avisa («Otra
 gestión», queda en «Por gestionar») y el chat pasa a ti. Así no se pierde el cliente.
 
+
+## 42. El botón ⓘ: dónde va cada explicación (pantalla limpia, explicación completa)
+
+**Qué es.** Un botón redondo con una «i» que abre un cuadro con la explicación de lo que tienes delante. Es el
+componente `InfoButton` (`frontend/src/components/app/info-button.tsx`). El cuadro tiene espacio para explicar bien
+(títulos, listas, un ejemplo, un aviso) y se cierra con «Entendido».
+
+**Para qué existe.** Las explicaciones de «para qué sirve esto» son valiosas, pero cuando estaban escritas dentro de la
+pantalla la saturaban: párrafos largos debajo de cada campo y cada sección. Ahora la pantalla solo muestra lo
+esencial y la explicación completa queda a un toque.
+
+**Tres niveles, según qué se explica.**
+- **La pantalla entera:** `PageHeader` acepta `info`; el botón aparece junto al título («Cómo funcionan los parámetros»).
+- **Una sección:** `SectionCard` acepta `info`; el botón aparece junto al título de la sección.
+- **Un campo:** `Campo` acepta `info`; el botón aparece junto a la etiqueta. Un interruptor o casilla usa `InfoButton`
+  directamente, al lado de su etiqueta (nunca dentro de ella, porque un botón no puede ir dentro de una etiqueta).
+
+**Qué se queda en la pantalla y qué va al cuadro.**
+| Se queda en la pantalla | Va al cuadro ⓘ |
+|---|---|
+| Títulos y etiquetas cortas | El «para qué sirve» y el «cómo funciona» |
+| La unidad y el rango («mensajes, de 10 a 100», «Por unidad.») | Ejemplos y reglas de detalle |
+| Errores | Avisos que solo informan |
+| Avisos que piden una acción («Guarda tus cambios antes de probar») | Qué pasa «en la vida real» frente a una vista previa |
+| Advertencias de algo difícil de deshacer | |
+| Estados vacíos y de carga | |
+
+**Dos detalles técnicos.**
+- Si quitas la pista corta (`ayuda`) de un campo, quita también su referencia en `aria-describedby`; si no, el lector de
+  pantalla apunta a un texto que ya no existe (la auditoría de accesibilidad lo marca). `descripcionDe(id, tieneAyuda, error)`
+  arma ese valor.
+- El texto de un campo que se repite en dos pantallas (la ficha y el formulario de producto propio) vive en un solo
+  archivo, `producto/[sku]/info-campos.tsx`, para que no se desfase.

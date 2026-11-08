@@ -6,6 +6,7 @@ import { useState } from "react";
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterChips, type Chip } from "@/components/app/filter-chips";
 import { ListSkeleton } from "@/components/app/list-skeleton";
+import { InfoButton } from "@/components/app/info-button";
 import { PageHeader } from "@/components/app/page-header";
 import { useRefrescarContadores } from "@/components/escaladas-context";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,29 @@ export default function GestionPage() {
     <>
       <PageHeader
         title="Por gestionar"
-        description="Clientes que quieren comprar un producto propio o necesitan que los atiendas tú: pedidos cerrados, pedidos de ver el producto, negociaciones… Márcalos como atendidos cuando termines."
+        description="Clientes que necesitan que los atiendas tú."
+        info={
+          <InfoButton titulo="Qué es «Por gestionar»">
+            <p>
+              Aquí aparece todo lo que <strong>solo tú puedes resolver</strong>: clientes que quieren comprar un producto propio, pedidos de ver el producto en persona, negociaciones, pagos por transferencia…
+            </p>
+            <p>
+              Un producto propio no crea el pedido solo (no pasa por Rocketfy): cuando el cliente decide comprar, el pedido queda registrado aquí y tú lo gestionas. El aviso por Telegram es solo el timbre; este es el registro, que no se pierde.
+            </p>
+            <h3>Qué puedes hacer</h3>
+            <ul>
+              <li>
+                <strong>Marcar como atendida</strong> cuando termines. Deja de figurar como pendiente.
+              </li>
+              <li>
+                <strong>Marcar cobrada</strong> cuando llegue el dinero (y deshacer el cobro si fue un error).
+              </li>
+              <li>
+                <strong>Cancelar la venta</strong> si el cliente se arrepiente: las unidades vuelven al stock. Una venta cobrada no se puede cancelar sin antes deshacer el cobro.
+              </li>
+            </ul>
+          </InfoButton>
+        }
       />
 
       <FilterChips chips={chips} value={vista} onChange={(v) => setVista(v as Vista)} label="Filtrar por estado" />
@@ -63,7 +86,7 @@ export default function GestionPage() {
             title={vista === "pendiente" ? "No hay nada por gestionar" : "Todavía no has atendido ninguna solicitud"}
             description={
               vista === "pendiente"
-                ? "Cuando un cliente quiera comprar un producto propio, o pida verlo o negociarlo, aparecerá aquí y te llegará un aviso por Telegram."
+                ? "Cuando un cliente quiera comprar un producto propio, o pida verlo o negociarlo, aparecerá aquí."
                 : "Las solicitudes que marques como atendidas se guardan aquí."
             }
           />

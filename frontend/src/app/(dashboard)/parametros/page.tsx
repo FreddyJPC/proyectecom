@@ -4,6 +4,7 @@ import { Calculator, MessageSquareText, SlidersHorizontal, TriangleAlert } from 
 import Link from "next/link";
 
 import { EmptyState } from "@/components/app/empty-state";
+import { InfoButton } from "@/components/app/info-button";
 import { ListSkeleton } from "@/components/app/list-skeleton";
 import { PageHeader } from "@/components/app/page-header";
 import { SectionCard } from "@/components/app/section-card";
@@ -29,21 +30,31 @@ export default function ParametrosPage() {
     <>
       <PageHeader
         title="Parámetros"
-        description="Controla desde aquí cómo trabaja el sistema, sin tocar el servidor ni pedir un cambio de código. Cada cambio queda anotado y siempre puedes volver al valor original."
+        description="Controla cómo trabaja el sistema, sin tocar el servidor."
+        info={
+          <InfoButton titulo="Cómo funcionan los parámetros">
+            <p>
+              Desde aquí controlas cómo trabaja el sistema <strong>sin tocar el servidor ni pedir un cambio de código</strong>. Cada ajuste explica para qué sirve
+              con su propio botón ⓘ.
+            </p>
+            <h3>Qué valor se usa</h3>
+            <ol>
+              <li>
+                <strong>Lo que guardes aquí.</strong>
+              </li>
+              <li>Si no hay nada guardado, la variable equivalente del servidor (Railway), si existe.</li>
+              <li>Si tampoco, el valor original que trae el programa.</li>
+            </ol>
+            <p>Mientras no guardes nada aquí, todo funciona como antes.</p>
+            <h3>Cambios y seguridad</h3>
+            <ul>
+              <li>Cada cambio queda anotado en el historial, al final de la pantalla.</li>
+              <li>Siempre puedes volver al valor original con «Restaurar original».</li>
+              <li>Los ajustes sensibles piden confirmación antes de guardarse.</li>
+            </ul>
+          </InfoButton>
+        }
       />
-
-      <div className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-card">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-info-soft text-status-info-ink">
-          <SlidersHorizontal className="size-[1.1rem]" aria-hidden />
-        </span>
-        <div className="space-y-0.5">
-          <p className="text-sm font-semibold">Qué valor se usa</p>
-          <p className="text-sm text-muted-foreground">
-            Primero lo que guardes aquí; si no hay nada, la variable equivalente del servidor (Railway), si existe; y si tampoco, el valor original que trae el
-            programa. Mientras no guardes nada aquí, todo funciona como antes.
-          </p>
-        </div>
-      </div>
 
       {error && !data ? (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-status-danger/30 bg-status-danger-soft p-4 text-status-danger-ink">
@@ -72,16 +83,25 @@ export default function ParametrosPage() {
         ))
       )}
 
-      <SectionCard titulo="Otros ajustes" descripcion="Se editan en su propia pantalla porque tienen reglas entre sí.">
+      <SectionCard
+        titulo="Otros ajustes"
+        descripcion="Se editan en su propia pantalla."
+        info={
+          <InfoButton titulo="Por qué estos ajustes van aparte">
+            <p>
+              Estos ajustes tienen <strong>reglas entre sí</strong> (por ejemplo, un margen mínimo no puede ser mayor que el objetivo, o un texto de Victoria tiene que
+              pasar una revisión antes de publicarse), así que se editan en su propia pantalla, con sus validaciones y su prueba.
+            </p>
+          </InfoButton>
+        }
+      >
         <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-neutral-soft text-status-neutral-ink">
             <MessageSquareText className="size-[1.1rem]" aria-hidden />
           </span>
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="text-sm font-semibold">Instrucciones de Victoria</p>
-            <p className="text-sm text-muted-foreground">
-              Su personalidad, su objetivo y las reglas que sigue. Con borrador, prueba antes de publicar y versiones para volver atrás.
-            </p>
+            <p className="text-sm text-muted-foreground">Su personalidad, su objetivo y sus reglas.</p>
           </div>
           <Button asChild variant="outline">
             <Link href="/parametros/instrucciones">Abrir instrucciones</Link>
@@ -93,9 +113,7 @@ export default function ParametrosPage() {
           </span>
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="text-sm font-semibold">Ajustes de precios y topes diarios</p>
-            <p className="text-sm text-muted-foreground">
-              Márgenes, envío estimado, redondeo y cuántas redacciones y pruebas con IA se permiten por día.
-            </p>
+            <p className="text-sm text-muted-foreground">Márgenes, envío, redondeo y topes de IA por día.</p>
           </div>
           <AjustesPreciosDialog trigger={<Button variant="outline">Abrir ajustes</Button>} />
         </div>

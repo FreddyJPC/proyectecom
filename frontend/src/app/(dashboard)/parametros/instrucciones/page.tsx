@@ -2,6 +2,7 @@
 
 import { TriangleAlert } from "lucide-react";
 
+import { InfoButton } from "@/components/app/info-button";
 import { ListSkeleton } from "@/components/app/list-skeleton";
 import { PageHeader } from "@/components/app/page-header";
 import { SectionCard } from "@/components/app/section-card";
@@ -18,7 +19,37 @@ export default function InstruccionesDeVictoriaPage() {
     <>
       <PageHeader
         title="Instrucciones de Victoria"
-        description="Cómo habla Victoria y qué reglas sigue. Edita un borrador, pruébalo con «Probar con Victoria» y recién entonces publícalo: los clientes no ven nada hasta que publiques."
+        description="Cómo habla Victoria y qué reglas sigue."
+        info={
+          <InfoButton titulo="Cómo funcionan las instrucciones de Victoria">
+            <p>
+              Aquí cambias la personalidad de Victoria, su objetivo y las reglas que nunca rompe. Se hace en tres pasos, para que ningún cambio llegue a un cliente sin
+              haberse probado:
+            </p>
+            <ol>
+              <li>
+                <strong>Edita un borrador.</strong> Los clientes no ven nada hasta que publiques.
+              </li>
+              <li>
+                <strong>Pruébalo</strong> con «Probar con Victoria», que usa el mismo cerebro pero sin tocar nada real.
+              </li>
+              <li>
+                <strong>Publícalo.</strong> Desde el siguiente mensaje, Victoria habla con ese texto.
+              </li>
+            </ol>
+            <h3>Si algo sale mal</h3>
+            <ul>
+              <li>La versión anterior queda guardada: puedes cargarla de nuevo en el borrador.</li>
+              <li>«Volver a las originales» hace que Victoria use al instante el texto que trae el programa.</li>
+              <li>Si las instrucciones guardadas fallan o dejan de ser válidas, Victoria usa las originales: nunca se queda sin instrucciones.</li>
+            </ul>
+            <h3>Lo que no se puede cambiar</h3>
+            <p>
+              El total a cobrar, el stock, la cantidad máxima por pedido y la pausa de productos los decide el sistema, no el texto. Un texto peor puede empeorar el trato
+              con un cliente, pero no puede saltarse esas reglas.
+            </p>
+          </InfoButton>
+        }
       />
 
       {error && !data ? (
