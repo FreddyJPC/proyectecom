@@ -24,6 +24,8 @@ export type TotalesPorFiltroRapido = {
   escaladas: number;
   escaladasSinRevisar: number;
   esperandoPago: number;
+  /** Conversaciones que el dueño atiende (intención de compra de un producto propio). */
+  enGestion: number;
 };
 
 export type ConversacionesListado = {

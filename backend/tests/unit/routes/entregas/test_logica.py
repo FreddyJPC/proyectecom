@@ -101,6 +101,9 @@ class TestTextos:
         texto = texto_para_la_ficha(True, [])
         assert "INCLUIDO en el precio" in texto and "registrar_entrega" not in texto
 
+    def test_con_envio_incluido_las_opciones_guardadas_no_se_listan(self):
+        assert texto_para_la_ficha(True, OPCIONES) == texto_para_la_ficha(True, [])
+
     def test_ficha_con_envio_aparte_lista_las_opciones_y_pide_registrar_entrega(self):
         texto = texto_para_la_ficha(False, OPCIONES)
         assert "se cobra aparte" in texto and "Envío en Cuenca" in texto and "registrar_entrega" in texto

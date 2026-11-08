@@ -82,6 +82,8 @@ class ProductoBotDetalleDTO:
     costo_flete_estimado: Optional[str] = None
     entregas: List[dict] = field(default_factory=list)
     imagenes: List[dict] = field(default_factory=list)
+    # Carpeta de las fotos de este producto en el bucket (`p<id>`): la app sube ahí.
+    carpeta_fotos: str = ""
 
 
 @dataclass

@@ -70,6 +70,7 @@ const convs = [
   ["593958899001", "Andrea Salazar", "fep", "fria", "Audífonos Bluetooth Pro", false, "bot", "Quedo atenta por si deseas continuar con tu pedido.", 60 * 52],
   ["593967788990", "Santiago Caicedo", "fep", "activa", "Lámpara LED Recargable", false, "cliente", "Sí, la quiero en color blanco", 8],
   ["593972233445", "Gabriela Núñez", "directo", "esperando_pago", "Audífonos Bluetooth Pro", false, "cliente", "Ya hice la transferencia, te envío el comprobante", 15],
+  ["593955667788", "Marcelo Ortiz", "fep", "en_gestion", "Zapatos de cuero", true, "bot", "Listo, le avisé al dueño: te escribe enseguida para coordinar 🙋", 12],
 ];
 const conversaciones = convs.map((c, i) => ({
   id: 301 - i, telefono: c[0], nombreCliente: c[1], origen: c[2], estado: c[3], productoInteres: c[4], sinRevisar: c[5],
@@ -149,8 +150,12 @@ const fichaBase = (sku, nombre, estado, precio, costo, sugerido, stock, extra = 
   sku, nombre, estado, precio, costoRocketfy: costo, precioSugeridoRocketfy: sugerido, stockUltimo: stock, stockActualizadoEn: ago(12),
   pesoKg: "0.350", imagenUrl: null, rocketfyProductId: 4800 + sku.length, descripcion: "", variantes: null, tiempoEntrega: "", metodosPago: ["contraentrega"],
   preguntasFrecuentes: null, temasNoResponder: null, maxUnidadesPorPedido: 1, notasInternas: null, precioCompetencia: null, publicadoEn: null, publicadoPor: null,
-  creadoEn: ago(9000), actualizadoEn: ago(60), historial: [], ...extra,
+  creadoEn: ago(9000), actualizadoEn: ago(60), historial: [],
+  // ADR-012: de dónde viene el producto, cómo se envía y sus fotos. Un producto de Rocketfy trae el envío en el precio.
+  id: ++siguienteIdProducto, proveedor: "rocketfy", proveedorNombre: "Rocketfy", categoriaId: null, categoria: null, costoPropio: null, controlaStock: true,
+  envioIncluido: true, costoFleteEstimado: null, entregas: [], imagenes: [], ...extra,
 });
+let siguienteIdProducto = 100;
 const productosBot = [
   fichaBase("AUD-BT-001", "Audífonos Bluetooth Pro", "activo", "34.90", "18.50", "34.90", 4, {
     imagenUrl: "https://cdn.rocketfy.example/aud-bt-001.png",
@@ -179,32 +184,91 @@ const productosBot = [
   }),
   fichaBase("CAM-SEG-360", "Cámara de Seguridad 360°", "archivado", "39.99", "25.00", "39.99", 28, { descripcion: "Cámara Wi-Fi con giro de 360°.", tiempoEntrega: "3 a 5 días hábiles", actualizadoEn: ago(20000) }),
 ];
+
+// ---------- Productos propios (ADR-012) ----------
+// Las fotos se sirven desde este mismo servidor, imitando el bucket público «productos» de Supabase Storage.
+const BUCKET = "productos";
+const urlFoto = (ruta) => `http://127.0.0.1:${PORT}/storage/v1/object/public/${BUCKET}/${ruta}`;
+const colorDe = (texto) => { let h = 0; for (const c of texto) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const svgFoto = (ruta) => {
+  const h = colorDe(ruta);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><rect width="400" height="400" fill="hsl(${h},55%,82%)"/><circle cx="200" cy="170" r="80" fill="hsl(${h},55%,45%)"/><rect x="110" y="270" width="180" height="40" rx="20" fill="hsl(${h},55%,45%)"/></svg>`;
+};
+let siguienteIdImagen = 1;
+let siguienteIdEntrega = 10;
+const nuevaImagen = (carpeta, orden) => { const storagePath = `${carpeta}/foto-${siguienteIdImagen}.jpg`; return { id: siguienteIdImagen++, url: urlFoto(storagePath), storagePath, orden }; };
+const categorias = [{ id: 1, nombre: "Calzado", activo: true }, { id: 2, nombre: "Ropa", activo: true }, { id: 3, nombre: "Accesorios", activo: true }];
+let siguienteIdCategoria = 4;
+const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? null;
+const propio = (sku, nombre, estado, precio, costo, stock, extra = {}) => {
+  const f = fichaBase(sku, nombre, estado, precio, null, null, stock, {
+    proveedor: "propio", proveedorNombre: "Producto propio", costoPropio: costo, rocketfyProductId: null, pesoKg: null, metodosPago: ["contraentrega", "transferencia"], ...extra,
+  });
+  f.categoria = nombreCategoria(f.categoriaId);
+  f.carpetaFotos = `p${f.id}`;
+  return f;
+};
+const zapatos = propio("PROP-0001", "Zapatos de cuero", "activo", "45.00", "28.00", 14, {
+  descripcion: "Zapatos de cuero genuino, hechos a mano en Cuenca. Suela antideslizante y plantilla acolchada.", tiempoEntrega: "1 a 2 días en Cuenca; 3 a 5 días al resto del país",
+  variantes: "Talla 38 al 43; negro y café", preguntasFrecuentes: "¿Son de cuero real? Sí, 100 % cuero.", categoriaId: 1, envioIncluido: false, costoFleteEstimado: null,
+  publicadoEn: ago(1200), publicadoPor: "freddy@azoshop.ec", actualizadoEn: ago(90), maxUnidadesPorPedido: 3,
+  historial: [{ accion: "publicado", usuario: "freddy@azoshop.ec", cambios: { estado: ["borrador", "activo"] }, creadoEn: ago(1200) }, { accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "propio" }, creadoEn: ago(1500) }],
+});
+zapatos.categoria = nombreCategoria(1);
+zapatos.entregas = [
+  { id: 1, nombre: "Envío dentro de Cuenca", tipo: "envio", costoCliente: "2.00", costoNegocio: "1.50", cantones: ["Cuenca"], provincias: [], restoDelPais: false, direccionRetiro: null, tiempoEntrega: "1 día", activo: true },
+  { id: 2, nombre: "Retiro en el local", tipo: "retiro", costoCliente: "0.00", costoNegocio: null, cantones: [], provincias: [], restoDelPais: false, direccionRetiro: "Av. Remigio Crespo 3-45, Cuenca", tiempoEntrega: "Hoy mismo", activo: true },
+  { id: 3, nombre: "Envío al resto del país", tipo: "envio", costoCliente: "5.00", costoNegocio: "4.20", cantones: [], provincias: [], restoDelPais: true, direccionRetiro: null, tiempoEntrega: "3 a 5 días", activo: true },
+];
+zapatos.imagenes = [nuevaImagen(zapatos.carpetaFotos, 0), nuevaImagen(zapatos.carpetaFotos, 1)];
+const camiseta = propio("PROP-0002", "Camiseta de algodón", "borrador", "12.00", "5.50", null, {
+  descripcion: "Camiseta de algodón peinado, corte regular.", tiempoEntrega: "2 a 3 días", variantes: "S, M, L, XL", categoriaId: 2, controlaStock: false, envioIncluido: true,
+  costoFleteEstimado: "3.50", actualizadoEn: ago(30), historial: [{ accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "propio" }, creadoEn: ago(30) }],
+});
+productosBot.push(zapatos, camiseta);
 const PEDIDOS_30D = { "AUD-BT-001": 23, "RLJ-SM-014": 9, "CRG-RAP-33": 4 };
 function margenEnRiesgo(f) {
   if (!ajustes.confirmado || !["listo", "activo", "pausado", "agotado"].includes(f.estado)) return false;
-  const precio = cents(f.precio), costo = cents(f.costoRocketfy);
+  const precio = cents(f.precio), costo = costoDe(f);
   if (!precio || costo == null) return false;
-  const gan = precio - costo - cents(ajustes.envioEstimado) - cents(ajustes.otrosCostosFijos);
+  const gan = precio - costo - fleteDe(f) - cents(ajustes.otrosCostosFijos);
   return gan <= 0 || (gan / precio) * 100 < Number(ajustes.margenMinimoPct);
 }
-const resumenBot = (f) => ({ pedidos30d: PEDIDOS_30D[f.sku] ?? 0, margenEnRiesgo: margenEnRiesgo(f), sku: f.sku, nombre: f.nombre, estado: f.estado, precio: f.precio, costoRocketfy: f.costoRocketfy, stockUltimo: f.stockUltimo, maxUnidadesPorPedido: f.maxUnidadesPorPedido, imagenUrl: f.imagenUrl, publicadoEn: f.publicadoEn, actualizadoEn: f.actualizadoEn });
+// Lo que cuesta una unidad según de dónde viene, y el flete que se resta de la ganancia (espejo de ventas/origen.py).
+const esPropio = (f) => f.proveedor === "propio";
+const costoDe = (f) => cents(esPropio(f) ? f.costoPropio : f.costoRocketfy);
+const fleteDe = (f) => {
+  if (!f.envioIncluido) return 0;
+  const propio = cents(f.costoFleteEstimado);
+  return propio ?? cents(ajustes.envioEstimado);
+};
+const resumenBot = (f) => ({
+  pedidos30d: PEDIDOS_30D[f.sku] ?? 0, margenEnRiesgo: margenEnRiesgo(f), sku: f.sku, nombre: f.nombre, estado: f.estado, precio: f.precio, costoRocketfy: f.costoRocketfy, stockUltimo: f.stockUltimo,
+  maxUnidadesPorPedido: f.maxUnidadesPorPedido, imagenUrl: f.imagenes[0]?.url ?? f.imagenUrl, publicadoEn: f.publicadoEn, actualizadoEn: f.actualizadoEn,
+  proveedor: f.proveedor, proveedorNombre: f.proveedorNombre, categoria: f.categoria, controlaStock: f.controlaStock, envioIncluido: f.envioIncluido,
+});
 function verificarBot(f) {
   const bloqueos = [], avisos = [];
   if (!f.nombre.trim()) bloqueos.push("Falta el nombre del producto.");
   if (!f.descripcion.trim()) bloqueos.push("Falta la descripción: es lo que Victoria cuenta al cliente.");
   if (!f.tiempoEntrega.trim()) bloqueos.push("Falta el tiempo de entrega.");
   if (!f.metodosPago.length) bloqueos.push("Falta al menos un método de pago.");
-  const piso = Math.max((cents(f.costoRocketfy) ?? 0) + (ajustes.confirmado ? cents(ajustes.envioEstimado) : 0), PISO_MIN), precio = cents(f.precio);
+  // Un producto propio no tiene el piso de $10 de Rocketfy (el recaudo mínimo es de su contra entrega) ni su stock.
+  const piso = Math.max((costoDe(f) ?? 0) + (ajustes.confirmado ? fleteDe(f) : 0), esPropio(f) ? 0 : PISO_MIN), precio = cents(f.precio);
   if (precio == null || precio <= 0) bloqueos.push("El precio debe ser mayor que cero.");
   else if (precio < piso) bloqueos.push(`El precio ($${f.precio}) está por debajo del mínimo para vender ($${dinero(piso)}).`);
-  if (f.stockUltimo === 0) bloqueos.push("Rocketfy reporta 0 unidades en stock.");
+  if (esPropio(f)) {
+    if (f.controlaStock && f.stockUltimo === 0) bloqueos.push("No quedan unidades: sube el stock para poder vender.");
+    else if (f.controlaStock && f.stockUltimo != null && f.stockUltimo <= 5) avisos.push(`Quedan pocas unidades (${f.stockUltimo}): conviene vigilarlo.`);
+    if (!f.envioIncluido && !f.entregas.some((o) => o.activo)) bloqueos.push("Falta definir el envío: el precio no lo incluye y no hay ninguna opción de entrega activa.");
+  } else if (f.stockUltimo === 0) bloqueos.push("Rocketfy reporta 0 unidades en stock.");
   else if (f.stockUltimo != null && f.stockUltimo <= 5) avisos.push(`Quedan pocas unidades (${f.stockUltimo}): conviene vigilarlo.`);
   if (f.metodosPago.includes("transferencia")) avisos.push("Acepta transferencia: tendrás que confirmar cada pago a mano.");
   if (!f.preguntasFrecuentes) avisos.push("No tiene preguntas frecuentes: Victoria te consultará más seguido.");
   if (f.variantes) avisos.push("Tiene variantes: Victoria deberá preguntar cuál quiere el cliente.");
   // Fase E: lista de verificación (margen, uso de la IA y compra de prueba).
-  if (ajustes.confirmado && precio != null && precio > 0 && f.costoRocketfy != null) {
-    const gan = precio - cents(f.costoRocketfy) - cents(ajustes.envioEstimado) - cents(ajustes.otrosCostosFijos), mg = (gan / precio) * 100;
+  if (ajustes.confirmado && precio != null && precio > 0 && costoDe(f) != null) {
+    const gan = precio - costoDe(f) - fleteDe(f) - cents(ajustes.otrosCostosFijos), mg = (gan / precio) * 100;
     if (gan <= 0) avisos.push(`Con este precio pierdes $${dinero(-gan)} por unidad (con tu envío estimado).`);
     else if (mg < Number(ajustes.margenMinimoPct)) avisos.push(`Tu margen (${mg.toFixed(1)} %) está por debajo del mínimo que definiste (${ajustes.margenMinimoPct} %).`);
   }
@@ -227,15 +291,16 @@ let ajustes = {
   calibracionEnvio: { observaciones: 2, minimo: "7.20", mediana: "8.47", maximo: "9.10" },
 };
 function recomendacionBot(f, precioTxt, competenciaTxt) {
-  const costo = cents(f.costoRocketfy), env = cents(ajustes.envioEstimado), fijos = cents(ajustes.otrosCostosFijos);
+  // ADR-012: el costo y el flete salen del producto (propio o de Rocketfy); un propio no tiene el recaudo mínimo de $10 de Rocketfy.
+  const costo = costoDe(f), env = fleteDe(f), fijos = cents(ajustes.otrosCostosFijos);
   const otros = Number(ajustes.otrosCostosPct) / 100, mmin = Number(ajustes.margenMinimoPct) / 100, mobj = Number(ajustes.margenObjetivoPct) / 100;
-  const piso = Math.max((costo ?? 0) + (ajustes.confirmado ? env : 0), PISO_MIN);
+  const piso = Math.max((costo ?? 0) + (ajustes.confirmado ? env : 0), esPropio(f) ? 0 : PISO_MIN);
   const sugerido = cents(f.precioSugeridoRocketfy);
   const comp = competenciaTxt ? cents(competenciaTxt) : cents(f.precioCompetencia);
   const base = { ajustesConfirmados: ajustes.confirmado, costo: costo == null ? null : dinero(costo), piso: dinero(piso), envioEstimado: ajustes.envioEstimado,
     otrosCostosFijos: ajustes.otrosCostosFijos, otrosCostosPct: ajustes.otrosCostosPct, margenMinimoPct: ajustes.margenMinimoPct, margenObjetivoPct: ajustes.margenObjetivoPct,
     precioSugerido: sugerido == null ? null : dinero(sugerido), precioCompetencia: comp == null ? null : dinero(comp), niveles: [], evaluacion: null, avisos: [] };
-  if (costo == null) { base.avisos.push("Todavía no hay costo de Rocketfy guardado para este producto: pulsa «Actualizar desde Rocketfy» para poder calcular el precio."); return base; }
+  if (costo == null) { base.avisos.push("Todavía no hay costo guardado para este producto: en uno de Rocketfy pulsa «Actualizar desde Rocketfy»; en uno propio anota cuánto te cuesta. Con el costo se puede calcular el precio."); return base; }
   const ganancia = (p) => p - costo - env - fijos - Math.round(p * otros);
   const margen = (p, g) => (p > 0 ? (g / p * 100).toFixed(1) : "0.0");
   const redondear = (x) => (ajustes.redondeo === "terminado_99" ? Math.max(0, Math.ceil((x - 99) / 100)) * 100 + 99 : x);
@@ -438,14 +503,25 @@ function borradorIA(f, b) {
 let usadasPruebas = 7;
 function turnoVictoria(f, b) {
   const msg = String(b.mensaje || ""), bajo = msg.toLowerCase();
-  const e = { nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}) };
-  const herramientas = [], avisos = [], fotos = [];
-  let escalada = false, pedido = null, respuesta = "";
+  const e = {
+    nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, subtotal: null, costoEnvio: "0.00",
+    entregaOpcionId: null, entregaNombre: null, entregaTipo: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}),
+  };
+  const herramientas = [], avisos = [], fotos = [], solicitudes = [];
+  let escalada = false, pedido = null, respuesta = "", ventaManual = null;
+  const propia = esPropio(f);
   const usar = (nombre, entrada, resultado) => herramientas.push({ nombre, entrada, resultado });
+  // Pide al dueño que atienda (productos propios): queda en «Por gestionar» y llega un aviso por Telegram.
+  const pedirGestion = (tipo, etiqueta, detalle) => {
+    solicitudes.push({ tipo, etiqueta, detalle });
+    usar("solicitar_gestion", { tipo, detalle }, "Listo: el dueño ya sabe que este cliente necesita atención. Despídete con naturalidad y dile que lo contactarán enseguida.");
+    avisos.push({ canal: "telegram", texto: `${etiqueta}: ${detalle}` });
+  };
   const registrar = (n) => {
     const max = f.maxUnidadesPorPedido;
     if (n > max) { usar("registrar_producto", { producto_sku: f.sku, producto_nombre: f.nombre, cantidad: n }, `De este producto solo se puede pedir hasta ${max} ${max === 1 ? "unidad" : "unidades"} por pedido. Explícaselo al cliente con naturalidad.`); return false; }
-    e.productoSku = f.sku; e.productoNombre = f.nombre; e.cantidad = n; e.total = dinero(cents(f.precio) * n);
+    if (propia && f.controlaStock && f.stockUltimo != null && n > f.stockUltimo) { usar("registrar_producto", { producto_sku: f.sku, producto_nombre: f.nombre, cantidad: n }, `Solo quedan ${f.stockUltimo} unidades de este producto. Explícaselo al cliente con naturalidad.`); return false; }
+    e.productoSku = f.sku; e.productoNombre = f.nombre; e.cantidad = n; e.subtotal = dinero(cents(f.precio) * n); e.total = dinero(cents(f.precio) * n + (cents(e.costoEnvio) ?? 0));
     usar("registrar_producto", { producto_sku: f.sku, producto_nombre: f.nombre, cantidad: n }, `Producto registrado: ${n} x ${f.nombre}. Total a cobrar: $${e.total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.`);
     return true;
   };
@@ -453,13 +529,66 @@ function turnoVictoria(f, b) {
     escalada = true; usar("escalar_a_humano", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
     avisos.push({ canal: "telegram", texto: `Victoria escaló la conversación. Motivo: ${motivo}` });
   };
-  if (/garant|cuotas|tarjeta|factura/.test(bajo)) { escalar("El cliente pregunta algo que no está en la ficha del producto"); respuesta = "Eso no lo tengo confirmado, así que te paso con un asesor que te lo aclara enseguida 🙋"; }
+  // --- Productos propios: el pedido no se crea solo; pasa al dueño (ADR-012) ---
+  const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const aplicables = () => {
+    const activas = f.entregas.filter((o) => o.activo), explicita = (o) => o.cantones.length > 0 || o.provincias.length > 0;
+    const cubre = (o) => o.cantones.some((c) => sinTildes(c) === sinTildes(e.canton)) || o.provincias.some((x) => sinTildes(x) === sinTildes(e.provincia));
+    const cubierto = activas.some((o) => o.tipo === "envio" && explicita(o) && cubre(o));
+    return activas.filter((o) => o.tipo === "retiro" || (explicita(o) ? cubre(o) : o.restoDelPais && !cubierto));
+  };
+  const cerrarPropio = () => {
+    const sub = cents(f.precio) * e.cantidad, env = cents(e.costoEnvio) ?? 0, opcion = f.entregas.find((o) => o.id === e.entregaOpcionId);
+    const costoProd = costoDe(f) == null ? null : costoDe(f) * e.cantidad, envNegocio = f.envioIncluido ? fleteDe(f) : cents(opcion?.costoNegocio);
+    const conSigno = (c) => (c < 0 ? "-" : "") + dinero(Math.abs(c));
+    e.subtotal = dinero(sub); e.total = dinero(sub + env); e.estado = "por_gestionar";
+    ventaManual = {
+      producto: f.nombre, variante: e.productoVariante, cantidad: e.cantidad, subtotal: dinero(sub), costoEnvioCliente: dinero(env), total: dinero(sub + env),
+      costoProductos: costoProd == null ? null : dinero(costoProd), costoEnvioNegocio: envNegocio == null ? null : dinero(envNegocio),
+      ganancia: costoProd == null || envNegocio == null ? null : conSigno(sub + env - costoProd - envNegocio), entrega: e.entregaNombre ?? "Envío incluido en el precio", metodoPago: e.metodoPago, canal: "WhatsApp",
+    };
+    solicitudes.push({ tipo: "pedido_cerrado", etiqueta: "Pedido cerrado, gestionar envío", detalle: `${e.nombreCliente} · ${f.nombre} × ${e.cantidad} · $${e.total}` });
+    avisos.push({ canal: "telegram", texto: `Pedido cerrado, gestionar envío: ${e.nombreCliente} (${e.canton}) — ${f.nombre} × ${e.cantidad}, total $${e.total}` });
+    usar("cerrar_venta", {}, "Pedido registrado y pasado al dueño. Comunícaselo al cliente: lo contactarán para coordinar la entrega y el pago. No prometas fechas ni des cuentas bancarias.");
+    respuesta = `¡Listo, ${e.nombreCliente}! Registré tu pedido: ${e.cantidad} × ${f.nombre}, total $${e.total}. Una persona del equipo te escribe enseguida para coordinar la entrega y el pago 😊`;
+  };
+  const elegirEntrega = (texto) => {
+    const ap = aplicables(), t = sinTildes(texto), n = Number((/^\s*(\d+)\s*[).]?\s*$/.exec(texto) || [])[1] || 0);
+    if (!ap.length) { pedirGestion("sin_cobertura", "Sin cobertura de envío", `${e.nombreCliente} (${e.canton}, ${e.provincia}) no tiene ninguna opción de entrega`); escalada = true; respuesta = "Para tu zona necesito confirmar la entrega con una persona del equipo; te escriben enseguida 🙋"; return; }
+    const op = n ? ap[n - 1] : /retiro|retirar|recoger/.test(t) ? ap.find((o) => o.tipo === "retiro") : /envio|domicilio|casa/.test(t) ? ap.find((o) => o.tipo === "envio") : null;
+    if (!op) {
+      const lista = ap.map((o, i) => `${i + 1}) ${o.nombre}: ${cents(o.costoCliente) > 0 ? "$" + o.costoCliente : "sin costo"}${o.direccionRetiro ? " · se retira en " + o.direccionRetiro : ""}${o.tiempoEntrega ? " · " + o.tiempoEntrega : ""}`).join("\n");
+      usar("registrar_entrega", { canton: e.canton, provincia: e.provincia }, `Opciones que le aplican a este cliente:\n${lista}\nOfrécele solo estas y, cuando elija, vuelve a llamar con su elección.`);
+      respuesta = `Para tu pedido tengo estas opciones de entrega:\n${lista}\n¿Cuál prefieres?`;
+      return;
+    }
+    e.entregaOpcionId = op.id; e.entregaNombre = op.nombre; e.entregaTipo = op.tipo; e.costoEnvio = op.costoCliente;
+    e.total = dinero((cents(e.subtotal) ?? 0) + cents(op.costoCliente));
+    usar("registrar_entrega", { canton: e.canton, provincia: e.provincia, opcion_id: op.id }, `Entrega registrada: ${op.nombre}. Total final con el envío: $${e.total}. Es el único monto que puedes decirle.`);
+    cerrarPropio();
+  };
+  const datosCompletos = () => ["nombreCliente", "direccion", "canton", "provincia", "metodoPago"].every((k) => e[k]);
+  if (propia && /rebaja|barato|descuento/.test(bajo)) { pedirGestion("quiere_negociar", "Quiere negociar", "Pide una rebaja si lleva más de una unidad"); escalada = true; respuesta = "Eso lo define el dueño directamente: ya le avisé y te escribe enseguida para conversarlo 🙋"; }
+  else if (propia && /ir a ver|ver el producto|verlo en persona/.test(bajo)) { pedirGestion("quiere_ver_producto", "Quiere ver el producto", "Quiere verlo antes de comprarlo"); escalada = true; respuesta = "¡Claro! Le acabo de avisar al dueño para que coordine contigo; te escribe enseguida 🙋"; }
+  else if (propia && /pagar/.test(bajo) && !/transferencia|contra/.test(bajo)) {
+    if (!e.productoSku) registrar(1);
+    pedirGestion("quiere_pagar", "Quiere pagar", "Pregunta cómo pagar");
+    respuesta = "Perfecto, ya le avisé al dueño para que te indique cómo pagar. Mientras tanto, ¿me das tu nombre, dirección, cantón y provincia para dejar el pedido listo?";
+  }
+  else if (propia && e.productoSku && !f.envioIncluido && !e.entregaOpcionId && datosCompletos() && !/soy\s/.test(bajo)) elegirEntrega(msg);
+  else if (/garant|cuotas|tarjeta|factura/.test(bajo)) { escalar("El cliente pregunta algo que no está en la ficha del producto"); respuesta = "Eso no lo tengo confirmado, así que te paso con un asesor que te lo aclara enseguida 🙋"; }
   else if (/persona|asesor|humano/.test(bajo)) { escalar("El cliente pidió hablar con una persona"); respuesta = "¡Claro! Ya te conecto con un asesor humano 🙋"; }
   else if (/foto|imagen|c[oó]mo se ve/.test(bajo)) {
     const yaEnviada = (b.historial || []).some((h) => h.rol === "bot" && h.contenido.includes(`(${f.sku})`) && h.contenido.startsWith("📷"));
     if (yaEnviada) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Ya le enviaste la foto de este producto a este cliente: no la repitas."); respuesta = "¡Ya te la mandé arriba! Si quieres otro detalle, dime 😊"; }
-    else if (!f.imagenUrl) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Este producto no tiene una foto disponible para enviar. Descríbeselo al cliente con la información de su ficha y no le prometas fotos."); respuesta = `Por ahora no tengo foto de este producto, pero te lo describo: ${f.descripcion}`; }
-    else { fotos.push({ mensaje: `📷 Foto de ${f.nombre} (${f.sku})`, url: f.imagenUrl, descripcion: f.nombre }); usar("enviar_foto_producto", { producto_sku: f.sku }, "Foto enviada al cliente. Puedes decirle que ya se la mandaste."); respuesta = "¡Claro! Te acabo de enviar la foto 📷 ¿Te gustaría pedirlo?"; }
+    else if (!f.imagenes.length && !f.imagenUrl) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Este producto no tiene fotos disponibles. Dile al cliente que por el momento no hay imágenes y descríbeselo con la información de su ficha; no le prometas fotos."); respuesta = `Por el momento no hay imágenes de este producto, pero te lo describo: ${f.descripcion}`; }
+    else {
+      // Galería propia (hasta el máximo por envío, 3 por defecto); si no hay, la foto de Rocketfy.
+      const urls = f.imagenes.length ? f.imagenes.slice(0, 3).map((i) => i.url) : [f.imagenUrl];
+      urls.forEach((url, i) => fotos.push({ mensaje: `📷 Foto${urls.length > 1 ? ` ${i + 1} de ${urls.length}` : ""} de ${f.nombre} (${f.sku})`, url, descripcion: f.nombre }));
+      usar("enviar_foto_producto", { producto_sku: f.sku }, `${urls.length === 1 ? "Foto enviada" : urls.length + " fotos enviadas"} al cliente. Puedes decirle que ya se las mandaste.`);
+      respuesta = `¡Claro! Te acabo de enviar ${urls.length === 1 ? "la foto" : "unas fotos"} 📷 ¿Te gustaría pedirlo?`;
+    }
   }
   else if (/env[ií]o|demora|llega/.test(bajo) && !/soy\s/.test(bajo)) { respuesta = `La entrega es en ${f.tiempoEntrega || "el plazo que acordemos"}. Sobre el costo del envío no tengo información confirmada, ¿quieres que lo consulte con un asesor?`; }
   else if (/transferencia/.test(bajo)) {
@@ -480,6 +609,7 @@ function turnoVictoria(f, b) {
     if (/contra ?entrega/.test(bajo)) { e.metodoPago = "contraentrega"; usar("registrar_metodo_pago", { metodo_pago: "contraentrega" }, "Método de pago registrado."); }
     const falta = ["nombreCliente", "direccion", "canton", "provincia", "metodoPago"].filter((k) => !e[k]);
     if (falta.length) respuesta = `Me falta: ${falta.join(", ")}. ¿Me los confirmas?`;
+    else if (propia) { if (f.envioIncluido) cerrarPropio(); else elegirEntrega(msg); }
     else if (Number(e.total) < 10) { escalar("El total ($" + e.total + ") es menor al recaudo mínimo de contraentrega ($10.00)"); respuesta = "Un asesor te contactará para terminar tu pedido 🙋"; }
     else {
       e.idPedidoLocal = Math.floor(Date.now() / 1000); e.idPedidoRocketfy = 9000001; e.estado = "despachado";
@@ -488,7 +618,7 @@ function turnoVictoria(f, b) {
       respuesta = `¡Pedido confirmado, ${e.nombreCliente}! Llega en ${f.tiempoEntrega}. Total a pagar al recibir: $${e.total}. ¡Gracias por tu compra!`;
     }
   } else { respuesta = `¡Hola! Soy Victoria de AzoShop 😊 Te cuento sobre ${f.nombre}: ${f.descripcion} ¿Te gustaría pedirlo?`; }
-  return { respuesta, herramientas, estado: e, escalada, pedido, avisos, fotos };
+  return { respuesta, herramientas, estado: e, escalada, pedido, avisos, fotos, ventaManual, solicitudes };
 }
 
 function manejarProductosBot(req, res, p, q, send) {
@@ -508,6 +638,68 @@ function manejarProductosBot(req, res, p, q, send) {
       hist(f, "creado", { desde: "rocketfy" }); productosBot.unshift(f);
       return send(detalleBot(f), 201);
     }
+    // --- Productos propios (ADR-012) ---
+    if (p === "/productos-bot/propios" && req.method === "POST") {
+      const detalle = {};
+      if (!String(body.nombre || "").trim()) detalle.nombre = ["Escribe el nombre del producto."];
+      if (!(cents(body.precio) > 0)) detalle.precio = ["El precio debe ser mayor que cero."];
+      if (!body.envioIncluido && !(body.entregas || []).some((o) => o.activo !== false)) detalle.entregas = ["Agrega al menos una opción de entrega o marca que el precio ya incluye el envío."];
+      if (Object.keys(detalle).length) return send({ error: "Datos inválidos.", detalle }, 422);
+      const n = productosBot.filter((x) => x.proveedor === "propio").length + 1;
+      const f = propio(`PROP-${String(n).padStart(4, "0")}`, String(body.nombre).trim(), "borrador", body.precio, body.costoPropio ?? null, body.controlaStock ? body.stock ?? 0 : null, {
+        descripcion: body.descripcion || "", variantes: body.variantes || null, tiempoEntrega: body.tiempoEntrega || "", metodosPago: body.metodosPago?.length ? body.metodosPago : ["contraentrega"],
+        preguntasFrecuentes: body.preguntasFrecuentes || null, temasNoResponder: body.temasNoResponder || null, maxUnidadesPorPedido: body.maxUnidadesPorPedido || 1,
+        categoriaId: body.categoriaId ?? null, controlaStock: !!body.controlaStock, envioIncluido: !!body.envioIncluido, costoFleteEstimado: body.costoFleteEstimado || null, actualizadoEn: new Date().toISOString(),
+      });
+      f.categoria = nombreCategoria(f.categoriaId);
+      f.entregas = (body.entregas || []).map((o) => ({ id: siguienteIdEntrega++, ...o }));
+      hist(f, "creado", { desde: "propio" }); productosBot.unshift(f);
+      return send(detalleBot(f), 201);
+    }
+    const sub = p.match(/^\/productos-bot\/([^/]+)\/(entregas|imagenes)(?:\/([^/]+))?$/);
+    if (sub) {
+      const f = productosBot.find((x) => x.sku === decodeURIComponent(sub[1]));
+      if (!f) return send({ error: `No existe el producto '${decodeURIComponent(sub[1])}'.` }, 404);
+      if (f.estado === "archivado") return send({ error: "Un producto archivado no se puede editar: restáuralo primero." }, 409);
+      f.actualizadoEn = new Date().toISOString();
+      if (sub[2] === "entregas" && !sub[3] && req.method === "PUT") {
+        const lista = body.entregas || [];
+        for (const [i, o] of lista.entries()) {
+          if (!String(o.nombre || "").trim()) return send({ error: "Datos inválidos.", detalle: { entregas: [`Opción ${i + 1}: falta el nombre (por ejemplo «Envío dentro de Cuenca»).`] } }, 422);
+          if (o.tipo === "retiro" && !String(o.direccionRetiro || "").trim()) return send({ error: "Datos inválidos.", detalle: { entregas: [`Opción ${i + 1}: un retiro necesita la dirección donde se retira.`] } }, 422);
+        }
+        f.entregas = lista.map((o) => ({ id: siguienteIdEntrega++, ...o }));
+        hist(f, "editado", { entregas: [null, `${lista.length} opciones`] });
+        return send(detalleBot(f));
+      }
+      if (sub[2] === "entregas" && sub[3] === "copiar" && req.method === "POST") {
+        const origen = productosBot.find((x) => x.sku === body.desdeSku);
+        if (!origen) return send({ error: `No existe el producto '${body.desdeSku}'.` }, 404);
+        f.entregas = origen.entregas.map((o) => ({ ...o, id: siguienteIdEntrega++ }));
+        hist(f, "editado", { entregas: [null, `copiadas de ${origen.sku}`] });
+        return send(detalleBot(f));
+      }
+      if (sub[2] === "imagenes" && !sub[3] && req.method === "POST") {
+        if (!String(body.storagePath || "").startsWith(`${f.carpetaFotos}/`)) return send({ error: "La foto debe estar en la carpeta de este producto." }, 422);
+        if (f.imagenes.length >= 8) return send({ error: "Máximo 8 fotos por producto." }, 409);
+        f.imagenes.push({ id: siguienteIdImagen++, url: urlFoto(body.storagePath), storagePath: body.storagePath, orden: f.imagenes.length });
+        hist(f, "editado", { fotos: [f.imagenes.length - 1, f.imagenes.length] });
+        return send(detalleBot(f));
+      }
+      if (sub[2] === "imagenes" && sub[3] === "orden" && req.method === "PUT") {
+        const ids = body.ids || [];
+        f.imagenes = ids.map((id, i) => ({ ...f.imagenes.find((x) => x.id === id), orden: i })).filter((x) => x.id);
+        return send(detalleBot(f));
+      }
+      if (sub[2] === "imagenes" && sub[3] && req.method === "DELETE") {
+        const antes = f.imagenes.length;
+        f.imagenes = f.imagenes.filter((x) => String(x.id) !== sub[3]).map((x, i) => ({ ...x, orden: i }));
+        if (f.imagenes.length === antes) return send({ error: "Esa foto no pertenece a este producto." }, 404);
+        hist(f, "editado", { fotos: [antes, f.imagenes.length] });
+        return send(detalleBot(f));
+      }
+      return send({ error: "mock: ruta no implementada " + p }, 404);
+    }
     if (p === "/productos-bot/contenido/uso") { const tope = ajustes.topeRedaccionesDia; return send({ tope, usadas: usadasIA, restantes: Math.max(0, tope - usadasIA) }); }
     if (p === "/productos-bot/pruebas/uso") { const tope = ajustes.topePruebasDia; return send({ tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas), maxMensajes: maxMensajesPrueba() }); }
     const pr = p.match(/^\/productos-bot\/([^/]+)\/probar$/);
@@ -526,14 +718,14 @@ function manejarProductosBot(req, res, p, q, send) {
       const mensaje = String(body.mensaje || "").trim();
       if (!mensaje || mensaje.length > 1000) return send({ error: "Datos inválidos.", detalle: { mensaje: ["Escribe un mensaje de hasta 1000 caracteres."] } }, 422);
       if (body.escalada) return send({ error: "Victoria ya pasó esta conversación a una persona: en la vida real no seguiría respondiendo. Reinicia la prueba para empezar otra." }, 409);
-      if (body.estado?.estado === "despachado") return send({ error: "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende una persona. Reinicia la prueba para empezar otra." }, 409);
+      if (body.estado?.estado === "despachado" || body.estado?.estado === "por_gestionar") return send({ error: "La compra de esta prueba ya se cerró: en la vida real, si el cliente vuelve a escribir, lo atiende una persona. Reinicia la prueba para empezar otra." }, 409);
       if ((body.historial || []).filter((h) => h.rol === "cliente").length >= maxMensajesPrueba()) return send({ error: `La prueba llegó a ${maxMensajesPrueba()} mensajes. Reiníciala para empezar de nuevo.` }, 409);
       const tope = ajustes.topePruebasDia;
       if (usadasPruebas >= tope) return send({ error: `Ya usaste los ${tope} mensajes de prueba de hoy. El contador se reinicia a medianoche (hora de Ecuador); puedes subir el tope en Ajustes de precios.`, uso: { tope, usadas: usadasPruebas, restantes: 0 } }, 429);
       if (mensaje.includes("SIN_IA")) return send({ error: "Probar con Victoria no está configurado en el servidor (falta la clave de la IA)." }, 503);
       usadasPruebas += 1;
       const turno = turnoVictoria(f, { ...body, mensaje });
-      if (turno.pedido) hist(f, "simulacion_completa", null);
+      if (turno.pedido || turno.ventaManual) hist(f, "simulacion_completa", null);
       return setTimeout(() => send({ ...turno, uso: { tope, usadas: usadasPruebas, restantes: Math.max(0, tope - usadasPruebas), maxMensajes: maxMensajesPrueba() } }), Number(process.env.DELAY_IA || 600));
     }
     const g = p.match(/^\/productos-bot\/([^/]+)\/contenido\/generar$/);
@@ -564,6 +756,9 @@ function manejarProductosBot(req, res, p, q, send) {
       const propuesto = { ...f, ...body };
       if (f.estado === "activo") { const peor = verificarBot(propuesto).bloqueos.filter((b) => !antes.has(b)); if (peor.length) return send({ error: "El producto no cumple lo mínimo para esa acción.", bloqueos: peor }, 422); }
       Object.assign(f, body, { actualizadoEn: new Date().toISOString() });
+      // ADR-012: el stock de un producto propio lo lleva la app; la categoría viaja como id y se muestra su nombre.
+      if ("stock" in body) { f.stockUltimo = body.stock; delete f.stock; }
+      if ("categoriaId" in body) f.categoria = nombreCategoria(body.categoriaId);
       if (Object.keys(cambios).length) hist(f, "editado", cambios);
       return send(detalleBot(f));
     }
@@ -579,6 +774,66 @@ function manejarProductosBot(req, res, p, q, send) {
   });
 }
 
+// ---------- Por gestionar (ADR-012) ----------
+// Lo que espera al dueño con un producto propio. Se guarda en memoria para poder atender solicitudes.
+const ETIQUETAS_SOLICITUD = { quiere_comprar: "Quiere comprar", quiere_pagar: "Quiere pagar", pide_envio: "Pide envío", quiere_ver_producto: "Quiere ver el producto", quiere_negociar: "Quiere negociar", sin_cobertura: "Sin cobertura de envío", pedido_cerrado: "Pedido cerrado, gestionar envío", otro: "Otro" };
+const solicitud = (id, conversacionId, tipo, detalle, min, extra = {}) => ({
+  id, conversacionId, tipo, tipoEtiqueta: ETIQUETAS_SOLICITUD[tipo], detalle, estado: "pendiente", notaAtencion: null, atendidaPor: null, creadaEn: ago(min), atendidaEn: null,
+  telefono: null, nombreCliente: null, direccion: null, canton: null, provincia: null, producto: null, variante: null, cantidad: null, metodoPago: null, entrega: null, total: null, proveedor: "propio", tienePedido: false, ...extra,
+});
+const solicitudesGestion = [
+  solicitud(6, 292, "pedido_cerrado", "Pedido completo: solo falta coordinar la entrega y el pago.", 9, {
+    telefono: "593955667788", nombreCliente: "Marcelo Ortiz", direccion: "Av. Remigio Crespo 3-45", canton: "Cuenca", provincia: "Azuay", producto: "Zapatos de cuero", variante: "Talla 41, negro",
+    cantidad: 1, metodoPago: "contraentrega", entrega: "Envío dentro de Cuenca", total: "47.00", tienePedido: true,
+  }),
+  solicitud(5, 298, "quiere_ver_producto", "Quiere probarse los zapatos antes de comprarlos.", 32, { telefono: "593961234567", nombreCliente: "Lucía Mendoza", producto: "Zapatos de cuero", canton: "Cuenca", provincia: "Azuay" }),
+  solicitud(4, 299, "quiere_negociar", "Pide una rebaja si lleva dos pares.", 75, { telefono: "593976543210", nombreCliente: null, producto: "Zapatos de cuero", cantidad: 2 }),
+  solicitud(3, 296, "sin_cobertura", "Vive en Galápagos y ninguna opción de entrega cubre ese destino.", 240, { telefono: "593958899001", nombreCliente: "Andrea Salazar", canton: "San Cristóbal", provincia: "Galápagos", producto: "Camiseta de algodón" }),
+  solicitud(2, 300, "pedido_cerrado", "Pedido completo.", 60 * 20, {
+    estado: "atendida", notaAtencion: "Se coordinó el envío por Servientrega; pagó contra entrega.", atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 18), telefono: "593998877665", nombreCliente: "Carlos Andrade",
+    direccion: "Calle Los Pinos N45-12", canton: "Quito", provincia: "Pichincha", producto: "Camiseta de algodón", variante: "M", cantidad: 2, metodoPago: "transferencia", entrega: "Envío al resto del país", total: "29.00", tienePedido: true,
+  }),
+  solicitud(1, 297, "quiere_pagar", "Preguntó cómo pagar.", 60 * 30, { estado: "atendida", notaAtencion: null, atendidaPor: "freddy@azoshop.ec", atendidaEn: ago(60 * 29), telefono: "593984455667", nombreCliente: "Daniela Vera", producto: "Zapatos de cuero" }),
+];
+function manejarGestion(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    if (p === "/gestion" && req.method === "GET") {
+      const estado = q.get("estado") || "pendiente";
+      return send(solicitudesGestion.filter((x) => x.estado === estado).sort((a, b) => new Date(b.creadaEn) - new Date(a.creadaEn)));
+    }
+    if (p === "/gestion/resumen") return send({ pendientes: solicitudesGestion.filter((x) => x.estado === "pendiente").length });
+    const m = p.match(/^\/gestion\/(\d+)\/atender$/);
+    if (m && req.method === "POST") {
+      const x = solicitudesGestion.find((y) => y.id === Number(m[1]));
+      if (!x) return send({ error: "No existe esa solicitud." }, 404);
+      if (x.estado === "atendida") return send({ error: "Esa solicitud ya estaba atendida." }, 409);
+      const nota = raw ? JSON.parse(raw).nota : null;
+      Object.assign(x, { estado: "atendida", notaAtencion: nota || null, atendidaPor: "freddy@azoshop.ec", atendidaEn: new Date().toISOString() });
+      return send(x);
+    }
+    send({ error: "mock: ruta no implementada " + p }, 404);
+  });
+}
+function manejarCategorias(req, res, p, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const conteo = (id) => productosBot.filter((f) => f.categoriaId === id).length;
+    if (req.method === "GET") return send(categorias.map((c) => ({ ...c, productos: conteo(c.id) })));
+    if (req.method === "POST") {
+      const nombre = String((raw ? JSON.parse(raw) : {}).nombre || "").trim();
+      if (!nombre) return send({ error: "Datos inválidos.", detalle: { nombre: ["Escribe el nombre de la categoría."] } }, 422);
+      if (categorias.some((c) => c.nombre.toLowerCase() === nombre.toLowerCase())) return send({ error: `Ya existe la categoría «${nombre}».` }, 409);
+      const nueva = { id: siguienteIdCategoria++, nombre, activo: true };
+      categorias.push(nueva);
+      return send({ ...nueva, productos: 0 }, 201);
+    }
+    send({ error: "mock: método no implementado" }, 405);
+  });
+}
+
 // ---------- servidor ----------
 function paginar(arr, q) {
   const page = Number(q.get("page") || 1), pageSize = Number(q.get("pageSize") || 20);
@@ -586,7 +841,7 @@ function paginar(arr, q) {
 }
 function totalesConv() {
   const esc = conversaciones.filter((c) => c.estado === "escalada");
-  return { escaladas: esc.length, escaladasSinRevisar: esc.filter((c) => c.sinRevisar).length, esperandoPago: conversaciones.filter((c) => c.estado === "esperando_pago").length };
+  return { escaladas: esc.length, escaladasSinRevisar: esc.filter((c) => c.sinRevisar).length, esperandoPago: conversaciones.filter((c) => c.estado === "esperando_pago").length, enGestion: conversaciones.filter((c) => c.estado === "en_gestion").length };
 }
 
 const server = http.createServer((req, res) => {
@@ -637,6 +892,11 @@ const server = http.createServer((req, res) => {
     if (p === "/parametros" || p.startsWith("/parametros/")) return manejarParametros(req, res, p, q, send);
     if (p === "/instrucciones-victoria" || p.startsWith("/instrucciones-victoria/")) return manejarInstrucciones(req, res, p, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
+    if (p === "/gestion" || p.startsWith("/gestion/")) return manejarGestion(req, res, p, q, send);
+    if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
+    // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
+    if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
+    if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }
     send({ error: "mock: ruta no implementada " + p }, 404);
   };
   delay ? setTimeout(go, delay) : go();

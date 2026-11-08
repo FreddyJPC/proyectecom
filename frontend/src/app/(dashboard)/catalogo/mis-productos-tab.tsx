@@ -1,6 +1,6 @@
 "use client";
 
-import { FilePenLine, PackageOpen, Settings2, TriangleAlert } from "lucide-react";
+import { FilePenLine, PackageOpen, PackagePlus, Settings2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { estadoProductoBotInfo } from "@/lib/estados";
 import { formatMoney, tiempoRelativo } from "@/lib/format";
-import type { EstadoProductoBot, ProductoBotResumen } from "@/types/producto-bot";
+import { esPropio, type EstadoProductoBot, type ProductoBotResumen } from "@/types/producto-bot";
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "./accion-estado";
 import { AjustesPreciosDialog } from "./ajustes-precios-dialog";
@@ -22,6 +22,8 @@ import { fichaHref } from "./preparar-boton";
 const POCO_STOCK = 5;
 
 type Filtro = "todos" | "venta" | "borradores" | "pausados" | "archivados";
+// ADR-012: de dónde viene el producto. Se filtra aparte del estado.
+type FiltroOrigen = "todos" | "rocketfy" | "propio";
 
 const ESTADOS_DEL_FILTRO: Record<Exclude<Filtro, "todos">, EstadoProductoBot[]> = {
   venta: ["activo"],
@@ -51,34 +53,49 @@ export function MisProductosTab({
   onIrAlCatalogo: () => void;
 }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [origen, setOrigen] = useState<FiltroOrigen>("todos");
 
+  const delOrigen = items?.filter((p) => origen === "todos" || p.proveedor === origen);
   const chips: Chip[] = [
     { value: "todos", label: "Todos" },
-    { value: "venta", label: "A la venta", count: items?.filter((p) => coincide(p, "venta")).length },
-    { value: "borradores", label: "Borradores", count: items?.filter((p) => coincide(p, "borradores")).length },
-    { value: "pausados", label: "Pausados", count: items?.filter((p) => coincide(p, "pausados")).length },
-    { value: "archivados", label: "Archivados", count: items?.filter((p) => coincide(p, "archivados")).length },
+    { value: "venta", label: "A la venta", count: delOrigen?.filter((p) => coincide(p, "venta")).length },
+    { value: "borradores", label: "Borradores", count: delOrigen?.filter((p) => coincide(p, "borradores")).length },
+    { value: "pausados", label: "Pausados", count: delOrigen?.filter((p) => coincide(p, "pausados")).length },
+    { value: "archivados", label: "Archivados", count: delOrigen?.filter((p) => coincide(p, "archivados")).length },
+  ];
+  const chipsOrigen: Chip[] = [
+    { value: "todos", label: "Todos los orígenes" },
+    { value: "rocketfy", label: "Rocketfy", count: items?.filter((p) => p.proveedor === "rocketfy" && p.estado !== "archivado").length },
+    { value: "propio", label: "Propios", count: items?.filter((p) => p.proveedor === "propio" && p.estado !== "archivado").length },
   ];
 
-  const visibles = items?.filter((p) => coincide(p, filtro)) ?? [];
+  const visibles = delOrigen?.filter((p) => coincide(p, filtro)) ?? [];
 
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-prose text-sm text-muted-foreground">
-          Aquí están los productos que preparaste para que Victoria los venda. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados. Cada hora se actualizan costo y stock desde Rocketfy, y un producto que se queda sin stock se pausa solo.
+          Aquí están los productos que preparaste para que Victoria los venda, de Rocketfy y propios. <strong className="font-medium text-foreground">Solo los que están «A la venta» los ve Victoria</strong>; el resto son borradores, pausados o archivados. Cada hora se actualizan costo y stock de los de Rocketfy, y un producto que se queda sin stock se pausa solo.
         </p>
-        <AjustesPreciosDialog
-          // Los ajustes cambian qué productos tienen el margen en riesgo: se vuelve a pedir la lista.
-          onGuardado={recargar}
-          trigger={
-            <Button variant="outline" size="sm">
-              <Settings2 /> Ajustes de precios
-            </Button>
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild size="sm">
+            <Link href="/catalogo/propio/nuevo">
+              <PackagePlus /> Publicar producto propio
+            </Link>
+          </Button>
+          <AjustesPreciosDialog
+            // Los ajustes cambian qué productos tienen el margen en riesgo: se vuelve a pedir la lista.
+            onGuardado={recargar}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Settings2 /> Ajustes de precios
+              </Button>
+            }
+          />
+        </div>
       </div>
 
+      <FilterChips chips={chipsOrigen} value={origen} onChange={(v) => setOrigen(v as FiltroOrigen)} label="Filtrar por origen" />
       <FilterChips chips={chips} value={filtro} onChange={(v) => setFiltro(v as Filtro)} label="Filtrar por estado" />
 
       <Card className="gap-0 overflow-hidden py-0">
@@ -101,8 +118,15 @@ export function MisProductosTab({
             <EmptyState
               icon={PackageOpen}
               title="Aún no preparaste ningún producto"
-              description="Ve al Catálogo y pulsa «Preparar para vender» en un producto de Rocketfy. Se crea como borrador y Victoria no lo ve hasta que lo publiques."
-              action={<Button onClick={onIrAlCatalogo}>Ir al Catálogo</Button>}
+              description="Pulsa «Preparar para vender» en un producto de Rocketfy del Catálogo, o publica uno tuyo. Se crea como borrador y Victoria no lo ve hasta que lo publiques."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button onClick={onIrAlCatalogo}>Ir al Catálogo</Button>
+                  <Button asChild variant="outline">
+                    <Link href="/catalogo/propio/nuevo">Publicar producto propio</Link>
+                  </Button>
+                </div>
+              }
             />
           ) : (
             <EmptyState icon={PackageOpen} title="Nada en este filtro" description="Prueba con otro filtro para ver tus demás productos." />
@@ -111,8 +135,10 @@ export function MisProductosTab({
           <ul className="divide-y">
             {visibles.map((p) => {
               const estado = estadoProductoBotInfo(p.estado);
-              const agotado = p.stockUltimo != null && p.stockUltimo <= 0;
-              const bajo = p.stockUltimo != null && !agotado && p.stockUltimo <= POCO_STOCK;
+              const propio = esPropio(p);
+              const sinControl = propio && !p.controlaStock;
+              const agotado = !sinControl && p.stockUltimo != null && p.stockUltimo <= 0;
+              const bajo = !sinControl && p.stockUltimo != null && !agotado && p.stockUltimo <= POCO_STOCK;
               const principal = ACCIONES_POR_ESTADO[p.estado][0];
               return (
                 <li key={p.sku} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5">
@@ -122,10 +148,13 @@ export function MisProductosTab({
                         {p.nombre}
                       </Link>
                       <StatusBadge label={estado.label} variant={estado.variant} className="h-5 px-2 text-[0.7rem]" />
+                      {propio && <StatusBadge label="Propio" variant="info" className="h-5 px-2 text-[0.7rem]" />}
                       {p.margenEnRiesgo && <StatusBadge label="Margen en riesgo" variant="warning" className="h-5 px-2 text-[0.7rem]" />}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <span className="tabular">{p.sku}</span>
+                      {p.categoria && <> · {p.categoria}</>}
+                      {!p.envioIncluido && <> · envío aparte</>}
                       {p.actualizadoEn && <> · actualizado {tiempoRelativo(p.actualizadoEn)}</>}
                     </p>
                   </div>
@@ -142,7 +171,7 @@ export function MisProductosTab({
                     <div className="w-28">
                       <p className="text-xs text-muted-foreground">Stock</p>
                       <div className="flex items-center gap-2">
-                        <span className="tabular font-semibold">{p.stockUltimo ?? "—"}</span>
+                        {sinControl ? <span className="text-sm text-muted-foreground">Sin control</span> : <span className="tabular font-semibold">{p.stockUltimo ?? "—"}</span>}
                         {agotado ? <StatusBadge label="Agotado" variant="danger" className="h-5 px-2 text-[0.7rem]" /> : bajo ? <StatusBadge label="Bajo" variant="warning" className="h-5 px-2 text-[0.7rem]" /> : null}
                       </div>
                     </div>

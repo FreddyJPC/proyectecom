@@ -11,17 +11,21 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiError } from "@/lib/api";
 import { estadoProductoBotInfo } from "@/lib/estados";
 import { formatFechaHora, normalizarMonto } from "@/lib/format";
-import { METODOS_PAGO, type EditarProductoBotInput, type ProductoBotDetalle } from "@/types/producto-bot";
+import { METODOS_PAGO, esPropio, type EditarProductoBotInput, type ProductoBotDetalle } from "@/types/producto-bot";
 
 import { ACCIONES_POR_ESTADO, AccionEstadoBoton } from "../../accion-estado";
+import { SelectorCategoria } from "../../selector-categoria";
 import { Campo, descripcionDe } from "./campo";
+import { GaleriaFotos } from "./galeria-fotos";
 import { ProbarConVictoria } from "./probar-victoria";
 import { RedactarIADialog } from "./redactar-ia-dialog";
-import { DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
+import { DatosProductoPropio, DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
+import { SeccionEnvio, firmaDelEnvio } from "./seccion-envio";
 import { SeccionPrecio } from "./seccion-precio";
 
 // Mismos límites que el backend (backend/src/routes/productos_bot/schemas.py):
@@ -36,6 +40,7 @@ const LIMITE = {
   notasInternas: 2000,
 } as const;
 const MAX_UNIDADES = 20;
+const MAX_STOCK = 1_000_000;
 
 type Formulario = {
   nombre: string;
@@ -49,6 +54,11 @@ type Formulario = {
   maxUnidades: string;
   notasInternas: string;
   precioCompetencia: string;
+  categoriaId: number | null;
+  /** Solo productos propios. */
+  costoPropio: string;
+  controlaStock: boolean;
+  stock: string;
 };
 
 // Los textos se parten de su versión sin espacios sobrantes: al guardar el
@@ -67,12 +77,16 @@ function desdeDetalle(d: ProductoBotDetalle): Formulario {
     maxUnidades: String(d.maxUnidadesPorPedido),
     notasInternas: (d.notasInternas ?? "").trim(),
     precioCompetencia: d.precioCompetencia ?? "",
+    categoriaId: d.categoriaId,
+    costoPropio: d.costoPropio ?? "",
+    controlaStock: d.controlaStock,
+    stock: d.stockUltimo == null ? "" : String(d.stockUltimo),
   };
 }
 
 /** Compara lo escrito con lo guardado: devuelve SOLO lo que cambió (el PATCH
  * del backend actualiza únicamente los campos que vengan) y los errores. */
-function revisar(inicial: Formulario, actual: Formulario) {
+function revisar(inicial: Formulario, actual: Formulario, propio: boolean) {
   const cambios: EditarProductoBotInput = {};
   const errores: Partial<Record<keyof Formulario, string>> = {};
 
@@ -121,6 +135,26 @@ function revisar(inicial: Formulario, actual: Formulario) {
     else if (competencia !== inicial.precioCompetencia) cambios.precioCompetencia = competencia;
   }
 
+  if (actual.categoriaId !== inicial.categoriaId) cambios.categoriaId = actual.categoriaId;
+
+  // Costo y stock a mano: solo un producto propio (los de Rocketfy los trae Rocketfy).
+  if (propio) {
+    if (actual.costoPropio.trim() === "") {
+      if (inicial.costoPropio !== "") cambios.costoPropio = null;
+    } else {
+      const costo = normalizarMonto(actual.costoPropio, true);
+      if (costo == null) errores.costoPropio = "Escribe un monto válido, por ejemplo 18.00.";
+      else if (costo !== inicial.costoPropio) cambios.costoPropio = costo;
+    }
+
+    if (actual.controlaStock !== inicial.controlaStock) cambios.controlaStock = actual.controlaStock;
+    if (actual.controlaStock) {
+      const texto = actual.stock.trim();
+      if (!/^\d+$/.test(texto) || Number(texto) > MAX_STOCK) errores.stock = "Escribe cuántas unidades tienes (un número entero, 0 o más).";
+      else if (texto !== inicial.stock) cambios.stock = Number(texto);
+    }
+  }
+
   return { cambios, errores };
 }
 
@@ -133,7 +167,8 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<{ mensaje: string; motivos: string[] } | null>(null);
 
-  const { cambios, errores } = revisar(inicial, form);
+  const propio = esPropio(detalle);
+  const { cambios, errores } = revisar(inicial, form, propio);
   const hayCambios = Object.keys(cambios).length > 0 || Object.keys(errores).length > 0;
   const soloLectura = detalle.estado === "archivado";
   const estado = estadoProductoBotInfo(detalle.estado);
@@ -188,7 +223,12 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
       <PageHeader
         accionesDebajoEnMovil
         title={detalle.nombre}
-        badge={<StatusBadge label={estado.label} variant={estado.variant} />}
+        badge={
+          <>
+            <StatusBadge label={estado.label} variant={estado.variant} />
+            {propio && <StatusBadge label="Producto propio" variant="info" />}
+          </>
+        }
         description={
           <>
             <span className="tabular">{detalle.sku}</span> · {estado.explicacion}
@@ -237,15 +277,16 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
 
         {!soloLectura && (
           <div className="lg:col-start-2 lg:row-start-2">
-            <ProbarConVictoria sku={detalle.sku} nombre={detalle.nombre} sinCambiosPendientes={!hayCambios} />
+            <ProbarConVictoria sku={detalle.sku} nombre={detalle.nombre} propio={propio} sinCambiosPendientes={!hayCambios} />
           </div>
         )}
 
         <div className="lg:col-start-2 lg:row-start-3">
-          <DatosRocketfy detalle={detalle} sinCambiosPendientes={!hayCambios} onActualizado={onCambio} />
+          {propio ? <DatosProductoPropio detalle={detalle} /> : <DatosRocketfy detalle={detalle} sinCambiosPendientes={!hayCambios} onActualizado={onCambio} />}
         </div>
 
-        <form onSubmit={guardar} noValidate className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-span-5 lg:row-start-1">
+        <div className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-span-5 lg:row-start-1">
+        <form onSubmit={guardar} noValidate className="flex min-w-0 flex-col gap-5">
           <fieldset disabled={soloLectura || guardando} className="contents">
             <legend className="sr-only">Datos de venta de {detalle.nombre}</legend>
 
@@ -262,6 +303,11 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
 
             <SectionCard titulo="Contenido para Victoria" descripcion="Todo lo de esta sección lo lee Victoria y se lo cuenta al cliente. Si algo no está aquí, ella no lo inventa.">
               <div className="space-y-5 p-4 sm:p-5">
+                {propio ? (
+                  <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                    Redactar con IA parte de lo que dice Rocketfy del producto, y uno propio no está en Rocketfy: escribe tú la ficha. Mientras más clara y verdadera sea, mejor vende Victoria.
+                  </p>
+                ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/50 p-3">
                   <p className="min-w-0 text-sm text-muted-foreground">
                     ¿Quieres un primer borrador? La IA lo redacta con los datos de Rocketfy y tus notas; tú revisas y aceptas cada campo.
@@ -283,6 +329,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
                     }
                   />
                 </div>
+                )}
 
                 <Campo id="nombre" label="Nombre del producto" error={errores.nombre} contador={{ actual: form.nombre.length, maximo: LIMITE.nombre }}>
                   <Input
@@ -431,6 +478,64 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
               </div>
             </SectionCard>
 
+            <SectionCard
+              titulo={propio ? "Categoría, costo y stock" : "Categoría"}
+              descripcion={propio ? "Para tus reportes y para llevar la cuenta de las unidades. Victoria no lee el costo." : "Para saber después qué tipo de producto te deja más."}
+            >
+              <div className="space-y-5 p-4 sm:p-5">
+                <Campo id="categoria" label="Categoría" opcional ayuda="Calzado, ropa, electrónica… Crea las que necesites.">
+                  <SelectorCategoria id="categoria" valor={form.categoriaId} onCambio={(v) => poner("categoriaId", v)} describedBy="categoria-ayuda" />
+                </Campo>
+
+                {propio && (
+                  <>
+                    <Campo id="costoPropio" label="Lo que te cuesta ($)" opcional error={errores.costoPropio} ayuda="Por unidad. Con esto se calcula tu ganancia real en cada venta.">
+                      <Input
+                        id="costoPropio"
+                        inputMode="decimal"
+                        value={form.costoPropio}
+                        onChange={(e) => poner("costoPropio", e.target.value)}
+                        aria-invalid={Boolean(errores.costoPropio)}
+                        aria-describedby={descripcionDe("costoPropio", true, errores.costoPropio)}
+                        className="tabular w-40"
+                      />
+                    </Campo>
+
+                    <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
+                      <Switch id="controlaStock" checked={form.controlaStock} onCheckedChange={(c) => poner("controlaStock", c)} className="mt-0.5" aria-describedby="controlaStock-ayuda" />
+                      <div className="min-w-0">
+                        <label htmlFor="controlaStock" className="text-sm font-medium">
+                          Llevar la cuenta de las unidades
+                        </label>
+                        <p id="controlaStock-ayuda" className="text-xs text-muted-foreground">
+                          {form.controlaStock
+                            ? "Cada venta descuenta del stock y, cuando llega a cero, el producto se pausa solo."
+                            : "Victoria siempre lo ofrece como disponible."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {form.controlaStock && (
+                      <Campo id="stock" label="Unidades que tienes" error={errores.stock} ayuda="El total del producto, sumando todas las variantes.">
+                        <Input
+                          id="stock"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={MAX_STOCK}
+                          value={form.stock}
+                          onChange={(e) => poner("stock", e.target.value)}
+                          aria-invalid={Boolean(errores.stock)}
+                          aria-describedby={descripcionDe("stock", true, errores.stock)}
+                          className="tabular w-32"
+                        />
+                      </Campo>
+                    )}
+                  </>
+                )}
+              </div>
+            </SectionCard>
+
             <SectionCard titulo="Notas internas" descripcion="Solo para ti y tu equipo: Victoria no las lee.">
               <div className="p-4 sm:p-5">
                 <Campo id="notasInternas" label="Notas" opcional contador={{ actual: form.notasInternas.length, maximo: LIMITE.notasInternas }}>
@@ -495,6 +600,10 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
             </div>
           )}
         </form>
+
+        <SeccionEnvio key={firmaDelEnvio(detalle)} detalle={detalle} sinCambiosPendientes={!hayCambios} onCambio={onCambio} />
+        <GaleriaFotos detalle={detalle} onCambio={onCambio} />
+        </div>
 
         <div className="lg:col-start-2 lg:row-start-4">
           <HistorialCard historial={detalle.historial} />

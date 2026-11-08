@@ -18,6 +18,44 @@ export type ProductoBotResumen = {
   pedidos30d: number;
   /** Con el precio y el costo de hoy, el margen está bajo tu mínimo (solo con ajustes confirmados). */
   margenEnRiesgo: boolean;
+  /** De dónde viene: "rocketfy" (el pedido se crea solo) o "propio" (lo gestionas tú). */
+  proveedor: string;
+  proveedorNombre: string;
+  categoria: string | null;
+  /** Solo productos propios: false = siempre disponible, sin llevar la cuenta de unidades. */
+  controlaStock: boolean;
+  /** true = el precio ya trae el envío; false = se cobra aparte según las opciones de entrega. */
+  envioIncluido: boolean;
+};
+
+/** Una opción de entrega de un producto (envío o retiro). Dinero como string. */
+export type OpcionEntrega = {
+  id: number;
+  nombre: string;
+  tipo: "envio" | "retiro";
+  /** Lo que paga el cliente por esta opción. */
+  costoCliente: string;
+  /** Lo que le cuesta al negocio (opcional). */
+  costoNegocio: string | null;
+  cantones: string[];
+  provincias: string[];
+  /** Aplica a todo destino que no cubra otro envío con cantones o provincias. */
+  restoDelPais: boolean;
+  direccionRetiro: string | null;
+  tiempoEntrega: string | null;
+  activo: boolean;
+};
+
+/** Lo que se envía al guardar las opciones (el servidor asigna los `id`). */
+export type OpcionEntregaInput = Omit<OpcionEntrega, "id">;
+
+/** Una foto de la galería del producto (guardada en el bucket «productos»). */
+export type ImagenProducto = {
+  id: number;
+  url: string;
+  /** Ruta dentro del bucket: `<sku>/<archivo>.jpg`. */
+  storagePath: string;
+  orden: number;
 };
 
 export type Verificacion = {
@@ -63,7 +101,45 @@ export type ProductoBotDetalle = {
   actualizadoEn: string | null;
   verificacion: Verificacion;
   historial: EntradaHistorial[];
+  proveedor: string;
+  proveedorNombre: string;
+  categoriaId: number | null;
+  categoria: string | null;
+  /** Lo que te cuesta una unidad (solo productos propios). */
+  costoPropio: string | null;
+  controlaStock: boolean;
+  envioIncluido: boolean;
+  /** Lo que cuesta el flete de ESTE producto; vacío = se usa el envío estimado general. */
+  costoFleteEstimado: string | null;
+  entregas: OpcionEntrega[];
+  imagenes: ImagenProducto[];
+  /** Carpeta de las fotos de este producto dentro del bucket (`p<id>`): la app sube ahí. */
+  carpetaFotos: string;
 };
+
+export const esPropio = (p: { proveedor: string }) => p.proveedor === "propio";
+
+/** Cuerpo del POST /productos-bot/propios: todo lo necesario para publicar un producto propio. */
+export type CrearProductoPropioInput = {
+  nombre: string;
+  descripcion: string;
+  precio: string;
+  costoPropio: string | null;
+  controlaStock: boolean;
+  stock: number | null;
+  categoriaId: number | null;
+  variantes: string | null;
+  tiempoEntrega: string;
+  metodosPago: string[];
+  preguntasFrecuentes: string | null;
+  temasNoResponder: string | null;
+  maxUnidadesPorPedido: number;
+  envioIncluido: boolean;
+  costoFleteEstimado: string | null;
+  entregas: OpcionEntregaInput[];
+};
+
+export type Categoria = { id: number; nombre: string; activo: boolean; productos: number };
 
 /** Cuerpo del PATCH: solo viajan los campos que cambiaron. */
 export type EditarProductoBotInput = Partial<{
@@ -78,6 +154,12 @@ export type EditarProductoBotInput = Partial<{
   maxUnidadesPorPedido: number;
   notasInternas: string | null;
   precioCompetencia: string | null;
+  categoriaId: number | null;
+  envioIncluido: boolean;
+  costoFleteEstimado: string | null;
+  costoPropio: string | null;
+  controlaStock: boolean;
+  stock: number;
 }>;
 
 /** Acciones que cambian el estado (POST /productos-bot/<sku>/<accion>). */
@@ -248,10 +330,16 @@ export type EstadoPrueba = {
   productoNombre: string | null;
   productoVariante: string | null;
   cantidad: number;
-  /** Lo calcula el sistema (precio × cantidad); dinero como string. */
+  /** Lo calcula el sistema (precio × cantidad + envío); dinero como string. */
   total: string | null;
+  /** Solo los productos (sin el envío). */
+  subtotal: string | null;
+  costoEnvio: string;
+  entregaOpcionId: number | null;
+  entregaNombre: string | null;
+  entregaTipo: string | null;
   metodoPago: "contraentrega" | "transferencia" | null;
-  estado: "recopilando_datos" | "esperando_pago" | "despachado";
+  estado: "recopilando_datos" | "esperando_pago" | "despachado" | "por_gestionar";
   idPedidoLocal: number | null;
   idPedidoRocketfy: number | null;
 };
@@ -282,6 +370,24 @@ export type FotoSimulada = {
   descripcion: string;
 };
 
+/** La venta de un producto PROPIO que se habría guardado al cerrarla (no se guardó nada). */
+export type VentaManualSimulada = {
+  producto: string;
+  variante: string | null;
+  cantidad: number;
+  subtotal: string;
+  costoEnvioCliente: string;
+  total: string;
+  costoProductos: string | null;
+  costoEnvioNegocio: string | null;
+  ganancia: string | null;
+  entrega: string | null;
+  metodoPago: string | null;
+  canal: string;
+};
+
+export type SolicitudSimulada = { tipo: string; etiqueta: string; detalle: string };
+
 export type TurnoSimulado = {
   respuesta: string;
   herramientas: LlamadaHerramienta[];
@@ -291,6 +397,8 @@ export type TurnoSimulado = {
   avisos: AvisoSimulado[];
   uso: UsoPruebas;
   fotos: FotoSimulada[];
+  ventaManual: VentaManualSimulada | null;
+  solicitudes: SolicitudSimulada[];
 };
 
 export type ProbarInput = {

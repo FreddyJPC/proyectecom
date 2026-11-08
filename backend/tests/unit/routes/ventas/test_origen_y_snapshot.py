@@ -56,6 +56,9 @@ class TestFlete:
     def test_envio_cobrado_aparte_no_resta_del_precio(self):
         assert flete_estimado(PROPIO, self.GENERAL) == Decimal("0.00")
 
+    def test_un_flete_anotado_no_cuenta_si_el_envio_se_cobra_aparte(self):
+        assert flete_estimado({**PROPIO, "costo_flete_estimado": Decimal("9.50")}, self.GENERAL) == Decimal("0.00")
+
     def test_un_flete_en_cero_anotado_por_el_dueno_cuenta(self):
         assert flete_estimado({**ROCKETFY, "costo_flete_estimado": Decimal("0.00")}, self.GENERAL) == Decimal("0.00")
 

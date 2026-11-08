@@ -343,6 +343,7 @@ class ProductoBotDetalleSchema(Schema):
     costo_flete_estimado = fields.Str(data_key="costoFleteEstimado", allow_none=True)
     entregas = fields.List(fields.Nested(EntregaSchema))
     imagenes = fields.List(fields.Nested(ImagenSchema))
+    carpeta_fotos = fields.Str(data_key="carpetaFotos")
 
 
 class CamposContenidoSchema(Schema):

@@ -33,7 +33,7 @@ from src.routes.ajustes.services import AjustesService
 from src.routes.categorias.repository import CategoriaRepository
 from src.routes.entregas.logica import limpiar_y_validar
 from src.routes.entregas.repository import EntregaRepository
-from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, url_publica, validar_ruta
+from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, carpeta_de, url_publica, validar_ruta
 from src.routes.imagenes.repository import ImagenRepository, ImagenYaRegistradaError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
@@ -117,6 +117,10 @@ def _limpiar_texto_de_rocketfy(texto: Optional[str]) -> str:
     if len(plano) > LARGO_MAXIMO_DESCRIPCION_ROCKETFY:
         plano = plano[: LARGO_MAXIMO_DESCRIPCION_ROCKETFY - 1].rstrip() + "…"
     return plano
+
+
+def _cuantas(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
 
 
 def _valor_para_historial(valor):
@@ -401,12 +405,15 @@ class ProductosBotService:
         limpias, errores = limpiar_y_validar(entregas)
         if errores:
             raise DatosDeProductoInvalidosError(errores)
+        anteriores = self._entregas.listar(actual["sku"])
         if actual["estado"] == "activo":
-            antes = self._cantidad_de_entregas_activas(actual["sku"])
+            antes = len([o for o in anteriores if o["activo"]])
             despues = len([o for o in limpias if o["activo"]])
             self._exigir_que_no_empeore(actual, actual, antes, despues)
         self._entregas.reemplazar(actual["sku"], limpias)
-        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"entregas": [len(limpias), "opciones"]})
+        self._repo.registrar_historial(
+            actual["sku"], "editado", usuario, {"entregas": [_cuantas(len(anteriores), "opción", "opciones"), _cuantas(len(limpias), "opción", "opciones")]}
+        )
         return self._a_detalle(self._repo.obtener(actual["sku"]))
 
     # ------------------------------------------------------------------
@@ -419,23 +426,25 @@ class ProductosBotService:
         if actual["estado"] == "archivado":
             raise TransicionInvalidaError("Un producto archivado no se puede editar: restáuralo primero.")
         try:
-            ruta = validar_ruta(actual["sku"], ruta)
+            ruta = validar_ruta(carpeta_de(actual["id"]), ruta)
         except RutaDeImagenInvalida as exc:
             raise DatosDeProductoInvalidosError([str(exc)]) from exc
-        if len(self._imagenes.listar(actual["sku"])) >= MAXIMO_POR_PRODUCTO:
+        cuantas = len(self._imagenes.listar(actual["sku"]))
+        if cuantas >= MAXIMO_POR_PRODUCTO:
             raise DatosDeProductoInvalidosError([f"Máximo {MAXIMO_POR_PRODUCTO} fotos por producto: quita alguna antes de subir otra."])
         try:
             self._imagenes.agregar(actual["sku"], url_publica(load_settings().supabase_url, ruta), ruta, usuario)
         except ImagenYaRegistradaError as exc:
             raise DatosDeProductoInvalidosError([str(exc)]) from exc
-        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": ["+1"]})
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": [_cuantas(cuantas, "foto", "fotos"), _cuantas(cuantas + 1, "foto", "fotos")]})
         return self._a_detalle(self._repo.obtener(actual["sku"]))
 
     def quitar_imagen(self, sku: str, imagen_id: int, usuario: Optional[str]) -> ProductoBotDetalleDTO:
         actual = self._obtener_o_error(sku)
+        cuantas = len(self._imagenes.listar(actual["sku"]))
         if self._imagenes.quitar(actual["sku"], imagen_id) is None:
             raise ProductoBotNoEncontradoError("Esa foto no existe en este producto.")
-        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": ["-1"]})
+        self._repo.registrar_historial(actual["sku"], "editado", usuario, {"fotos": [_cuantas(cuantas, "foto", "fotos"), _cuantas(cuantas - 1, "foto", "fotos")]})
         return self._a_detalle(self._repo.obtener(actual["sku"]))
 
     def ordenar_imagenes(self, sku: str, ids: List[int], usuario: Optional[str]) -> ProductoBotDetalleDTO:
@@ -691,6 +700,7 @@ class ProductosBotService:
                 {"id": i["id"], "url": i["url"], "storage_path": i["storage_path"], "orden": i["orden"]}
                 for i in self._imagenes.listar(fila["sku"])
             ],
+            carpeta_fotos=carpeta_de(fila["id"]),
         )
 
     @staticmethod

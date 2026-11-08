@@ -52,14 +52,12 @@ def controla_su_stock(producto: Dict[str, Any]) -> bool:
 def flete_estimado(producto: Dict[str, Any], envio_general: Decimal) -> Decimal:
     """El flete que se resta de la ganancia al calcular precios y margen de este producto.
 
-    - Si el dueño anotó el flete de ESTE producto, ese manda (un kit de 4 kg no cuesta lo mismo que
-      unos audífonos).
-    - Si no, y el precio incluye el envío, el envío estimado general.
     - Si el envío se cobra APARTE al cliente, el flete no sale del precio: 0 (la ganancia real de cada
-      venta, con lo que se cobró y lo que costó, queda guardada en `ventas`)."""
-    propio = _decimal(producto.get("costo_flete_estimado"))
-    if propio is not None:
-        return propio
+      venta, con lo que se cobró y lo que costó, queda guardada en `ventas`).
+    - Si el precio incluye el envío y el dueño anotó el flete de ESTE producto, ese manda (un kit de 4 kg
+      no cuesta lo mismo que unos audífonos).
+    - Si no anotó nada, el envío estimado general."""
     if not producto.get("envio_incluido", True):
         return Decimal("0.00")
-    return envio_general
+    propio = _decimal(producto.get("costo_flete_estimado"))
+    return propio if propio is not None else envio_general

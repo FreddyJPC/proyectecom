@@ -13,7 +13,7 @@ import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, TurnoSimulado, UsoPruebas } from "@/types/producto-bot";
+import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, SolicitudSimulada, TurnoSimulado, UsoPruebas, VentaManualSimulada } from "@/types/producto-bot";
 
 // Mismo límite que el backend (schemas.py).
 const MAX_MENSAJE = 1000;
@@ -27,8 +27,17 @@ const ESCENARIOS = [
   { id: "fuera", label: "Pregunta fuera de la ficha", texto: "¿Tiene garantía de 5 años y puedo pagarlo en 12 cuotas con tarjeta de crédito?", esperado: "Debe pasar la conversación a una persona en vez de inventar una respuesta." },
   { id: "dos", label: "Quiero 2 unidades", texto: "Quiero 2 unidades", esperado: "Debe respetar el máximo de unidades por pedido: si pasa del máximo, se lo explica al cliente." },
   { id: "persona", label: "Quiero hablar con una persona", texto: "Prefiero hablar con una persona, por favor", esperado: "Debe pasar la conversación a una persona enseguida." },
-  { id: "foto", label: "Quiero ver una foto", texto: "¿Tienes fotos? Quiero ver cómo se ve", esperado: "Si la ficha tiene imagen, Victoria envía la foto una sola vez; si no la tiene, lo dice sin prometerla." },
+  { id: "foto", label: "Quiero ver una foto", texto: "¿Tienes fotos? Quiero ver cómo se ve", esperado: "Si el producto tiene fotos, Victoria envía unas pocas (y las siguientes si pides más, sin repetir); si no tiene, dice que por ahora no hay imágenes sin prometerlas." },
 ] as const;
+
+/** Escenarios de un producto PROPIO: el pedido no se crea solo, pasa al dueño. */
+const ESCENARIOS_PROPIO = [
+  { id: "ver", label: "Quiero verlo en persona", texto: "¿Puedo ir a ver el producto antes de comprarlo?", esperado: "Victoria avisa al dueño («Quiere ver el producto») y se despide: la conversación pasa a ti. No debe inventar una dirección ni una cita." },
+  { id: "pagar", label: "¿Cómo pago?", texto: "Quiero pagar, ¿cómo lo hago?", esperado: "Victoria avisa al dueño («Quiere pagar») y sigue tomando los datos del pedido. No da cuentas bancarias ni confirma pagos: eso lo haces tú." },
+  { id: "negociar", label: "¿Me haces rebaja?", texto: "¿Me lo puedes dejar más barato si llevo dos?", esperado: "Victoria no ofrece descuentos: avisa al dueño («Quiere negociar») y pasa la conversación." },
+] as const;
+
+type Escenario = { id: string; label: string; texto: string; esperado: string };
 
 const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   guardar_datos_cliente: "Guardó datos del cliente",
@@ -37,7 +46,9 @@ const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   registrar_metodo_pago: "Registró el método de pago",
   cerrar_venta: "Intentó cerrar la venta",
   escalar_a_humano: "Pasó la conversación a una persona",
-  enviar_foto_producto: "Envió la foto del producto",
+  enviar_foto_producto: "Envió fotos del producto",
+  registrar_entrega: "Ofreció / registró la entrega",
+  solicitar_gestion: "Avisó al dueño",
 };
 
 type Turno = {
@@ -80,6 +91,7 @@ function Dato({ etiqueta, children, heredarColor, className }: { etiqueta: strin
 }
 
 function VentaEnCurso({ estado }: { estado: EstadoPrueba | null }) {
+  const conEnvio = estado?.entregaNombre != null;
   const pago = estado?.metodoPago === "contraentrega" ? "Contraentrega" : estado?.metodoPago === "transferencia" ? "Transferencia" : null;
   return (
     <section aria-label="Venta en curso" className="grid gap-3 rounded-xl border bg-card p-3 sm:p-4">
@@ -96,6 +108,7 @@ function VentaEnCurso({ estado }: { estado: EstadoPrueba | null }) {
         <Dato className="col-span-2" etiqueta="Producto">
             {estado?.productoNombre ? `${estado.cantidad} × ${estado.productoNombre}${estado.productoVariante ? ` (${estado.productoVariante})` : ""}` : null}
           </Dato>
+        {conEnvio && <Dato className="col-span-2" etiqueta="Entrega">{`${estado?.entregaNombre}${estado && Number(estado.costoEnvio) > 0 ? ` (+${formatMoney(estado.costoEnvio)})` : ""}`}</Dato>}
         <Dato etiqueta="Total a cobrar">{estado?.total ? <span className="tabular font-medium">{formatMoney(estado.total)}</span> : null}</Dato>
       </dl>
     </section>
@@ -142,6 +155,30 @@ function PedidoQueSeHabriaEnviado({ pedido }: { pedido: PedidoSimulado }) {
   );
 }
 
+/** Lo que se habría guardado al cerrar la venta de un producto propio (con su ganancia real). */
+function VentaQueSeHabriaGuardado({ venta }: { venta: VentaManualSimulada }) {
+  return (
+    <section aria-label="Pedido para gestionar" className="grid gap-3 rounded-xl border border-status-success/30 bg-status-success-soft p-3 text-status-success-ink sm:p-4">
+      <div className="flex items-start gap-2.5">
+        <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">Pedido que te habría llegado para gestionar</h3>
+          <p className="text-xs">Es una vista previa: no se guardó nada, no se descontó stock y no se avisó a nadie. En la vida real aparecería en «Por gestionar» y te llegaría un aviso por Telegram.</p>
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+        <Dato className="col-span-2" heredarColor etiqueta="Producto">{`${venta.cantidad} × ${venta.producto}${venta.variante ? ` (${venta.variante})` : ""}`}</Dato>
+        <Dato heredarColor etiqueta="Subtotal"><span className="tabular">{formatMoney(venta.subtotal)}</span></Dato>
+        <Dato heredarColor etiqueta="Envío cobrado"><span className="tabular">{formatMoney(venta.costoEnvioCliente)}</span></Dato>
+        <Dato heredarColor etiqueta="Total a cobrar"><span className="tabular font-semibold">{formatMoney(venta.total)}</span></Dato>
+        <Dato heredarColor etiqueta="Entrega">{venta.entrega}</Dato>
+        <Dato heredarColor etiqueta="Forma de pago">{venta.metodoPago === "transferencia" ? "Transferencia" : venta.metodoPago === "contraentrega" ? "Contraentrega" : venta.metodoPago}</Dato>
+        <Dato heredarColor etiqueta="Tu ganancia">{venta.ganancia ? <span className="tabular font-semibold">{formatMoney(venta.ganancia)}</span> : "No se puede calcular (falta algún costo)"}</Dato>
+      </dl>
+    </section>
+  );
+}
+
 function HerramientasUsadas({ herramientas }: { herramientas: LlamadaHerramienta[] }) {
   if (herramientas.length === 0) return null;
   return (
@@ -168,11 +205,14 @@ function HerramientasUsadas({ herramientas }: { herramientas: LlamadaHerramienta
 export function ProbarConVictoria({
   sku,
   nombre,
+  propio = false,
   sinCambiosPendientes,
   usarBorrador = false,
 }: {
   sku: string;
   nombre: string;
+  /** Un producto propio: la prueba ensaya también el cierre manual (el pedido pasa al dueño). */
+  propio?: boolean;
   /** Falso si hay ediciones sin guardar: la prueba usa lo último guardado. */
   sinCambiosPendientes: boolean;
   /** Probar con el borrador de las instrucciones de Victoria (Parámetros → Instrucciones), no con las publicadas. */
@@ -188,7 +228,9 @@ export function ProbarConVictoria({
   const [pendiente, setPendiente] = useState<string | null>(null);
   const [error, setError] = useState<{ mensaje: string; motivos: string[] } | null>(null);
   const [usoLocal, setUsoLocal] = useState<UsoPruebas | null>(null);
-  const [escenario, setEscenario] = useState<(typeof ESCENARIOS)[number] | null>(null);
+  const [escenario, setEscenario] = useState<Escenario | null>(null);
+  const [venta, setVenta] = useState<VentaManualSimulada | null>(null);
+  const [solicitudes, setSolicitudes] = useState<SolicitudSimulada[]>([]);
   const registro = useRef<HTMLDivElement>(null);
 
   const usoApi = useApi<UsoPruebas>(abierto ? "/productos-bot/pruebas/uso" : null);
@@ -196,7 +238,7 @@ export function ProbarConVictoria({
   const sinUsos = uso != null && uso.restantes <= 0;
 
   const enviando = pendiente !== null;
-  const despachado = estado?.estado === "despachado";
+  const despachado = estado?.estado === "despachado" || estado?.estado === "por_gestionar";
   // El máximo es un parámetro del sistema (Parámetros → «Mensajes por prueba»): llega del servidor.
   const maxMensajes = uso?.maxMensajes ?? null;
   const llegoAlMaximo = maxMensajes !== null && turnos.length >= maxMensajes;
@@ -225,6 +267,8 @@ export function ProbarConVictoria({
       setEstado(res.estado);
       setEscalada(res.escalada);
       if (res.pedido) setPedido(res.pedido);
+      if (res.ventaManual) setVenta(res.ventaManual);
+      if (res.solicitudes?.length) setSolicitudes((previas) => [...previas, ...res.solicitudes.filter((s) => !previas.some((p) => p.tipo === s.tipo))]);
       setUsoLocal(res.uso);
     } catch (err) {
       // El mensaje vuelve al cuadro para poder reintentar sin reescribirlo.
@@ -251,6 +295,8 @@ export function ProbarConVictoria({
     setTurnos([]);
     setEstado(null);
     setPedido(null);
+    setVenta(null);
+    setSolicitudes([]);
     setEscalada(false);
     setBorrador("");
     setError(null);
@@ -281,7 +327,7 @@ export function ProbarConVictoria({
           {!sinCambiosPendientes && <p className="text-xs text-muted-foreground">Guarda o descarta tus cambios para probar: la prueba usa lo último que guardaste.</p>}
           {hayPrueba && sinCambiosPendientes && (
             <p role="status" className="text-xs text-muted-foreground">
-              {pedido ? "Hay una compra de prueba completada." : `Hay una prueba en curso (${turnos.length} ${turnos.length === 1 ? "mensaje" : "mensajes"}).`}
+              {pedido || venta ? "Hay una compra de prueba completada." : `Hay una prueba en curso (${turnos.length} ${turnos.length === 1 ? "mensaje" : "mensajes"}).`}
             </p>
           )}
 
@@ -291,7 +337,7 @@ export function ProbarConVictoria({
               <DialogDescription>
                 Es una conversación de ensayo con «{nombre}» tal como está guardado
                 {usarBorrador && <>, usando <strong className="font-medium text-foreground">tu borrador de instrucciones</strong></>}.{" "}
-                <strong className="font-medium text-foreground">No se envía nada a Rocketfy, WhatsApp ni Telegram, y la conversación no se guarda.</strong> Cada mensaje usa la IA y cuenta para tu tope diario.
+                <strong className="font-medium text-foreground">No se envía nada a Rocketfy, WhatsApp ni Telegram, no se guarda ninguna venta y la conversación no se guarda.</strong> Cada mensaje usa la IA y cuenta para tu tope diario.
               </DialogDescription>
             </DialogHeader>
 
@@ -315,7 +361,7 @@ export function ProbarConVictoria({
                     // Con todos los botones deshabilitados, la fila con scroll no tendría nada enfocable: se enfoca ella misma.
                     tabIndex={enviando || bloqueada ? 0 : undefined}
                     className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-                    {ESCENARIOS.map((e) => (
+                    {[...ESCENARIOS, ...(propio ? ESCENARIOS_PROPIO : [])].map((e) => (
                       <Button
                         key={e.id}
                         type="button"
@@ -401,13 +447,13 @@ export function ProbarConVictoria({
                   )}
                 </div>
 
-                {escalada && (
+                {escalada && !despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
                     <UserRound className="mt-0.5 size-4 shrink-0" aria-hidden />
                     Victoria pasó la conversación a una persona. En la vida real ya no seguiría respondiendo: reinicia la prueba para probar otro caso.
                   </p>
                 )}
-                {despachado && !escalada && (
+                {despachado && (
                   <p role="status" className="flex items-start gap-2.5 rounded-lg bg-status-success-soft p-3 text-sm text-status-success-ink">
                     <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
                     La compra se cerró. En la vida real, si el cliente vuelve a escribir lo atiende una persona. Reinicia la prueba para probar otro caso.
@@ -469,6 +515,20 @@ export function ProbarConVictoria({
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
                 <VentaEnCurso estado={estado} />
                 {pedido && <PedidoQueSeHabriaEnviado pedido={pedido} />}
+                {venta && <VentaQueSeHabriaGuardado venta={venta} />}
+                {solicitudes.length > 0 && (
+                  <section aria-label="Solicitudes de gestión" className="grid gap-1.5 rounded-xl border bg-card p-3 sm:p-4">
+                    <h3 className="text-sm font-semibold">Lo que te habría llegado en «Por gestionar»</h3>
+                    <ul className="list-disc space-y-1 pl-4 text-sm">
+                      {solicitudes.map((s) => (
+                        <li key={s.tipo}>
+                          <span className="font-medium">{s.etiqueta}</span>
+                          {s.detalle ? `: ${s.detalle}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
                 {avisos.length > 0 && (
                   <section aria-label="Avisos que se habrían enviado" className="grid gap-1.5 rounded-xl border bg-status-warning-soft p-3 text-status-warning-ink sm:p-4">
                     <h3 className="text-sm font-semibold">Avisos que se habrían enviado a Telegram</h3>

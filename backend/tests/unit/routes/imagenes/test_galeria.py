@@ -9,6 +9,7 @@ from src.config.database import get_connection
 from src.routes.imagenes.logica import (
     MAXIMO_POR_PRODUCTO,
     RutaDeImagenInvalida,
+    carpeta_de,
     galeria_para_enviar,
     url_publica,
     validar_ruta,
@@ -33,18 +34,21 @@ class TestReglas:
     def test_la_ruta_con_espacios_o_acentos_se_codifica(self):
         assert url_publica("https://abc.supabase.co", "SKU 1/foto.png").endswith("/productos/SKU%201/foto.png")
 
-    @pytest.mark.parametrize("ruta", ["PROP-0001/abc.jpg", "PROP-0001/a-b_c.1.JPEG", "PROP-0001/z.png"])
+    @pytest.mark.parametrize("ruta", ["p7/abc.jpg", "p7/a-b_c.1.JPEG", "p7/z.png"])
     def test_rutas_validas(self, ruta):
-        assert validar_ruta("PROP-0001", ruta) == ruta
+        assert validar_ruta("p7", ruta) == ruta
+
+    def test_la_carpeta_es_el_id_del_producto_no_su_sku(self):
+        assert carpeta_de(42) == "p42"
 
     @pytest.mark.parametrize(
         "ruta",
-        ["", "x.jpg", "OTRO-SKU/a.jpg", "PROP-0001/sub/a.jpg", "PROP-0001/../a.jpg", "PROP-0001/..jpg",
-         "PROP-0001/a.gif", "PROP-0001/a.webp", "PROP-0001/a", "PROP-0001/a b.jpg", "/PROP-0001/a.jpg", "PROP-0001/" + "x" * 130 + ".jpg"],
+        ["", "x.jpg", "p8/a.jpg", "p7/sub/a.jpg", "p7/../a.jpg", "p7/..jpg",
+         "p7/a.gif", "p7/a.webp", "p7/a", "p7/a b.jpg", "/p7/a.jpg", "p7/" + "x" * 130 + ".jpg"],
     )
     def test_rutas_que_no_se_aceptan(self, ruta):
         with pytest.raises(RutaDeImagenInvalida):
-            validar_ruta("PROP-0001", ruta)
+            validar_ruta("p7", ruta)
 
     def test_la_galeria_a_enviar_prefiere_las_subidas(self):
         subidas = [{"url": "https://a/1.jpg"}, {"url": "https://a/2.jpg"}]
@@ -171,15 +175,15 @@ def _servicio(filas=None):
 class TestServicio:
     def test_registrar_arma_la_url_con_el_proyecto_de_supabase_y_la_muestra_en_el_detalle(self):
         servicio, imagenes, repo = _servicio()
-        detalle = servicio.registrar_imagen("PROP-0001", "PROP-0001/a.jpg", "freddy@azoshop.com")
+        detalle = servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "freddy@azoshop.com")
 
-        esperada = f"{SUPABASE_URL}/storage/v1/object/public/productos/PROP-0001/a.jpg"
-        assert detalle.imagenes == [{"id": 1, "url": esperada, "storage_path": "PROP-0001/a.jpg", "orden": 0}]
-        assert repo.historial[-1]["cambios"] == {"fotos": ["+1"]}
+        esperada = f"{SUPABASE_URL}/storage/v1/object/public/productos/p2/a.jpg"
+        assert detalle.imagenes == [{"id": 1, "url": esperada, "storage_path": "p2/a.jpg", "orden": 0}]
+        assert repo.historial[-1]["cambios"] == {"fotos": ["0 fotos", "1 foto"]}
 
     def test_rutas_de_otro_producto_o_formatos_raros_se_rechazan(self):
         servicio, imagenes, _ = _servicio()
-        for ruta in ("OTRO/a.jpg", "PROP-0001/a.gif", "PROP-0001/../x.jpg"):
+        for ruta in ("p9/a.jpg", "PROP-0001/a.jpg", "p2/a.gif", "p2/../x.jpg"):
             with pytest.raises(DatosDeProductoInvalidosError):
                 servicio.registrar_imagen("PROP-0001", ruta, "x")
         assert imagenes.filas == []
@@ -187,27 +191,27 @@ class TestServicio:
     def test_maximo_de_fotos_por_producto(self):
         servicio, imagenes, _ = _servicio()
         for n in range(MAXIMO_POR_PRODUCTO):
-            servicio.registrar_imagen("PROP-0001", f"PROP-0001/{n}.jpg", "x")
+            servicio.registrar_imagen("PROP-0001", f"p2/{n}.jpg", "x")
         with pytest.raises(DatosDeProductoInvalidosError) as error:
-            servicio.registrar_imagen("PROP-0001", "PROP-0001/otra.jpg", "x")
+            servicio.registrar_imagen("PROP-0001", "p2/otra.jpg", "x")
         assert "Máximo" in error.value.mensajes[0]
 
     def test_la_misma_foto_dos_veces(self):
         servicio, *_ = _servicio()
-        servicio.registrar_imagen("PROP-0001", "PROP-0001/a.jpg", "x")
+        servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "x")
         with pytest.raises(DatosDeProductoInvalidosError):
-            servicio.registrar_imagen("PROP-0001", "PROP-0001/a.jpg", "x")
+            servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "x")
 
     def test_un_producto_archivado_no_recibe_fotos(self):
         from src.routes.productos_bot.exceptions import TransicionInvalidaError
 
         servicio, *_ = _servicio([_propio(estado="archivado")])
         with pytest.raises(TransicionInvalidaError):
-            servicio.registrar_imagen("PROP-0001", "PROP-0001/a.jpg", "x")
+            servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "x")
 
     def test_quitar_y_quitar_una_que_no_existe(self):
         servicio, imagenes, _ = _servicio()
-        servicio.registrar_imagen("PROP-0001", "PROP-0001/a.jpg", "x")
+        servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "x")
         assert servicio.quitar_imagen("PROP-0001", 1, "x").imagenes == []
         with pytest.raises(ProductoBotNoEncontradoError):
             servicio.quitar_imagen("PROP-0001", 1, "x")
@@ -215,7 +219,7 @@ class TestServicio:
     def test_ordenar_exige_exactamente_las_que_hay(self):
         servicio, *_ = _servicio()
         for n in "abc":
-            servicio.registrar_imagen("PROP-0001", f"PROP-0001/{n}.jpg", "x")
+            servicio.registrar_imagen("PROP-0001", f"p2/{n}.jpg", "x")
         orden = servicio.ordenar_imagenes("PROP-0001", [3, 1, 2], "x")
         assert [i["id"] for i in orden.imagenes] == [3, 1, 2]
         for malo in ([1, 2], [1, 2, 3, 4], [1, 1, 2], [1, 2, 9]):

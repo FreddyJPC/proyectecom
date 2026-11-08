@@ -133,11 +133,8 @@ def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]]) ->
     """Lo que Victoria sabe del envío de un producto (va en su ficha)."""
     activas = [o for o in opciones if o.get("activo", True)]
     if envio_incluido:
-        base = "Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente."
-        if not activas:
-            return base
-        lineas = [f"- {describir(o)} (para {donde_aplica(o)})" for o in activas]
-        return base + " Opciones de entrega:\n" + "\n".join(lineas)
+        # Las opciones solo existen cuando el envío se cobra aparte: con el envío incluido no hay nada que elegir.
+        return "Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente."
     if not activas:
         return "Envío: este producto todavía no tiene opciones de entrega definidas; si el cliente pregunta, usa escalar_a_humano."
     lineas = [f"- {describir(o)} (para {donde_aplica(o)})" for o in activas]

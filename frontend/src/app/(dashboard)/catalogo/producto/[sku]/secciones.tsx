@@ -156,11 +156,42 @@ export function DatosRocketfy({
   );
 }
 
-const CAMPOS_DINERO = new Set(["precio", "costo_rocketfy", "precio_sugerido_rocketfy"]);
+/** Resumen de un producto propio (no está en Rocketfy): lo que se edita está en las secciones de la izquierda. */
+export function DatosProductoPropio({ detalle }: { detalle: ProductoBotDetalle }) {
+  const sinControl = !detalle.controlaStock;
+  return (
+    <SectionCard titulo="Producto propio" descripcion="Lo vendes tú: el pedido te llega a ti para gestionarlo.">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:p-5">
+        <Dato label="SKU">
+          <span className="tabular break-all">{detalle.sku}</span>
+        </Dato>
+        <Dato label="Categoría">{detalle.categoria}</Dato>
+        <Dato label="Lo que te cuesta">{detalle.costoPropio ? <span className="tabular font-medium">{formatMoney(detalle.costoPropio)}</span> : null}</Dato>
+        <Dato label="Stock">
+          {sinControl ? (
+            <span className="text-muted-foreground">Sin control</span>
+          ) : (
+            <>
+              <span className="tabular">{detalle.stockUltimo ?? "—"}</span>
+              {detalle.stockActualizadoEn && <span className="text-xs text-muted-foreground"> · {tiempoRelativo(detalle.stockActualizadoEn)}</span>}
+            </>
+          )}
+        </Dato>
+        <Dato label="Envío">
+          {detalle.envioIncluido ? "Incluido en el precio" : `Aparte (${detalle.entregas.filter((e) => e.activo).length} ${detalle.entregas.filter((e) => e.activo).length === 1 ? "opción activa" : "opciones activas"})`}
+        </Dato>
+        <Dato label="Fotos">{detalle.imagenes.length > 0 ? `${detalle.imagenes.length}` : "Ninguna"}</Dato>
+      </dl>
+    </SectionCard>
+  );
+}
+
+const CAMPOS_DINERO = new Set(["precio", "costo_rocketfy", "precio_sugerido_rocketfy", "costo_propio", "costo_flete_estimado"]);
 
 function textoDeValor(campo: string, valor: unknown): string {
   if (valor == null || valor === "") return "vacío";
   if (campo === "estado") return estadoProductoBotInfo(String(valor)).label;
+  if (typeof valor === "boolean") return valor ? "sí" : "no";
   if (CAMPOS_DINERO.has(campo)) return formatMoney(String(valor));
   return String(valor);
 }
