@@ -12,7 +12,7 @@ Rocketfy ni WhatsApp**.
 | `server.mjs` | Servidor falso que simula el login de Supabase y la API del backend con datos realistas (pedidos, conversaciones, alertas, catálogo, métricas). |
 | `shots.mjs` | Inicia sesión y saca capturas de cada pantalla (escritorio 1440 px y móvil 390 px). |
 | `interact.mjs` | Capturas de interacciones: menú "Más", diálogos, panel de datos, estados de error y vacío, tablet. |
-| `axe.mjs` | Auditoría de accesibilidad (WCAG 2.1 AA + buenas prácticas) en todas las pantallas y en los cuadros abiertos, claro y oscuro, **y comprobación de desborde horizontal** (nada fuera de pantalla en el móvil). Debe dar `SIN VIOLACIONES`. |
+| `axe.mjs` | Auditoría de accesibilidad (WCAG 2.1 AA + buenas prácticas) en todas las pantallas y en los cuadros abiertos, claro y oscuro, **y comprobación de desborde horizontal** (nada fuera de pantalla en el móvil). **Abre cada botón ⓘ** (`InfoButton`) de cada pantalla —y los que hay dentro de otros cuadros— y audita su cuadro (`SIN_INFOS=1` los salta para ir más rápido). Debe dar `SIN VIOLACIONES`. |
 
 ## Cómo usarlas
 ```bash
@@ -31,7 +31,7 @@ npx next dev -p 3100
 # 4) capturas / auditoría (desde frontend/tools/ui-preview)
 node shots.mjs                    # -> shots/*.png  (OUT=carpeta, ONLY=resumen,pedidos, THEME=dark, FULL=0)
 node interact.mjs                 # -> shots/*.png
-node axe.mjs                      # -> lista de problemas, o SIN VIOLACIONES (ONLY=/gestion,/catalogo/propio para auditar solo algunas rutas)
+node axe.mjs                      # -> lista de problemas, o SIN VIOLACIONES (ONLY=/gestion,/catalogo/propio para auditar solo algunas rutas; SIN_INFOS=1 para no abrir los cuadros ⓘ; la auditoría completa tarda ~10 min)
 ```
 
 Si Playwright no encuentra el navegador, indica uno con `CHROMIUM_PATH=/ruta/a/chrome`
