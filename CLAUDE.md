@@ -204,7 +204,7 @@ posible y rotarlos.
   `us-west2`), dominio `backend-production-3e43.up.railway.app`. Repositorio
   conectado, **backend desplegado y sano** (2026-10-30; `/health` →
   `scheduler: true`). **Ojo:** el despliegue automático NO se ha podido comprobar (pendiente #48; no se
-  disparó en 12 fusiones seguidas hasta el 2026-11-08). Tras fusionar a `main` algo de `backend/`, reconectar la
+  disparó en 13 fusiones seguidas hasta el 2026-11-08). Tras fusionar a `main` algo de `backend/`, reconectar la
   fuente con `connect-service-source` y verificar el despliegue en los logs.
 - Vercel: `proyectecom-dashboard` **desplegado en producción**
   (`https://proyectecom-dashboard.vercel.app`, 2026-10-30). Tiene *Vercel
@@ -228,11 +228,14 @@ posible y rotarlos.
   (tablas `parametros_sistema`, `parametros_historial`, `victoria_instrucciones_versiones`).
   Pantalla Control → Parámetros (+ Instrucciones de Victoria). Mientras no se guarde nada
   en la app, todo vale lo mismo que antes (variable del servidor o valor del código).
-- **Productos propios (ADR-012, ver `PROGRESS.md` 0.0.104/0.0.105 para el estado de
-  despliegue):** migraciones 020 (proveedores, categorías, envío por producto, ventas,
-  «Por gestionar») y 021 (galería y bucket público `productos` de Supabase Storage).
+- **Productos propios (ADR-012, desplegado 2026-11-08, PR #19):** migraciones 020
+  (proveedores, categorías, envío por producto, ventas, «Por gestionar») y 021 (galería y
+  bucket público `productos` de Supabase Storage) aplicadas en Supabase (21 migraciones).
   Menú «Por gestionar»; «Publicar producto propio» en Catálogo → Mis productos.
-  Parámetros del sistema: ya son 16 (nuevo `bot.max_fotos_por_envio`).
+  Parámetros del sistema: ya son 16 (nuevo `bot.max_fotos_por_envio`). Los 2 productos que
+  había siguen siendo de Rocketfy. **Aún no se ha probado una venta propia real** (pendiente
+  #61); las fotos por WhatsApp siguen apagadas (pendiente #58). Hay una sola cuenta en
+  Supabase Auth: no abrir el registro de usuarios (pendiente #65).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
