@@ -3,7 +3,7 @@ Pruebas de Victoria con errores humanos (ortografía, abreviaturas, palabras peg
 respuestas de confirmación informales...). Usa la SIMULACIÓN del backend ("Probar con Victoria"): nada real se envía ni se
 guarda; el pedido de Rocketfy y Telegram son de mentira. La IA es la REAL (Anthropic) cuando se pasa --real.
 
-Uso (desde backend/, con las variables de CLAUDE.md §5 y, para --real, ANTHROPIC_API_KEY):
+Uso (desde backend/, con las variables de CLAUDE.md §5 y, para --real, ANTHROPIC_API_KEY_PRUEBAS o ANTHROPIC_API_KEY):
     python tools/pruebas_con_errores_humanos.py --seco            # IA falsa: solo comprueba que el guion corre
     python tools/pruebas_con_errores_humanos.py --real [ids...]   # IA real (cuesta unos centavos); ids = S1 S2 ... (todos si no se pasan)
 Los mismos casos, para escribirlos a mano en la app, están en docs/PRUEBAS_CON_ERRORES_HUMANOS.md.
@@ -101,9 +101,17 @@ def correr(id_escenario, llm):
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "--real" in args:
-        from src.integrations.llm.factory import get_llm_client
+        import os
 
-        llm = get_llm_client()  # exige ANTHROPIC_API_KEY
+        from src.config.parametros import parametros
+        from src.integrations.llm.factory import _proveedor_anthropic
+
+        # La plataforma de Claude Code puede ignorar la variable ANTHROPIC_API_KEY (la usa para su propia sesión): por eso
+        # también se acepta ANTHROPIC_API_KEY_PRUEBAS. Solo se lee el valor para pasarlo al cliente; nunca se imprime.
+        clave = os.environ.get("ANTHROPIC_API_KEY_PRUEBAS") or os.environ.get("ANTHROPIC_API_KEY")
+        if not clave:
+            sys.exit("Falta la clave: define ANTHROPIC_API_KEY_PRUEBAS (o ANTHROPIC_API_KEY) en el entorno.")
+        llm = _proveedor_anthropic(clave, parametros.valor("llm.modelo"))
     else:
         llm = LLMSeco()
     ids = [a for a in args if a in ESCENARIOS] or list(ESCENARIOS)

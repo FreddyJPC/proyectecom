@@ -5,7 +5,7 @@
 mal escrito. Se corre en la app: **Catálogo → un producto → «Probar con Victoria»** (no envía nada a ningún cliente ni crea pedidos
 reales). Escribe cada mensaje tal cual, en orden, y compara con «Qué debe pasar».
 
-También se puede correr desde la terminal con `backend/tools/pruebas_con_errores_humanos.py --real` (necesita `ANTHROPIC_API_KEY`;
+También se puede correr desde la terminal con `backend/tools/pruebas_con_errores_humanos.py --real` (necesita `ANTHROPIC_API_KEY_PRUEBAS` o `ANTHROPIC_API_KEY`;
 cuesta unos centavos). El producto del guion es «Audífonos Bluetooth», colores negro y blanco, envío incluido, hasta 3 unidades.
 
 | # | Situación | Mensajes del cliente (en orden) | Qué debe pasar |
