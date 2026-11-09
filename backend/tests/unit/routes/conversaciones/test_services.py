@@ -16,6 +16,7 @@ from src.routes.conversaciones.exceptions import (
 )
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.conversaciones.services import ConversacionesService
+from tests.helpers_canales import registro_de_whatsapp
 
 AHORA = datetime.now(timezone.utc)
 
@@ -28,14 +29,16 @@ class FakeConversacionRepository:
         fila = self.tabla.get(conversacion_id)
         return dict(fila) if fila else None
 
-    def listar(self, estado=None, origen=None, q=None, page=1, page_size=20):
+    def listar(self, estado=None, origen=None, q=None, page=1, page_size=20, canal=None):
         filas = list(self.tabla.values())
         if estado:
             filas = [f for f in filas if f["estado"] == estado]
         if origen:
             filas = [f for f in filas if f["origen"] == origen]
+        if canal:
+            filas = [f for f in filas if f["canal"] == canal]
         if q:
-            filas = [f for f in filas if q in f["telefono"] or q.lower() in (f.get("nombre_cliente") or "").lower()]
+            filas = [f for f in filas if q in (f["telefono"] or "") or q.lower() in (f.get("nombre_cliente") or "").lower()]
         filas.sort(key=lambda f: f["creada_en"] if estado == "escalada" else f["actualizada_en"], reverse=(estado != "escalada"))
         total = len(filas)
         inicio = (page - 1) * page_size
@@ -94,15 +97,19 @@ class FakeMensajeRepository:
 
 
 def _conversacion(
-    id=1, telefono="593987654321", origen="directo", estado="activa", fep_expira_en=None, vista_en=None,
-    notas_internas=None, id_anuncio=None, creada_en=None, actualizada_en=None,
+    id=1, telefono="593987654321", origen="directo", estado="activa", vista_en=None,
+    notas_internas=None, id_anuncio=None, creada_en=None, actualizada_en=None, canal="whatsapp", id_externo=None,
+    contacto_nombre=None,
 ):
     return {
         "id": id,
+        "contacto_id": id,
+        "canal": canal,
+        "id_externo": id_externo or telefono,
         "telefono": telefono,
+        "contacto_nombre": contacto_nombre,
         "origen": origen,
         "estado": estado,
-        "fep_expira_en": fep_expira_en,
         "id_anuncio": id_anuncio,
         "vista_en": vista_en,
         "notas_internas": notas_internas,
@@ -127,7 +134,7 @@ class FakeAnuncioRepository:
 
 def _servicio(conversaciones=None, leads=None, mensajes=None, whatsapp=None, llegadas=None, vinculos=None):
     return ConversacionesService(
-        whatsapp_client=whatsapp or MagicMock(),
+        canales=registro_de_whatsapp(whatsapp or MagicMock()),
         conversacion_repo=FakeConversacionRepository(conversaciones=conversaciones or []),
         lead_repo=FakeLeadRepository(leads_por_conversacion=leads or {}),
         mensaje_repo=FakeMensajeRepository(mensajes_por_conversacion=mensajes or {}),
@@ -170,7 +177,7 @@ class TestVentanaDeMensajeria:
         llegadas = {1: [{"id_anuncio": "123", "creado_en": AHORA - timedelta(hours=30)}]}
         whatsapp = MagicMock()
         servicio = _servicio(
-            conversaciones=[_conversacion(origen="fep", id_anuncio="123")], mensajes=mensajes, whatsapp=whatsapp, llegadas=llegadas
+            conversaciones=[_conversacion(origen="anuncio", id_anuncio="123")], mensajes=mensajes, whatsapp=whatsapp, llegadas=llegadas
         )
 
         with pytest.raises(VentanaMensajeriaCerradaError):
@@ -182,7 +189,7 @@ class TestVentanaDeMensajeria:
         whatsapp = MagicMock()
         mensaje_repo = FakeMensajeRepository()
         servicio = ConversacionesService(
-            whatsapp_client=whatsapp,
+            canales=registro_de_whatsapp(whatsapp),
             conversacion_repo=FakeConversacionRepository(conversaciones=[_conversacion(origen="directo")]),
             lead_repo=FakeLeadRepository(),
             mensaje_repo=mensaje_repo,
@@ -201,7 +208,7 @@ class TestVentanaDeMensajeria:
         whatsapp.enviar_texto.side_effect = WhatsAppBusinessError("número no en ventana de 24h", code=131047)
         mensaje_repo = FakeMensajeRepository(mensajes_por_conversacion=mensajes)
         servicio = ConversacionesService(
-            whatsapp_client=whatsapp,
+            canales=registro_de_whatsapp(whatsapp),
             conversacion_repo=FakeConversacionRepository(conversaciones=[_conversacion()]),
             lead_repo=FakeLeadRepository(),
             mensaje_repo=mensaje_repo,
@@ -213,6 +220,53 @@ class TestVentanaDeMensajeria:
 
         guardados = mensaje_repo.obtener_por_conversacion(1)
         assert any(m["rol"] == "humano" and m["contenido"] == "hola" for m in guardados)
+
+
+class TestCanales:
+    """ADR-014: la conversación sabe por qué canal habla el cliente y el panel no depende de que haya teléfono."""
+
+    def test_el_listado_trae_canal_identificador_y_nombre_aunque_no_haya_telefono(self):
+        servicio = _servicio(conversaciones=[
+            _conversacion(id=1),
+            _conversacion(id=2, telefono=None, canal="instagram", id_externo="17841400000000000", contacto_nombre="ana_ec"),
+        ])
+        items = {i.id: i for i in servicio.listar_conversaciones().items}
+        assert (items[1].canal, items[1].id_externo, items[1].telefono) == ("whatsapp", "593987654321", "593987654321")
+        assert (items[2].canal, items[2].id_externo, items[2].telefono, items[2].nombre) == (
+            "instagram", "17841400000000000", None, "ana_ec",
+        )
+
+    def test_se_puede_filtrar_el_listado_por_canal(self):
+        servicio = _servicio(conversaciones=[
+            _conversacion(id=1),
+            _conversacion(id=2, telefono=None, canal="instagram", id_externo="1784"),
+        ])
+        assert [i.id for i in servicio.listar_conversaciones(canal="instagram").items] == [2]
+
+    def test_el_detalle_dice_el_canal_y_el_contacto(self):
+        servicio = _servicio(conversaciones=[_conversacion(id=2, telefono=None, canal="instagram", id_externo="1784")])
+        c = servicio.obtener_detalle(2).conversacion
+        assert (c.canal, c.id_externo, c.telefono, c.contacto_id) == ("instagram", "1784", None, 2)
+
+    def test_escribir_a_un_canal_sin_conectar_guarda_el_mensaje_y_avisa_que_no_salio(self):
+        mensajes = {2: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=1)}]}
+        whatsapp = MagicMock()
+        mensaje_repo = FakeMensajeRepository(mensajes_por_conversacion=mensajes)
+        servicio = ConversacionesService(
+            canales=registro_de_whatsapp(whatsapp),
+            conversacion_repo=FakeConversacionRepository(
+                conversaciones=[_conversacion(id=2, telefono=None, canal="instagram", id_externo="1784")]
+            ),
+            lead_repo=FakeLeadRepository(),
+            mensaje_repo=mensaje_repo,
+            anuncio_servicio=AnuncioServicio(repo=FakeAnuncioRepository(), productos=MagicMock()),
+        )
+
+        with pytest.raises(EnvioWhatsAppFallidoError, match="todavía no está conectado"):
+            servicio.enviar_mensaje_manual(2, "hola Ana")
+
+        whatsapp.enviar_texto.assert_not_called()  # nunca se manda por el canal equivocado
+        assert any(m["rol"] == "humano" for m in mensaje_repo.obtener_por_conversacion(2))
 
 
 class TestObtenerDetalle:
@@ -274,7 +328,7 @@ class TestOrigenYAnuncioEnElDetalle:
         llegadas = {1: [{**self.LLEGADA, "creado_en": ahora - timedelta(hours=1)}]}
         vinculos = {"123": {"producto_sku": "AUD-1", "producto_nombre": "Audífonos Pro"}}
         servicio = _servicio(
-            conversaciones=[_conversacion(origen="fep", id_anuncio="123")], mensajes=mensajes, llegadas=llegadas, vinculos=vinculos
+            conversaciones=[_conversacion(origen="anuncio", id_anuncio="123")], mensajes=mensajes, llegadas=llegadas, vinculos=vinculos
         )
 
         c = servicio.obtener_detalle(1).conversacion
@@ -289,7 +343,7 @@ class TestOrigenYAnuncioEnElDetalle:
 
     def test_anuncio_sin_producto_vinculado_deja_el_producto_en_none(self):
         llegadas = {1: [{**self.LLEGADA, "creado_en": datetime.now(timezone.utc)}]}
-        servicio = _servicio(conversaciones=[_conversacion(origen="fep", id_anuncio="123")], llegadas=llegadas)
+        servicio = _servicio(conversaciones=[_conversacion(origen="anuncio", id_anuncio="123")], llegadas=llegadas)
 
         assert servicio.obtener_detalle(1).conversacion.anuncio.producto is None
 

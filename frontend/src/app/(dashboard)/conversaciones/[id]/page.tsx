@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { estadoConversacionInfo } from "@/lib/estados";
+import { lineaDeCanal, nombreCanal, nombreDeCliente } from "@/lib/canales";
 import { etiquetaDia, formatFechaHora, formatHora, formatMoney, formatPhone, tiempoRestante } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion } from "@/types/conversacion";
@@ -29,7 +30,7 @@ function Dato({ label, children }: { label: string; children?: ReactNode }) {
   return (
     <div className="space-y-0.5">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("text-sm", vacio && "text-muted-foreground/70 italic")}>{vacio ? "Sin definir aún" : children}</dd>
+      <dd className={cn("text-sm", vacio && "text-muted-foreground italic")}>{vacio ? "Sin definir aún" : children}</dd>
     </div>
   );
 }
@@ -87,7 +88,7 @@ function PanelDatos({
   onGuardarNota: () => void;
   guardandoNota: boolean;
   notaCambiada: boolean;
-  telefono: string;
+  telefono: string | null;
 }) {
   const puedeCrearPedido = Boolean(lead?.nombreCliente && lead?.direccion && lead?.productoNombre) && lead?.estado !== "despachado" && lead?.estado !== "cancelado";
 
@@ -109,10 +110,13 @@ function PanelDatos({
         </h2>
         <dl className="space-y-3">
           <Dato label="Nombre">{lead?.nombreCliente}</Dato>
+          <Dato label="Canal">{nombreCanal(conversacion.canal)}</Dato>
           <Dato label="Teléfono">
-            <a href={`tel:+${telefono}`} className="tabular text-primary underline-offset-2 hover:underline">
-              {formatPhone(telefono)}
-            </a>
+            {telefono ? (
+              <a href={`tel:+${telefono}`} className="tabular text-primary underline-offset-2 hover:underline">
+                {formatPhone(telefono)}
+              </a>
+            ) : null}
           </Dato>
           <Dato label="Dirección">{lead?.direccion}</Dato>
           <Dato label="Cantón y provincia">{[lead?.canton, lead?.provincia].filter(Boolean).join(", ")}</Dato>
@@ -298,7 +302,7 @@ export default function ConversacionDetallePage() {
 
   const { conversacion, lead } = data;
   const info = estadoConversacionInfo(conversacion.estado);
-  const nombre = lead?.nombreCliente || formatPhone(conversacion.telefono);
+  const nombre = nombreDeCliente({ nombreCliente: lead?.nombreCliente, nombre: conversacion.nombre, telefono: conversacion.telefono, idExterno: conversacion.idExterno });
   const nota = notaLocal ?? conversacion.notasInternas ?? "";
   const notaCambiada = notaLocal !== null && notaLocal !== (conversacion.notasInternas ?? "");
 
@@ -320,14 +324,14 @@ export default function ConversacionDetallePage() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Cabecera del chat */}
         <div className="flex items-center gap-3 border-b bg-card px-4 py-3">
-          <AvatarInitials nombre={lead?.nombreCliente ?? conversacion.telefono} semilla={conversacion.telefono} className="size-11" />
+          <AvatarInitials nombre={lead?.nombreCliente ?? conversacion.nombre ?? conversacion.telefono} semilla={conversacion.idExterno} className="size-11" />
           <div className="min-w-0 flex-1">
             <h1 className="sr-only lg:hidden">Conversación con {nombre}</h1>
             <h2 className="sr-only hidden lg:block">Conversación con {nombre}</h2>
             <p className="truncate font-semibold">{nombre}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <StatusBadge label={info.label} variant={info.variant} className="h-5 px-2 text-[0.7rem]" />
-              <span className="tabular truncate text-xs text-muted-foreground">{formatPhone(conversacion.telefono)}</span>
+              <span className="tabular truncate text-xs text-muted-foreground">{lineaDeCanal(conversacion)}</span>
             </div>
           </div>
           <Sheet open={panelAbierto} onOpenChange={setPanelAbierto}>

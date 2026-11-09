@@ -21,7 +21,7 @@ from .exceptions import AccionDeVentaNoPermitidaError, StockInsuficienteError, V
 from .reglas import motivo_para_no_cancelar, motivo_para_no_cobrar, motivo_para_no_deshacer_cobro
 
 _COLUMNAS_VENTA = (
-    "lead_id", "conversacion_id", "proveedor_id", "canal", "id_anuncio", "estado", "metodo_pago",
+    "lead_id", "conversacion_id", "contacto_id", "proveedor_id", "origen", "canal", "id_anuncio", "estado", "metodo_pago",
     "cliente_nombre", "telefono", "direccion", "canton", "provincia", "entrega_tipo", "entrega_nombre",
     "subtotal", "costo_envio_cliente", "total", "costo_productos", "costo_envio_negocio",
     "id_pedido_local", "id_pedido_rocketfy",

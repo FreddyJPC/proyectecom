@@ -111,8 +111,31 @@ class TestRecepcionDeMensajes:
         MockService.return_value.procesar_mensaje_entrante.assert_called_once()
         dto_enviado = MockService.return_value.procesar_mensaje_entrante.call_args.args[0]
         assert dto_enviado.wamid == "wamid.HBgLNTkzOTg3NjU0MzIx"
-        assert dto_enviado.telefono == "593987654321"
+        assert dto_enviado.id_externo == "593987654321" and dto_enviado.canal == "whatsapp"
         assert dto_enviado.contenido == "Hola"
+
+    @patch("src.routes.whatsapp.controllers.threading.Thread", _HiloSincronoFalso)
+    @patch("src.routes.whatsapp.controllers.WebhookService")
+    def test_el_nombre_de_perfil_de_quien_escribe_llega_al_servicio(self, MockService, client):
+        payload = _payload_mensaje_texto()
+        valor = payload["entry"][0]["changes"][0]["value"]
+        valor["contacts"] = [{"profile": {"name": "Ana Pérez"}, "wa_id": "593987654321"}]
+
+        _post_firmado(client, payload)
+
+        dto_enviado = MockService.return_value.procesar_mensaje_entrante.call_args.args[0]
+        assert dto_enviado.nombre_perfil == "Ana Pérez"
+
+    @patch("src.routes.whatsapp.controllers.threading.Thread", _HiloSincronoFalso)
+    @patch("src.routes.whatsapp.controllers.WebhookService")
+    def test_sin_contactos_o_con_una_forma_rara_el_mensaje_igual_se_procesa(self, MockService, client):
+        payload = _payload_mensaje_texto()
+        payload["entry"][0]["changes"][0]["value"]["contacts"] = [None, {"wa_id": "otro"}, {"wa_id": "593987654321", "profile": None}]
+
+        resp = _post_firmado(client, payload)
+
+        assert resp.status_code == 200
+        assert MockService.return_value.procesar_mensaje_entrante.call_args.args[0].nombre_perfil is None
 
     @patch("src.routes.whatsapp.controllers.threading.Thread", _HiloSincronoFalso)
     @patch("src.routes.whatsapp.controllers.WebhookService")

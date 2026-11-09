@@ -17,7 +17,7 @@ class TestTelegramNotifier:
         )
         notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
 
-        notifier.notificar_escalado(conversacion_id=42, telefono="593987654321", motivo="Cliente pidió humano")
+        notifier.notificar_escalado(conversacion_id=42, cliente="WhatsApp · 593987654321", motivo="Cliente pidió humano")
 
         assert len(responses.calls) == 1
         cuerpo = json.loads(responses.calls[0].request.body)
@@ -30,7 +30,7 @@ class TestTelegramNotifier:
     def test_sin_credenciales_no_hace_ninguna_llamada_ni_lanza(self):
         notifier = TelegramNotifier(bot_token=None, chat_id=None)
 
-        notifier.notificar_escalado(conversacion_id=1, telefono="593999999999", motivo="prueba")
+        notifier.notificar_escalado(conversacion_id=1, cliente="WhatsApp · 593999999999", motivo="prueba")
 
         assert len(responses.calls) == 0
 
@@ -47,7 +47,7 @@ class TestTelegramNotifier:
         )
         notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
 
-        notifier.notificar_escalado(conversacion_id=1, telefono="593999999999", motivo="prueba")  # no debe lanzar
+        notifier.notificar_escalado(conversacion_id=1, cliente="WhatsApp · 593999999999", motivo="prueba")  # no debe lanzar
 
     @responses.activate
     def test_fallo_de_red_no_se_propaga(self):
@@ -58,7 +58,7 @@ class TestTelegramNotifier:
         )
         notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
 
-        notifier.notificar_escalado(conversacion_id=1, telefono="593999999999", motivo="prueba")  # no debe lanzar
+        notifier.notificar_escalado(conversacion_id=1, cliente="WhatsApp · 593999999999", motivo="prueba")  # no debe lanzar
 
 
 class TestNotificarAviso:
@@ -94,7 +94,7 @@ class TestAvisosDeGestion:
     def test_cierre_previo_dice_que_quiere_el_cliente_y_donde_verlo(self):
         responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
         TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_gestion(
-            "Quiere ver el producto", conversacion_id=42, telefono="593987654321", detalle="quiere verlos mañana"
+            "Quiere ver el producto", conversacion_id=42, cliente="WhatsApp · 593987654321", detalle="quiere verlos mañana"
         )
 
         texto = json.loads(responses.calls[0].request.body)["text"]

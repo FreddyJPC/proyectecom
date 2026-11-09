@@ -80,6 +80,12 @@ class FakeConversacionRepository:
         self.estados = {}
         self.vista_en = dict(vista_en or {})
 
+    def obtener_por_id(self, conversacion_id):
+        return {
+            "id": conversacion_id, "contacto_id": 1, "canal": "whatsapp",
+            "id_externo": "593987654321", "telefono": "593987654321",
+        }
+
     def actualizar_estado(self, conversacion_id, estado):
         self.estados[conversacion_id] = estado
 
@@ -1009,7 +1015,7 @@ class TestEscalarAHumano:
 
         assert conversaciones.estados[3] == "escalada"
         telegram.notificar_escalado.assert_called_once()
-        assert telegram.notificar_escalado.call_args.args == (3, "593987654321", "Cliente pidió hablar con una persona")
+        assert telegram.notificar_escalado.call_args.args == (3, "WhatsApp · 593987654321", "Cliente pidió hablar con una persona")
         assert "origen" in telegram.notificar_escalado.call_args.kwargs  # de dónde viene el cliente, para el aviso
         assert "asesor" in resultado.contenido.lower()
 

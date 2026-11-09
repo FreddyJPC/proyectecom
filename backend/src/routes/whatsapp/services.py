@@ -9,6 +9,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from src.config.parametros import parametros
+from src.integrations.canales import etiqueta_de_cliente
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.whatsapp import WhatsAppClient, WhatsAppError, get_whatsapp_client
 
@@ -59,8 +60,8 @@ class WebhookService:
             return
 
         # 2 y 3. Conversación: se reutiliza si el cliente ya nos había
-        # escrito antes; si no, se crea (con detección de FEP incluida).
-        conversacion = self._conversaciones.obtener_por_telefono(dto.telefono)
+        # escrito antes por este canal; si no, se crea junto con su contacto (con detección de anuncio incluida).
+        conversacion = self._conversaciones.obtener_por_canal(dto.canal, dto.id_externo)
         if conversacion is None:
             conversacion = self._crear_conversacion(dto)
         else:
@@ -107,11 +108,12 @@ class WebhookService:
         # producto propio que el dueño está gestionando) que vuelve a escribir se escala
         # directo, nunca pasa por Victoria (versión mínima del "Flujo 3"
         # de docs/BotPlanifiacion.md -- no el árbol completo de postventa).
-        if self._leads.existe_pedido_previo_por_telefono(dto.telefono):
-            self._escalar(conversacion_id, dto.telefono, motivo="Cliente con pedido previo escribió de nuevo")
+        if self._leads.existe_pedido_previo(conversacion["contacto_id"]):
+            self._escalar(conversacion, motivo="Cliente con pedido previo escribió de nuevo")
             self._bot_worker.encolar(
                 conversacion_id=conversacion_id,
-                telefono=dto.telefono,
+                canal=dto.canal,
+                id_externo=dto.id_externo,
                 modo="fijo",
                 mensaje_id=mensaje["id"],
                 texto_fijo=parametros.valor("bot.texto_postventa"),
@@ -123,10 +125,11 @@ class WebhookService:
         # la regla es determinista en código, no una decisión del LLM.
         lead = self._leads.obtener_por_conversacion(conversacion_id)
         if dto.tipo == "imagen" and lead is not None and lead["estado"] == "esperando_pago":
-            self._escalar(conversacion_id, dto.telefono, motivo="Cliente envió posible comprobante de pago")
+            self._escalar(conversacion, motivo="Cliente envió posible comprobante de pago")
             self._bot_worker.encolar(
                 conversacion_id=conversacion_id,
-                telefono=dto.telefono,
+                canal=dto.canal,
+                id_externo=dto.id_externo,
                 modo="fijo",
                 mensaje_id=mensaje["id"],
                 texto_fijo=parametros.valor("bot.texto_comprobante_recibido"),
@@ -136,7 +139,8 @@ class WebhookService:
         # Regla 4: cualquier otro caso -- Victoria responde.
         self._bot_worker.encolar(
             conversacion_id=conversacion_id,
-            telefono=dto.telefono,
+            canal=dto.canal,
+            id_externo=dto.id_externo,
             modo="ia",
             mensaje_id=mensaje["id"],
             texto_mensaje_cliente=dto.contenido,
@@ -158,27 +162,35 @@ class WebhookService:
                 "Vincúlalo a un producto en la app (Anuncios) para que Victoria sepa de qué hablar sin preguntar.",
             )
 
-    def _escalar(self, conversacion_id: int, telefono: str, motivo: str) -> None:
+    def _escalar(self, conversacion: dict, motivo: str) -> None:
         # marcar_escalada() (no actualizar_estado() genérico) para que
         # también limpie vista_en -- el módulo de Conversaciones del
         # dashboard necesita que CUALQUIER camino de escalado (este
         # determinista, o el de Victoria vía escalar_a_humano) deje la
         # conversación como "sin revisar" otra vez.
+        conversacion_id = conversacion["id"]
         self._conversaciones.marcar_escalada(conversacion_id)
         self._telegram.notificar_escalado(
-            conversacion_id, telefono, motivo, origen=self._anuncios.describir_origen(conversacion_id)
+            conversacion_id,
+            etiqueta_de_cliente(conversacion.get("canal"), conversacion.get("id_externo"), conversacion.get("telefono")),
+            motivo,
+            origen=self._anuncios.describir_origen(conversacion_id),
         )
 
     def _crear_conversacion(self, dto: MensajeEntranteDTO) -> dict:
-        # La presencia de "referral" es la señal de que el cliente llegó desde un anuncio Click-to-WhatsApp. La
+        # La presencia de "referral" es la señal de que el cliente llegó desde un anuncio (Click-to-WhatsApp). La
         # ventana gratuita de Meta ya NO se calcula aquí (era «72 h desde el primer mensaje», la regla anterior): se
         # deduce de los mensajes, ver routes/anuncios/ventana.py. Los datos completos del anuncio los guarda
         # `_registrar_llegada_por_anuncio`.
         if dto.referral:
             return self._conversaciones.crear(
-                telefono=dto.telefono,
-                origen="fep",
+                id_externo=dto.id_externo,
+                canal=dto.canal,
+                nombre_perfil=dto.nombre_perfil,
+                origen="anuncio",
                 id_anuncio=dto.referral.get("source_id"),
                 ctwa_clid=dto.referral.get("ctwa_clid"),
             )
-        return self._conversaciones.crear(telefono=dto.telefono, origen="directo")
+        return self._conversaciones.crear(
+            id_externo=dto.id_externo, canal=dto.canal, nombre_perfil=dto.nombre_perfil, origen="directo"
+        )

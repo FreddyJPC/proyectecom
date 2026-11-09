@@ -77,12 +77,12 @@ class AnuncioRepository:
                 if cur.fetchone() is None:
                     return {"registrada": False, "anuncio_nuevo": False}
 
-                # El cliente llegó (de nuevo) por un anuncio: el origen pasa a «fep» y el anuncio y el clic vigentes son los
+                # El cliente llegó (de nuevo) por un anuncio: el origen pasa a «anuncio» y el anuncio y el clic vigentes son los
                 # de esta llegada (el que más probablemente terminó en la compra). Si Meta no mandó alguno, se conserva el anterior.
                 cur.execute(
                     """
                     update conversaciones set
-                        origen = 'fep',
+                        origen = 'anuncio',
                         id_anuncio = coalesce(%s, id_anuncio),
                         ctwa_clid = coalesce(%s, ctwa_clid)
                     where id = %s
@@ -210,7 +210,7 @@ class AnuncioRepository:
 
         «Anuncio» = conversaciones que llegaron por un anuncio en el periodo; «Directo» = conversaciones creadas en el
         periodo que nunca llegaron por un anuncio. Las ventas se separan por el origen que tenía la conversación al
-        cerrarse (`ventas.canal`: «fep» es anuncio; cualquier otro valor cuenta como directo). No cuenta las canceladas."""
+        cerrarse (`ventas.origen`: «anuncio» es anuncio; cualquier otro valor cuenta como directo). No cuenta las canceladas."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -234,14 +234,14 @@ class AnuncioRepository:
                 base = _fila(cur)
                 cur.execute(
                     """
-                    select (canal = 'fep') as es_anuncio,
+                    select (origen = 'anuncio') as es_anuncio,
                            count(*) as ventas,
                            coalesce(sum(total), 0) as ingresos,
                            coalesce(sum(total - costo_productos - coalesce(costo_envio_negocio, 0))
                                     filter (where costo_productos is not null), 0) as ganancia
                     from ventas
                     where estado <> 'cancelada' and (%(desde)s::timestamptz is null or cerrada_en >= %(desde)s)
-                    group by (canal = 'fep')
+                    group by (origen = 'anuncio')
                     """,
                     {"desde": desde},
                 )

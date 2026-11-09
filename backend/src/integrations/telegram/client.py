@@ -23,10 +23,11 @@ class TelegramNotifier:
         self._chat_id = chat_id
         self._advertido = False
 
-    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str, origen: str = "") -> None:
+    def notificar_escalado(self, conversacion_id: int, cliente: str, motivo: str, origen: str = "") -> None:
+        """`cliente` ya viene listo para leer: el canal y su teléfono o identificador («WhatsApp · 593987654321»)."""
         texto = (
             "🔴 Victoria escaló una conversación\n\n"
-            f"Teléfono: {telefono}\n"
+            f"Cliente: {cliente}\n"
             f"Motivo: {motivo}\n"
             + (f"Origen: {origen}\n" if origen else "")
             + f"Conversación ID: {conversacion_id}"
@@ -38,11 +39,11 @@ class TelegramNotifier:
         por falta de stock). Igual que el escalado: best-effort, nunca lanza."""
         self._enviar(f"{titulo}\n\n{detalle}", {}, "un aviso")
 
-    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "", origen: str = "") -> None:
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, cliente: str, detalle: str = "", origen: str = "") -> None:
         """«Cierre previo»: el cliente mostró una intención de compra y el dueño tiene que intervenir
         (ADR-012). El registro que no se pierde es la solicitud en la base («Por gestionar»); este aviso
         es solo el timbre, por eso es best-effort como todos."""
-        partes = [f"🟡 Cierre previo: {etiqueta}", "", f"Teléfono: {telefono}"]
+        partes = [f"🟡 Cierre previo: {etiqueta}", "", f"Cliente: {cliente}"]
         if detalle:
             partes.append(f"Detalle: {detalle}")
         if origen:

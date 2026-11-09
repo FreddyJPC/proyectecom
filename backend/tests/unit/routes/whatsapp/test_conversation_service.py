@@ -47,7 +47,7 @@ class FakeLeadRepository:
     def __init__(self, lead=None):
         self._lead = lead or {"id": 1}
 
-    def obtener_o_crear(self, conversacion_id, telefono):
+    def obtener_o_crear(self, conversacion_id, contacto_id, telefono):
         return self._lead
 
 
@@ -80,7 +80,7 @@ def _servicio(llm, historial_cliente, max_turnos=5, ejecutor=None):
     return VictoriaConversationService(
         llm_client=llm,
         lead_repo=FakeLeadRepository(),
-        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
         mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": historial_cliente}]),
         producto_repo=FakeProductoBotRepository(),
         ejecutor_herramientas=ejecutor or EjecutorHerramientasFalso(),
@@ -122,7 +122,7 @@ class TestLoopDeHerramientas:
         servicio = VictoriaConversationService(
             llm_client=llm,
             lead_repo=FakeLeadRepository(),
-            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
             mensaje_repo=(mensajes := FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}])),
             producto_repo=FakeProductoBotRepository(),
             ejecutor_herramientas=EjecutorHerramientasFalso(),
@@ -242,7 +242,7 @@ def _system_prompt_del_turno(catalogo, lead, id_anuncio=None):
     servicio = VictoriaConversationService(
         llm_client=llm,
         lead_repo=FakeLeadRepository(lead),
-        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": id_anuncio}}),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": id_anuncio}}),
         mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
         producto_repo=catalogo,
         ejecutor_herramientas=EjecutorHerramientasFalso(),
@@ -343,7 +343,7 @@ class TestHerramientasOfrecidasAlModelo:
         llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
         servicio = VictoriaConversationService(
             llm_client=llm, lead_repo=FakeLeadRepository(),
-            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
             mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
             producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorHerramientasFalso(),
             max_turnos_herramientas=5, max_mensajes_historial=40, enviar_fotos=True,
@@ -357,7 +357,7 @@ def _servicio_sin_fijar(llm, historial):
     return VictoriaConversationService(
         llm_client=llm,
         lead_repo=FakeLeadRepository(),
-        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
         mensaje_repo=FakeMensajeRepository(historial=historial),
         producto_repo=FakeProductoBotRepository(),
         ejecutor_herramientas=EjecutorHerramientasFalso(),
@@ -445,7 +445,7 @@ class TestParametrosDeVictoria:
         monkeypatch.setattr("src.routes.whatsapp.conversation_service.get_llm_client", lambda: usados.append(1) or next(turnos))
         servicio = VictoriaConversationService(
             lead_repo=FakeLeadRepository(),
-            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
             mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "hola"}]),
             producto_repo=FakeProductoBotRepository(),
             ejecutor_herramientas=EjecutorHerramientasFalso(),
@@ -464,7 +464,7 @@ class TestInstruccionesDeVictoria:
         llm = LLMProviderFalso([RespuestaLLM(texto="Hola", llamadas_herramientas=[], razon_de_parada="fin")])
         servicio = VictoriaConversationService(
             llm_client=llm, lead_repo=FakeLeadRepository(),
-            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+            conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
             mensaje_repo=FakeMensajeRepository(historial=[{"rol": "cliente", "contenido": "Hola"}]),
             producto_repo=FakeProductoBotRepository(), ejecutor_herramientas=EjecutorHerramientasFalso(),
             max_turnos_herramientas=5, max_mensajes_historial=40, **kw,
@@ -528,7 +528,7 @@ class TestConversacionEnManosDelDueno:
             ),
             RespuestaLLM(texto="¡Gracias! El dueño te escribe pronto.", llamadas_herramientas=[], razon_de_parada="fin"),
         ])
-        conversaciones = FakeConversacionRepository({1: {"id": 1, "telefono": "593987654321", "id_anuncio": None, "estado": "activa"}})
+        conversaciones = FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None, "estado": "activa"}})
 
         class EjecutorQueTraspasa(EjecutorHerramientasFalso):
             def ejecutar(self, nombre, lead_id, conversacion_id, entrada, id_llamada):

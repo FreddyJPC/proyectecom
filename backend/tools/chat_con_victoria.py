@@ -38,16 +38,33 @@ _TELEFONO_DEFAULT = "593900000000"
 
 
 def _borrar_conversacion(telefono: str) -> None:
-    # ON DELETE CASCADE se encarga de mensajes, leads y cola_mensajes.
+    """Borra la conversación de PRUEBA de este teléfono y lo que cuelga de ella. Desde la migración 024 la base se niega a
+    borrar una conversación con leads, llegadas por anuncio o solicitudes (ADR-014), así que se borran antes. Las ventas no se
+    tocan (como antes: su clave a la conversación es «dejar en blanco»); el contacto solo se borra si queda sin nada."""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("delete from conversaciones where telefono = %s", (telefono,))
+            cur.execute("select id, contacto_id from conversaciones where canal = 'whatsapp' and id_externo = %s", (telefono,))
+            fila = cur.fetchone()
+            if fila is None:
+                return
+            conversacion_id, contacto_id = fila
+            cur.execute("delete from solicitudes_gestion where conversacion_id = %s", (conversacion_id,))
+            cur.execute("delete from conversacion_anuncios where conversacion_id = %s", (conversacion_id,))
+            cur.execute("delete from leads where conversacion_id = %s", (conversacion_id,))
+            cur.execute("delete from conversaciones where id = %s", (conversacion_id,))  # cascada: mensajes y cola
+            cur.execute(
+                "delete from contactos ct where ct.id = %s "
+                "and not exists (select 1 from conversaciones c where c.contacto_id = ct.id) "
+                "and not exists (select 1 from leads l where l.contacto_id = ct.id) "
+                "and not exists (select 1 from ventas v where v.contacto_id = ct.id)",
+                (contacto_id,),
+            )
 
 
 def _obtener_o_crear_conversacion(telefono: str) -> dict:
-    conversacion = ConversacionRepository.obtener_por_telefono(telefono)
+    conversacion = ConversacionRepository.obtener_por_canal("whatsapp", telefono)
     if conversacion is None:
-        conversacion = ConversacionRepository.crear(telefono=telefono, origen="directo")
+        conversacion = ConversacionRepository.crear(id_externo=telefono, origen="directo")
         print(f"(conversación nueva creada, id={conversacion['id']})")
     else:
         print(f"(reutilizando conversación existente, id={conversacion['id']}, estado={conversacion['estado']})")

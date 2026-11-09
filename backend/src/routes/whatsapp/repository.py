@@ -2,9 +2,12 @@ from typing import List, Optional
 
 from src.config.database import get_connection
 
-_COLUMNAS_CONVERSACION = (
-    "id, telefono, origen, fep_expira_en, id_anuncio, ctwa_clid, "
-    "estado, vista_en, notas_internas, creada_en, actualizada_en"
+# La conversación ya trae a su CONTACTO (ADR-014): `telefono` y `contacto_nombre` son los de la persona (el teléfono puede
+# faltar en canales que no lo dan, como Instagram); `canal` + `id_externo` son cómo se la encuentra en ese canal.
+_SELECT_CONVERSACION = (
+    "select c.id, c.contacto_id, c.canal, c.id_externo, c.nombre_perfil, ct.telefono, ct.nombre as contacto_nombre, "
+    "c.origen, c.id_anuncio, c.ctwa_clid, c.estado, c.vista_en, c.notas_internas, c.creada_en, c.actualizada_en "
+    "from conversaciones c join contactos ct on ct.id = c.contacto_id"
 )
 _COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en"
 # Lo que Victoria necesita saber de un producto. Además de la ficha, el proveedor (ADR-012: de él depende CÓMO
@@ -24,7 +27,7 @@ _SELECT_PRODUCTO_BOT = (
     "left join categorias_producto c on c.id = p.categoria_id"
 )
 _COLUMNAS_LEAD = (
-    "id, conversacion_id, nombre_cliente, telefono, direccion, canton, provincia, "
+    "id, conversacion_id, contacto_id, nombre_cliente, telefono, direccion, canton, provincia, "
     "producto_sku, producto_nombre, producto_variante, cantidad, subtotal, total, metodo_pago, estado_pago, "
     "entrega_opcion_id, entrega_nombre, entrega_tipo, costo_envio, "
     "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en"
@@ -33,12 +36,13 @@ _COLUMNAS_LEAD = (
 
 class ConversacionRepository:
     @staticmethod
-    def obtener_por_telefono(telefono: str) -> Optional[dict]:
+    def obtener_por_canal(canal: str, id_externo: str) -> Optional[dict]:
+        """La conversación de un cliente en un canal (WhatsApp: `id_externo` es su teléfono)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"select {_COLUMNAS_CONVERSACION} from conversaciones where telefono = %s",
-                    (telefono,),
+                    f"{_SELECT_CONVERSACION} where c.canal = %s and c.id_externo = %s",
+                    (canal, id_externo),
                 )
                 row = cur.fetchone()
                 if row is None:
@@ -50,10 +54,7 @@ class ConversacionRepository:
     def obtener_por_id(conversacion_id: int) -> Optional[dict]:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"select {_COLUMNAS_CONVERSACION} from conversaciones where id = %s",
-                    (conversacion_id,),
-                )
+                cur.execute(f"{_SELECT_CONVERSACION} where c.id = %s", (conversacion_id,))
                 row = cur.fetchone()
                 if row is None:
                     return None
@@ -62,22 +63,51 @@ class ConversacionRepository:
 
     @staticmethod
     def crear(
-        telefono: str,
+        id_externo: str,
+        canal: str = "whatsapp",
         origen: str = "directo",
-        fep_expira_en=None,
         id_anuncio: Optional[str] = None,
         ctwa_clid: Optional[str] = None,
+        nombre_perfil: Optional[str] = None,
+        telefono: Optional[str] = None,
     ) -> dict:
+        """Crea el contacto (si hace falta) y su conversación en ese canal, en UNA transacción. Es «crear o traer»:
+        si dos mensajes del mismo cliente llegan a la vez (dos hilos), el segundo recibe la conversación que creó el
+        primero en vez de fallar por duplicado y perder el mensaje.
+
+        `telefono` es el teléfono del contacto cuando se conoce; en WhatsApp es el propio `id_externo`. Un mismo
+        teléfono es un solo contacto: si ya existe, la conversación nueva (p. ej. otro canal) se cuelga de él."""
+        if telefono is None and canal == "whatsapp":
+            telefono = id_externo
         with get_connection() as conn:
             with conn.cursor() as cur:
+                if telefono is not None:
+                    cur.execute(
+                        """
+                        insert into contactos (telefono, nombre) values (%s, %s)
+                        on conflict (telefono) where telefono is not null
+                        do update set actualizado_en = now(), nombre = coalesce(contactos.nombre, excluded.nombre)
+                        returning id
+                        """,
+                        (telefono, nombre_perfil),
+                    )
+                else:
+                    cur.execute("insert into contactos (nombre) values (%s) returning id", (nombre_perfil,))
+                contacto_id = cur.fetchone()[0]
+
                 cur.execute(
-                    f"""
-                    insert into conversaciones (telefono, origen, fep_expira_en, id_anuncio, ctwa_clid)
-                    values (%s, %s, %s, %s, %s)
-                    returning {_COLUMNAS_CONVERSACION}
+                    """
+                    insert into conversaciones (contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid)
+                    values (%s, %s, %s, %s, %s, %s, %s)
+                    on conflict (canal, id_externo)
+                    do update set nombre_perfil = coalesce(excluded.nombre_perfil, conversaciones.nombre_perfil)
+                    returning id
                     """,
-                    (telefono, origen, fep_expira_en, id_anuncio, ctwa_clid),
+                    (contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid),
                 )
+                conversacion_id = cur.fetchone()[0]
+
+                cur.execute(f"{_SELECT_CONVERSACION} where c.id = %s", (conversacion_id,))
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
                 return dict(zip(cols, row))
@@ -165,11 +195,12 @@ class ConversacionRepository:
         q: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
+        canal: Optional[str] = None,
     ) -> dict:
         """Listado del módulo de Conversaciones (dashboard): una fila por
         conversación, con el nombre/producto del lead y el último mensaje
-        ya resueltos (evita N+1 desde el frontend). `q` busca por teléfono
-        o nombre del cliente (sin distinguir mayúsculas)."""
+        ya resueltos (evita N+1 desde el frontend). `q` busca por teléfono,
+        identificador del canal o nombre del cliente (sin distinguir mayúsculas)."""
         condiciones = []
         params: list = []
         if estado:
@@ -178,10 +209,16 @@ class ConversacionRepository:
         if origen:
             condiciones.append("c.origen = %s")
             params.append(origen)
+        if canal:
+            condiciones.append("c.canal = %s")
+            params.append(canal)
         if q:
-            condiciones.append("(c.telefono ILIKE %s OR lower(l.nombre_cliente) LIKE lower(%s))")
+            condiciones.append(
+                "(ct.telefono ILIKE %s OR c.id_externo ILIKE %s OR lower(ct.nombre) LIKE lower(%s) "
+                "OR lower(c.nombre_perfil) LIKE lower(%s) OR lower(l.nombre_cliente) LIKE lower(%s))"
+            )
             comodin = f"%{q}%"
-            params.extend([comodin, comodin])
+            params.extend([comodin] * 5)
         where = f"where {' and '.join(condiciones)}" if condiciones else ""
 
         # Cola de escaladas: la más antigua primero. Cualquier otro filtro:
@@ -190,17 +227,23 @@ class ConversacionRepository:
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"select count(*) from conversaciones c left join leads l on l.conversacion_id = c.id {where}", params)
+                cur.execute(
+                    "select count(*) from conversaciones c join contactos ct on ct.id = c.contacto_id "
+                    f"left join leads l on l.conversacion_id = c.id {where}",
+                    params,
+                )
                 total = cur.fetchone()[0]
 
                 offset = (page - 1) * page_size
                 cur.execute(
                     f"""
                     select
-                        c.id, c.telefono, c.origen, c.estado, c.vista_en, c.creada_en, c.actualizada_en,
+                        c.id, c.canal, c.id_externo, ct.telefono, ct.nombre as contacto_nombre, c.nombre_perfil,
+                        c.origen, c.estado, c.vista_en, c.creada_en, c.actualizada_en,
                         l.nombre_cliente, l.producto_nombre,
                         m.rol as ultimo_mensaje_rol, m.contenido as ultimo_mensaje_contenido, m.creado_en as ultimo_mensaje_creado_en
                     from conversaciones c
+                    join contactos ct on ct.id = c.contacto_id
                     left join leads l on l.conversacion_id = c.id
                     left join lateral (
                         select rol, contenido, creado_en from mensajes
@@ -351,8 +394,8 @@ class ColaMensajeRepository:
         """Tareas a recuperar al arrancar el worker: las que quedaron
         'pendiente' (nunca se llegó a procesar) y las que quedaron
         'procesando' hace más de 5 minutos (huérfanas de un proceso
-        anterior que murió a medio trabajar). Trae el teléfono (vía
-        conversaciones) y el texto del cliente (vía mensajes, solo aplica
+        anterior que murió a medio trabajar). Trae el canal y el identificador
+        del cliente (vía conversaciones) y el texto del cliente (vía mensajes, solo aplica
         a modo='ia') porque TareaRespuestaDTO los necesita y, al ser una
         recuperación tras reinicio, no hay contexto en memoria del que
         tomarlos."""
@@ -361,7 +404,7 @@ class ColaMensajeRepository:
                 cur.execute(
                     """
                     select cm.id, cm.conversacion_id, cm.modo, cm.texto_fijo,
-                           c.telefono, m.contenido as mensaje_cliente_texto
+                           c.canal, c.id_externo, m.contenido as mensaje_cliente_texto
                     from cola_mensajes cm
                     join conversaciones c on c.id = cm.conversacion_id
                     left join mensajes m on m.id = cm.mensaje_id
@@ -526,27 +569,28 @@ class LeadRepository:
                 return dict(zip(cols, row))
 
     @staticmethod
-    def crear(conversacion_id: int, telefono: str) -> dict:
+    def crear(conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> dict:
+        """`telefono` es el de contacto/entrega del lead; puede faltar si el canal no lo da (Instagram, Messenger)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    insert into leads (conversacion_id, telefono)
-                    values (%s, %s)
+                    insert into leads (conversacion_id, contacto_id, telefono)
+                    values (%s, %s, %s)
                     returning {_COLUMNAS_LEAD}
                     """,
-                    (conversacion_id, telefono),
+                    (conversacion_id, contacto_id, telefono),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
                 return dict(zip(cols, row))
 
     @staticmethod
-    def obtener_o_crear(conversacion_id: int, telefono: str) -> dict:
+    def obtener_o_crear(conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> dict:
         existente = LeadRepository.obtener_por_conversacion(conversacion_id)
         if existente is not None:
             return existente
-        return LeadRepository.crear(conversacion_id, telefono)
+        return LeadRepository.crear(conversacion_id, contacto_id, telefono)
 
     @staticmethod
     def actualizar_datos_cliente(
@@ -653,14 +697,14 @@ class LeadRepository:
                 )
 
     @staticmethod
-    def existe_pedido_previo_por_telefono(telefono: str) -> bool:
-        """¿Este teléfono ya tiene un pedido cerrado? `despachado` (Rocketfy lo creó) o `por_gestionar`
-        (producto propio: el dueño lo está gestionando)."""
+    def existe_pedido_previo(contacto_id: int) -> bool:
+        """¿Este contacto ya tiene un pedido cerrado, por el canal que sea? `despachado` (Rocketfy lo creó) o
+        `por_gestionar` (producto propio: el dueño lo está gestionando)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "select 1 from leads where telefono = %s and estado in ('despachado', 'por_gestionar') limit 1",
-                    (telefono,),
+                    "select 1 from leads where contacto_id = %s and estado in ('despachado', 'por_gestionar') limit 1",
+                    (contacto_id,),
                 )
                 return cur.fetchone() is not None
 

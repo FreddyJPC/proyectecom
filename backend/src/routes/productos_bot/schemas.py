@@ -517,7 +517,7 @@ class VentaManualSimuladaSchema(Schema):
     ganancia = fields.Str(allow_none=True)
     entrega = fields.Str(allow_none=True)
     metodo_pago = fields.Str(data_key="metodoPago", allow_none=True)
-    canal = fields.Str()
+    origen = fields.Str()
 
 
 class SolicitudSimuladaSchema(Schema):

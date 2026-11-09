@@ -4,10 +4,12 @@ from typing import List, Optional
 
 @dataclass
 class MensajeEntranteDTO:
-    wamid: str          # ID único del mensaje asignado por WhatsApp (formato: wamid.xxx)
-    telefono: str       # número del cliente en formato internacional (ej: 593987654321)
+    wamid: str          # ID único del mensaje asignado por el canal (en WhatsApp: wamid.xxx)
+    id_externo: str     # identificador del cliente EN ESE CANAL (WhatsApp: su teléfono, ej: 593987654321)
     contenido: str      # texto del mensaje (o descripción si es imagen/audio)
     tipo: str           # 'texto' | 'imagen' | 'audio'
+    canal: str = "whatsapp"          # whatsapp | instagram | messenger (ADR-014)
+    nombre_perfil: Optional[str] = None   # nombre público del cliente en el canal, si el canal lo manda
     referral: Optional[dict] = None
     # Objeto referral completo si vino de anuncio Click-to-WhatsApp (FEP), None si no.
     # Cuando está presente, contiene: source_id (id_anuncio), ctwa_clid, headline, body, etc.
@@ -34,7 +36,8 @@ class TareaRespuestaDTO:
 
     cola_mensajes_id: int
     conversacion_id: int
-    telefono: str
+    canal: str
+    id_externo: str
     modo: str = "ia"
         # ia    -> invocar a VictoriaConversationService.procesar_turno()
         # fijo  -> enviar texto_fijo tal cual, sin pasar por el LLM

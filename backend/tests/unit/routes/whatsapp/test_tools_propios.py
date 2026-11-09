@@ -71,7 +71,7 @@ class Escena:
         self.herramientas = HerramientasVictoria(
             lead_repo=self.leads, conversacion_repo=self.conversaciones, producto_repo=self.productos,
             pedido_service=self.pedidos, telegram_notifier=self.telegram, stock_checker=StockEnEnsayo(None),
-            minimo_repo=MagicMock(), mensaje_repo=MensajesEnMemoria([], "hola"), whatsapp_client=MagicMock(),
+            minimo_repo=MagicMock(), mensaje_repo=MensajesEnMemoria([], "hola"), canales=MagicMock(),
             enviar_fotos=False, entrega_repo=EntregasEnEnsayo(entregas), gestion_service=self.gestion, ventas_service=self.ventas,
         )
 

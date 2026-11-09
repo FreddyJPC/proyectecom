@@ -32,7 +32,7 @@ from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
 from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
-from src.integrations.whatsapp import get_whatsapp_client
+from src.integrations.canales import etiqueta_de_cliente, get_registro_canales
 from src.routes.pedidos.dto import CrearPedidoInputDTO, LineaPedidoDTO
 from src.routes.pedidos.exceptions import (
     PedidoEnEstadoAmbiguoError,
@@ -114,6 +114,9 @@ _CAMPOS_REQUERIDOS_CIERRE = (
     "producto_nombre",
     "total",
     "metodo_pago",
+    # En WhatsApp siempre existe (es el número desde el que escribe). En canales sin teléfono (Instagram, Messenger)
+    # hay que pedírselo al cliente: Rocketfy lo exige para entregar. Ver ADR-014.
+    "telefono",
 )
 
 HERRAMIENTAS_VICTORIA = [
@@ -331,7 +334,7 @@ class HerramientasVictoria:
         stock_checker: Optional[StockChecker] = None,
         minimo_repo: Optional[MinimoObservadoRepository] = None,
         mensaje_repo: Optional[MensajeRepository] = None,
-        whatsapp_client=None,
+        canales=None,
         enviar_fotos: Optional[bool] = None,
         entrega_repo: Optional[EntregaRepository] = None,
         gestion_service: Optional[GestionService] = None,
@@ -351,8 +354,8 @@ class HerramientasVictoria:
         self._gestion = gestion_service or GestionService(telegram=self._telegram)
         self._ventas = ventas_service or VentasService()
         self._imagenes = imagen_repo or ImagenRepository()
-        # Perezoso: el cliente de WhatsApp solo se arma si de verdad se envía una foto.
-        self._whatsapp = whatsapp_client
+        # Perezoso: el registro de canales solo se arma si de verdad se envía una foto.
+        self._canales = canales
         # None = lo decide el parámetro «Enviar fotos» en cada llamada (se cambia desde la
         # app, sin reiniciar); True/False lo fija a la fuerza («Probar con Victoria» y los tests).
         self._enviar_fotos_fijo = enviar_fotos
@@ -457,13 +460,13 @@ class HerramientasVictoria:
                 "Descríbeselo con su ficha."
             )
 
-        lead = self._leads.obtener_por_id(lead_id)
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         tanda = pendientes[: parametros.valor("bot.max_fotos_por_envio")]
         enviadas = 0
         for posicion, url in enumerate(tanda):
             try:
-                self._cliente_whatsapp().enviar_imagen(
-                    telefono=lead["telefono"], url=url, descripcion=producto["nombre"] if ya_enviadas + posicion == 0 else None
+                self._registro_canales().para(conversacion["canal"]).enviar_imagen(
+                    conversacion["id_externo"], url, producto["nombre"] if ya_enviadas + posicion == 0 else None
                 )
             except Exception:
                 logger.warning(
@@ -490,10 +493,10 @@ class HerramientasVictoria:
         unidad = "la foto" if enviadas == 1 else f"{enviadas} fotos"
         return f"Ya le enviaste {unidad}{parcial}. Puedes decirle que se las mandaste.{resto}"
 
-    def _cliente_whatsapp(self):
-        if self._whatsapp is None:
-            self._whatsapp = get_whatsapp_client()
-        return self._whatsapp
+    def _registro_canales(self):
+        if self._canales is None:
+            self._canales = get_registro_canales()
+        return self._canales
 
     def _handle_registrar_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         # El LLM no siempre copia el SKU exacto tal como aparece en el
@@ -1035,7 +1038,16 @@ class HerramientasVictoria:
         )
 
     def _pedir_gestion(self, lead: dict, conversacion_id: int, clave: str, detalle: Optional[str]):
-        return self._gestion.solicitar(conversacion_id, lead["id"], clave, detalle, lead.get("telefono") or "")
+        return self._gestion.solicitar(conversacion_id, lead["id"], clave, detalle, self._etiqueta_cliente(conversacion_id, lead))
+
+    def _etiqueta_cliente(self, conversacion_id: int, lead: Optional[dict] = None) -> str:
+        """Cómo nombrar al cliente en un aviso al dueño: «WhatsApp · 593987654321» (el canal y su teléfono o identificador)."""
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        if conversacion is None:
+            return (lead or {}).get("telefono") or ""
+        return etiqueta_de_cliente(
+            conversacion.get("canal"), conversacion.get("id_externo"), conversacion.get("telefono") or (lead or {}).get("telefono")
+        )
 
     def _guardar_minimo_observado(self, exc: Exception, lead: dict, cantidad: int) -> None:
         """Si Rocketfy rechazó la confirmación por importe insuficiente, guarda
@@ -1064,10 +1076,9 @@ class HerramientasVictoria:
     def _handle_escalar_a_humano(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         self._conversaciones.marcar_escalada(conversacion_id)
         lead = self._leads.obtener_por_id(lead_id)
-        telefono = lead["telefono"] if lead else ""
         self._telegram.notificar_escalado(
             conversacion_id,
-            telefono,
+            self._etiqueta_cliente(conversacion_id, lead),
             entrada.get("motivo", "sin especificar"),
             origen=self._gestion.describir_origen(conversacion_id),
         )

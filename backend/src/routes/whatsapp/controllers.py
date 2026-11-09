@@ -20,7 +20,7 @@ import hashlib
 import hmac
 import logging
 import threading
-from typing import List
+from typing import List, Optional
 
 from flask import jsonify, request
 
@@ -95,15 +95,21 @@ def _extraer_mensajes(payload: dict) -> List[MensajeEntranteDTO]:
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 valor = change.get("value", {})
+                # `contacts` trae el nombre de perfil de quien escribe (`wa_id` es su teléfono). Es opcional.
+                nombres = {
+                    c.get("wa_id"): (c.get("profile") or {}).get("name")
+                    for c in valor.get("contacts", [])
+                    if isinstance(c, dict)
+                }
                 for msg in valor.get("messages", []):
-                    mensajes.append(_parsear_mensaje(msg))
+                    mensajes.append(_parsear_mensaje(msg, nombres.get(msg.get("from"))))
     except Exception:
         logger.exception("Payload de webhook de WhatsApp con forma inesperada -- se ignora")
         return []
     return mensajes
 
 
-def _parsear_mensaje(msg: dict) -> MensajeEntranteDTO:
+def _parsear_mensaje(msg: dict, nombre_perfil: Optional[str] = None) -> MensajeEntranteDTO:
     tipo_meta = msg.get("type", "text")
     if tipo_meta == "text":
         contenido = msg.get("text", {}).get("body", "")
@@ -122,8 +128,10 @@ def _parsear_mensaje(msg: dict) -> MensajeEntranteDTO:
 
     return MensajeEntranteDTO(
         wamid=msg["id"],
-        telefono=msg["from"],
+        id_externo=msg["from"],
         contenido=contenido,
         tipo=tipo,
+        canal="whatsapp",
+        nombre_perfil=nombre_perfil or None,
         referral=msg.get("referral"),
     )

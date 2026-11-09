@@ -12,20 +12,29 @@ class FakeConversacionRepository:
         self._siguiente_id = max((c["id"] for c in self.tabla.values()), default=0) + 1
         self.timestamps_actualizados = []
 
-    def obtener_por_telefono(self, telefono):
-        return self.tabla.get(telefono)
+    # En estos falsos la conversación se guarda por su identificador en el canal (el teléfono, en WhatsApp) y el
+    # contacto se identifica por ese mismo valor: basta para comprobar las reglas del webhook sin base de datos.
+    def obtener_por_canal(self, canal, id_externo):
+        existente = self.tabla.get(id_externo)
+        if existente is None:
+            return None
+        return {"contacto_id": id_externo, "canal": canal, "id_externo": id_externo, **existente}
 
-    def crear(self, telefono, origen="directo", fep_expira_en=None, id_anuncio=None, ctwa_clid=None):
+    def crear(self, id_externo, canal="whatsapp", origen="directo", id_anuncio=None, ctwa_clid=None,
+              nombre_perfil=None, telefono=None):
         conversacion = {
             "id": self._siguiente_id,
-            "telefono": telefono,
+            "contacto_id": id_externo,
+            "canal": canal,
+            "id_externo": id_externo,
+            "telefono": telefono or id_externo,
+            "nombre_perfil": nombre_perfil,
             "origen": origen,
-            "fep_expira_en": fep_expira_en,
             "id_anuncio": id_anuncio,
             "ctwa_clid": ctwa_clid,
             "estado": "activa",
         }
-        self.tabla[telefono] = conversacion
+        self.tabla[id_externo] = conversacion
         self._siguiente_id += 1
         return conversacion
 
@@ -74,8 +83,8 @@ class FakeLeadRepository:
         self._despachados = set(despachados_por_telefono or [])
         self._leads_por_conversacion = leads_por_conversacion or {}
 
-    def existe_pedido_previo_por_telefono(self, telefono):
-        return telefono in self._despachados
+    def existe_pedido_previo(self, contacto_id):
+        return contacto_id in self._despachados
 
     def obtener_por_conversacion(self, conversacion_id):
         return self._leads_por_conversacion.get(conversacion_id)
@@ -99,8 +108,12 @@ class FakeAnuncioServicio:
         return "Escribió directo (sin anuncio)"
 
 
-def _dto(wamid="wamid.1", telefono="593987654321", contenido="Hola", referral=None, tipo="texto"):
-    return MensajeEntranteDTO(wamid=wamid, telefono=telefono, contenido=contenido, tipo=tipo, referral=referral)
+def _dto(wamid="wamid.1", id_externo="593987654321", contenido="Hola", referral=None, tipo="texto", canal="whatsapp",
+         nombre_perfil=None):
+    return MensajeEntranteDTO(
+        wamid=wamid, id_externo=id_externo, contenido=contenido, tipo=tipo, canal=canal,
+        nombre_perfil=nombre_perfil, referral=referral,
+    )
 
 
 def _service(conv_repo=None, msg_repo=None, lead_repo=None, telegram=None, client=None, bot_worker=None, anuncios=None):
@@ -137,7 +150,7 @@ class TestIdempotencia:
 
 
 class TestDeteccionDeOrigen:
-    def test_referral_presente_marca_origen_fep(self):
+    def test_referral_presente_marca_origen_anuncio(self):
         conv_repo = FakeConversacionRepository()
 
         _service(conv_repo=conv_repo).procesar_mensaje_entrante(
@@ -145,11 +158,20 @@ class TestDeteccionDeOrigen:
         )
 
         conversacion = conv_repo.tabla["593987654321"]
-        assert conversacion["origen"] == "fep"
+        assert conversacion["origen"] == "anuncio"
         assert conversacion["id_anuncio"] == "23847382910"
         assert conversacion["ctwa_clid"] == "abc123"
-        # La ventana gratuita ya no se calcula como «72 h desde el primer mensaje»: se deduce de los mensajes.
-        assert conversacion["fep_expira_en"] is None
+
+    def test_la_conversacion_nace_con_su_canal_y_el_nombre_de_perfil(self):
+        conv_repo = FakeConversacionRepository()
+        bot_worker = MagicMock()
+        _service(conv_repo=conv_repo, bot_worker=bot_worker).procesar_mensaje_entrante(
+            _dto(id_externo="17841400000000000", canal="instagram", nombre_perfil="José P.")
+        )
+        conversacion = conv_repo.tabla["17841400000000000"]
+        assert conversacion["canal"] == "instagram" and conversacion["nombre_perfil"] == "José P."
+        kwargs = bot_worker.encolar.call_args.kwargs
+        assert kwargs["canal"] == "instagram" and kwargs["id_externo"] == "17841400000000000"
 
     def test_sin_referral_marca_origen_directo(self):
         conv_repo = FakeConversacionRepository()
@@ -169,7 +191,8 @@ class TestDeteccionDeOrigen:
         assert msg_repo.mensajes[0]["conversacion_id"] == 99
         bot_worker.encolar.assert_called_once_with(
             conversacion_id=99,
-            telefono="593987654321",
+            canal="whatsapp",
+            id_externo="593987654321",
             modo="ia",
             mensaje_id=msg_repo.mensajes[0]["id"],
             texto_mensaje_cliente="Hola",
@@ -260,7 +283,7 @@ class TestLlegadaPorAnuncio:
         telegram = MagicMock()
         lead_repo = FakeLeadRepository(despachados_por_telefono=["593987654321"])
         conv_repo = FakeConversacionRepository(
-            existentes={"593987654321": {"id": 5, "telefono": "593987654321", "origen": "fep", "estado": "activa"}}
+            existentes={"593987654321": {"id": 5, "telefono": "593987654321", "origen": "anuncio", "estado": "activa"}}
         )
 
         _service(conv_repo=conv_repo, lead_repo=lead_repo, telegram=telegram).procesar_mensaje_entrante(_dto())
@@ -381,7 +404,7 @@ class TestToleranciaAFallos:
 
     def test_excepcion_interna_nunca_se_propaga(self):
         conv_repo = MagicMock()
-        conv_repo.obtener_por_telefono.side_effect = RuntimeError("boom")
+        conv_repo.obtener_por_canal.side_effect = RuntimeError("boom")
 
         _service(conv_repo=conv_repo).procesar_mensaje_entrante(_dto())  # no debe lanzar
 

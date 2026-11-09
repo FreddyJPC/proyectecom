@@ -78,13 +78,17 @@ def _lead(**cambios):
 class TestArmarVenta:
     def test_venta_propia_con_envio_cobrado_aparte(self):
         entrega = {"costo_negocio": Decimal("1.50")}
-        venta, lineas = armar_venta(_lead(), PROPIO, {"origen": "fep", "id_anuncio": "ad-1"}, entrega, "por_gestionar", Decimal("5.00"))
+        venta, lineas = armar_venta(
+            _lead(), PROPIO, {"origen": "anuncio", "canal": "instagram", "id_anuncio": "ad-1", "contacto_id": 5},
+            entrega, "por_gestionar", Decimal("5.00"),
+        )
 
         assert venta["estado"] == "por_gestionar" and venta["proveedor_id"] == 2
         assert (venta["subtotal"], venta["costo_envio_cliente"], venta["total"]) == (Decimal("60.00"), Decimal("2.00"), Decimal("62.00"))
         assert venta["costo_productos"] == Decimal("36.00")  # 18.00 x 2
         assert venta["costo_envio_negocio"] == Decimal("1.50")
-        assert (venta["canal"], venta["id_anuncio"]) == ("fep", "ad-1")
+        # ORIGEN = cómo llegó (anuncio); CANAL = por dónde conversa (aquí, un cliente de Instagram).
+        assert (venta["origen"], venta["canal"], venta["id_anuncio"], venta["contacto_id"]) == ("anuncio", "instagram", "ad-1", 5)
         assert venta["entrega_nombre"] == "Envío en Cuenca"
         assert lineas == [
             {
@@ -125,6 +129,6 @@ class TestArmarVenta:
         venta, _ = armar_venta(_lead(subtotal=None), PROPIO, None, None, "por_gestionar", Decimal("0"))
         assert venta["subtotal"] == Decimal("60.00")
 
-    def test_canal_directo_por_defecto(self):
+    def test_origen_directo_y_canal_whatsapp_por_defecto(self):
         venta, _ = armar_venta(_lead(), PROPIO, None, None, "por_gestionar", Decimal("0"))
-        assert venta["canal"] == "directo" and venta["id_anuncio"] is None
+        assert venta["origen"] == "directo" and venta["canal"] == "whatsapp" and venta["id_anuncio"] is None

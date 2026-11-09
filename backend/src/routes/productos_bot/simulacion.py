@@ -73,6 +73,7 @@ def lead_inicial() -> Dict[str, Any]:
     return {
         "id": 1,
         "conversacion_id": 1,
+        "contacto_id": 1,
         "telefono": TELEFONO_DE_PRUEBA,
         "nombre_cliente": None,
         "direccion": None,
@@ -158,9 +159,12 @@ class ConversacionesEnMemoria:
         estado = "escalada" if self.escalada else "en_gestion" if self.en_gestion else "activa"
         return {
             "id": conversacion_id,
+            "contacto_id": 1,
+            "canal": "whatsapp",
+            "id_externo": TELEFONO_DE_PRUEBA,
             "telefono": TELEFONO_DE_PRUEBA,
             "id_anuncio": self.id_anuncio,
-            "origen": "fep" if self.id_anuncio else "directo",
+            "origen": "anuncio" if self.id_anuncio else "directo",
             "estado": estado,
         }
 
@@ -178,7 +182,7 @@ class LeadsEnMemoria:
     def __init__(self, lead: Dict[str, Any]):
         self.lead = lead
 
-    def obtener_o_crear(self, conversacion_id: int, telefono: str) -> Dict[str, Any]:
+    def obtener_o_crear(self, conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> Dict[str, Any]:
         return dict(self.lead)
 
     def obtener_por_id(self, lead_id: int) -> Dict[str, Any]:
@@ -303,7 +307,7 @@ class GestionEnEnsayo:
         self.solicitudes: List[Dict[str, Any]] = []
         self._pendiente: Optional[str] = None
 
-    def solicitar(self, conversacion_id, lead_id, clave_tipo, detalle, telefono) -> ResultadoSolicitud:
+    def solicitar(self, conversacion_id, lead_id, clave_tipo, detalle, cliente) -> ResultadoSolicitud:
         tipo = tipo_de_solicitud(clave_tipo)
         anterior = self._pendiente
         gana = anterior is None or tipo.prioridad > tipo_de_solicitud(anterior).prioridad
@@ -313,7 +317,7 @@ class GestionEnEnsayo:
         if resultado.creada or resultado.cambio_de_tipo:
             etiqueta = tipo_de_solicitud(final).etiqueta
             self.solicitudes.append({"tipo": final, "etiqueta": etiqueta, "detalle": detalle or ""})
-            self._telegram.notificar_gestion(etiqueta, conversacion_id, telefono, detalle or "")
+            self._telegram.notificar_gestion(etiqueta, conversacion_id, cliente, detalle or "")
         return ResultadoSolicitud(solicitud=resultado, traspasa=tipo.traspasa, etiqueta=tipo.etiqueta)
 
     def avisar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
@@ -374,13 +378,13 @@ class TelegramGrabador:
     def __init__(self):
         self.avisos: List[Dict[str, str]] = []
 
-    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str, origen: str = "") -> None:
+    def notificar_escalado(self, conversacion_id: int, cliente: str, motivo: str, origen: str = "") -> None:
         self.avisos.append({"canal": "telegram", "texto": f"Victoria escaló la conversación. Motivo: {motivo}"})
 
     def notificar_aviso(self, titulo: str, detalle: str) -> None:
         self.avisos.append({"canal": "telegram", "texto": f"{titulo}. {detalle}"})
 
-    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "", origen: str = "") -> None:
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, cliente: str, detalle: str = "", origen: str = "") -> None:
         texto = f"Cierre previo: {etiqueta}" + (f". {detalle}" if detalle else "")
         self.avisos.append({"canal": "telegram", "texto": texto})
 
@@ -394,12 +398,15 @@ class TelegramGrabador:
 
 
 class WhatsAppGrabador:
-    """No manda nada: anota la foto que se habría enviado al cliente."""
+    """No manda nada: anota la foto que se habría enviado al cliente. Hace de registro de canales Y de canal."""
 
     def __init__(self):
         self.enviadas: List[Dict[str, str]] = []
 
-    def enviar_imagen(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
+    def para(self, canal: Optional[str]) -> "WhatsAppGrabador":
+        return self
+
+    def enviar_imagen(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
         self.enviadas.append({"url": url, "descripcion": descripcion or ""})
         return {"messages": [{"id": "wamid.ensayo"}]}
 
@@ -533,7 +540,7 @@ def simular_turno(
         stock_checker=StockEnEnsayo(producto.get("stock_ultimo")),
         minimo_repo=MinimosEnEnsayo(),
         mensaje_repo=mensajes,
-        whatsapp_client=whatsapp,
+        canales=whatsapp,
         enviar_fotos=True,
         entrega_repo=EntregasEnEnsayo(entregas),
         gestion_service=gestion,
@@ -600,5 +607,5 @@ def _venta_para_mostrar(venta: Optional[Dict[str, Any]]) -> Optional[Dict[str, A
         "ganancia": dinero(venta["ganancia"]),
         "entrega": venta["entrega_nombre"],
         "metodo_pago": venta["metodo_pago"],
-        "canal": venta["canal"],
+        "origen": venta["origen"],
     }

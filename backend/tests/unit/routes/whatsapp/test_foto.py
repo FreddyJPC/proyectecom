@@ -80,7 +80,7 @@ def armar(productos=None, mensajes=None, whatsapp=None, enviar_fotos=True, galer
         stock_checker=FakeStockChecker(),
         minimo_repo=MagicMock(),
         mensaje_repo=mensajes,
-        whatsapp_client=whatsapp,
+        canales=registro_de_whatsapp(whatsapp),
         enviar_fotos=enviar_fotos,
         imagen_repo=ImagenesFalsas(galeria),
     )
@@ -167,7 +167,7 @@ class TestEnviarFoto:
         def prohibido():
             raise AssertionError("se armó el cliente de WhatsApp sin necesitarlo")
 
-        monkeypatch.setattr("src.routes.whatsapp.tools.get_whatsapp_client", prohibido)
+        monkeypatch.setattr("src.routes.whatsapp.tools.get_registro_canales", prohibido)
         h = HerramientasVictoria(
             lead_repo=FakeLeadRepository(), conversacion_repo=FakeConversacionRepository(), producto_repo=FakeProductoBotRepository(),
             pedido_service=MagicMock(), telegram_notifier=MagicMock(), stock_checker=FakeStockChecker(), minimo_repo=MagicMock(),
@@ -300,6 +300,8 @@ class TestInterruptor:
 # ----------------------------------------------------------------------
 from src.config.database import get_connection  # noqa: E402
 from src.routes.whatsapp.repository import ConversacionRepository, MensajeRepository, ProductoBotRepository  # noqa: E402
+from tests.helpers_db import borrar_conversaciones_de_prueba
+from tests.helpers_canales import registro_de_whatsapp
 
 TELEFONO_DE_PRUEBA = "593900009999"
 TELEFONO_OTRO = "593900009998"
@@ -307,18 +309,16 @@ SKU_REAL = "TEST-G2-FOTO"
 
 
 def _limpiar_base():
+    borrar_conversaciones_de_prueba(TELEFONO_DE_PRUEBA, TELEFONO_OTRO)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            telefonos = [TELEFONO_DE_PRUEBA, TELEFONO_OTRO]
-            cur.execute("delete from mensajes where conversacion_id in (select id from conversaciones where telefono = any(%s))", (telefonos,))
-            cur.execute("delete from conversaciones where telefono = any(%s)", (telefonos,))
             cur.execute("delete from productos_bot where sku = %s", (SKU_REAL,))
 
 
 @pytest.fixture
 def conversacion():
     _limpiar_base()
-    c = ConversacionRepository.crear(telefono=TELEFONO_DE_PRUEBA, origen="directo")
+    c = ConversacionRepository.crear(id_externo=TELEFONO_DE_PRUEBA, origen="directo")
     yield c["id"]
     _limpiar_base()
 
@@ -339,7 +339,7 @@ class TestContarFotosContraLaBase:
         assert MensajeRepository.contar_fotos(conversacion, "DEMO-1") == 0
 
     def test_es_por_conversacion(self, conversacion):
-        otra = ConversacionRepository.crear(telefono=TELEFONO_OTRO, origen="directo")["id"]
+        otra = ConversacionRepository.crear(id_externo=TELEFONO_OTRO, origen="directo")["id"]
         MensajeRepository.crear(conversacion, "bot", "📷 Foto de Reloj (DEMO-1)", tipo="imagen")
         assert MensajeRepository.contar_fotos(otra, "DEMO-1") == 0
 

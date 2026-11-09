@@ -9,7 +9,14 @@ export type UltimoMensaje = {
 
 export type ConversacionResumen = {
   id: number;
-  telefono: string;
+  /** Por dónde habla el cliente: whatsapp | instagram | messenger (ADR-014). */
+  canal: string;
+  /** Identificador del cliente en ese canal (en WhatsApp, su teléfono). */
+  idExterno: string | null;
+  /** Puede faltar: un cliente de Instagram o Messenger no tiene teléfono hasta que lo da. */
+  telefono: string | null;
+  /** Nombre del contacto (perfil del canal o el que dio al comprar). */
+  nombre: string | null;
   nombreCliente: string | null;
   origen: string;
   estado: string;
@@ -90,7 +97,12 @@ export type LlegadaPorAnuncio = {
 
 export type ConversacionDetalle = {
   id: number;
-  telefono: string;
+  contactoId: number;
+  canal: string;
+  idExterno: string;
+  telefono: string | null;
+  nombre: string | null;
+  /** Cómo llegó el cliente: «anuncio» o «directo» (no confundir con el canal). */
   origen: string;
   estado: string;
   idAnuncio: string | null;

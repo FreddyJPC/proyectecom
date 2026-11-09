@@ -13,6 +13,7 @@ from src.routes.whatsapp.repository import (
     MinimoObservadoRepository,
     ProductoBotRepository,
 )
+from tests.helpers_db import borrar_conversaciones_de_prueba
 
 _TELEFONO = "593900000777"
 _SKU_PRODUCTO = "TEST-FASE-A-PRODUCTO"
@@ -20,9 +21,9 @@ _SKU_MINIMO = "TEST-FASE-A-MINIMO"
 
 
 def _limpiar():
+    borrar_conversaciones_de_prueba(_TELEFONO)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("delete from conversaciones where telefono = %s", (_TELEFONO,))  # cascada: leads
             cur.execute("delete from productos_bot where sku = %s", (_SKU_PRODUCTO,))
             cur.execute("delete from rocketfy_minimos_observados where sku = %s", (_SKU_MINIMO,))
 
@@ -31,8 +32,8 @@ class TestCantidadEnElLead:
     def test_un_lead_nuevo_arranca_con_una_unidad_y_se_actualiza_con_el_producto(self):
         _limpiar()
         try:
-            conversacion = ConversacionRepository.crear(telefono=_TELEFONO, origen="directo")
-            lead = LeadRepository.obtener_o_crear(conversacion["id"], telefono=_TELEFONO)
+            conversacion = ConversacionRepository.crear(id_externo=_TELEFONO, origen="directo")
+            lead = LeadRepository.obtener_o_crear(conversacion["id"], conversacion["contacto_id"], telefono=_TELEFONO)
             assert lead["cantidad"] == 1
 
             LeadRepository.actualizar_producto(
@@ -49,8 +50,8 @@ class TestCantidadEnElLead:
     def test_llamar_sin_cantidad_deja_una_unidad(self):
         _limpiar()
         try:
-            conversacion = ConversacionRepository.crear(telefono=_TELEFONO, origen="directo")
-            lead = LeadRepository.obtener_o_crear(conversacion["id"], telefono=_TELEFONO)
+            conversacion = ConversacionRepository.crear(id_externo=_TELEFONO, origen="directo")
+            lead = LeadRepository.obtener_o_crear(conversacion["id"], conversacion["contacto_id"], telefono=_TELEFONO)
 
             LeadRepository.actualizar_producto(lead["id"], producto_sku="X", producto_nombre="Producto X", total=Decimal("24.99"))
 

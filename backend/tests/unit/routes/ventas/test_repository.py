@@ -13,16 +13,16 @@ from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistra
 from src.routes.ventas.repository import VentasRepository
 from src.routes.ventas.snapshot import armar_venta
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository
+from tests.helpers_db import borrar_conversaciones_de_prueba
 
 TELEFONO = "593900001234"
 ID_ANUNCIO = "anuncio-ventas-test"
 
 
 def _limpiar():
+    borrar_conversaciones_de_prueba(TELEFONO)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("delete from ventas where telefono = %s", (TELEFONO,))
-            cur.execute("delete from conversaciones where telefono = %s", (TELEFONO,))  # cascada: leads, solicitudes
             cur.execute("delete from productos_bot where nombre like 'TEST-VENTAS %'")
 
 
@@ -46,8 +46,8 @@ def _producto(stock=3, controla=True, **cambios):
 
 
 def _lead_listo(producto, cantidad=2):
-    conversacion = ConversacionRepository.crear(telefono=TELEFONO, origen="fep", id_anuncio=ID_ANUNCIO)
-    lead = LeadRepository.obtener_o_crear(conversacion["id"], telefono=TELEFONO)
+    conversacion = ConversacionRepository.crear(id_externo=TELEFONO, origen="anuncio", id_anuncio=ID_ANUNCIO)
+    lead = LeadRepository.obtener_o_crear(conversacion["id"], conversacion["contacto_id"], telefono=TELEFONO)
     LeadRepository.actualizar_datos_cliente(lead["id"], "Ana", "Calle 1", "Cuenca", "Azuay")
     LeadRepository.actualizar_producto(
         lead["id"], producto["sku"], producto["nombre"], Decimal("30.00") * cantidad, variante="talla 40", cantidad=cantidad
@@ -86,7 +86,7 @@ class TestCerrarManual:
         venta = VentasRepository.obtener_por_lead(lead["id"])
         assert venta["estado"] == "por_gestionar" and venta["proveedor_id"] == 2
         assert venta["total"] == Decimal("60.00") and venta["costo_productos"] == Decimal("36.00")
-        assert (venta["canal"], venta["id_anuncio"]) == ("fep", ID_ANUNCIO)
+        assert (venta["origen"], venta["canal"], venta["id_anuncio"]) == ("anuncio", "whatsapp", ID_ANUNCIO)
 
         with get_connection() as conn:
             with conn.cursor() as cur:

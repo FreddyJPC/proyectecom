@@ -45,7 +45,7 @@ class TestListarConversaciones:
         body = resp.get_json()
         assert body["totalesPorFiltroRapido"]["escaladasSinRevisar"] == 1
         MockService.return_value.listar_conversaciones.assert_called_once_with(
-            estado="escalada", origen=None, q=None, page=1, page_size=20
+            estado="escalada", origen=None, q=None, page=1, page_size=20, canal=None
         )
 
 
@@ -65,7 +65,8 @@ class TestVerConversacion:
         with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
             MockService.return_value.obtener_detalle.return_value = DetalleCompletoDTO(
                 conversacion=ConversacionDetalleDTO(
-                    id=1, telefono="593987654321", origen="directo", estado="activa",
+                    id=1, contacto_id=1, canal="whatsapp", id_externo="593987654321", telefono="593987654321", nombre=None,
+                    origen="directo", estado="activa",
                     id_anuncio=None, notas_internas=None, ventana_abierta=True,
                     ventana_expira_en=None, creada_en=None, actualizada_en=None,
                 ),
