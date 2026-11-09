@@ -70,7 +70,7 @@ class TestCompraPropia:
         assert (v["producto"], v["variante"], v["cantidad"]) == ("Zapatos de cuero", "talla 40", 2)
         assert (v["subtotal"], v["costo_envio_cliente"], v["total"]) == ("60.00", "2.00", "62.00")
         assert (v["costo_productos"], v["costo_envio_negocio"], v["ganancia"]) == ("36.00", "1.00", "25.00")
-        assert v["entrega"] == "Envío en Cuenca" and v["metodo_pago"] == "contraentrega" and v["canal"] == "directo"
+        assert v["entrega"] == "Envío en Cuenca" and v["metodo_pago"] == "contraentrega" and v["origen"] == "directo"
 
         textos = [a["texto"] for a in r.avisos]
         assert any("Cierre previo: Quiere comprar" in t for t in textos)

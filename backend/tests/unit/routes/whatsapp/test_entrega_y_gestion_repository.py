@@ -8,14 +8,13 @@ import pytest
 
 from src.config.database import get_connection
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository
+from tests.helpers_db import borrar_conversaciones_de_prueba
 
 TELEFONO = "593900009999"
 
 
 def _limpiar():
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("delete from conversaciones where telefono = %s", (TELEFONO,))  # cascada: leads
+    borrar_conversaciones_de_prueba(TELEFONO)
 
 
 @pytest.fixture(autouse=True)
@@ -27,8 +26,8 @@ def limpio():
 
 @pytest.fixture
 def lead():
-    conversacion = ConversacionRepository.crear(telefono=TELEFONO, origen="directo")
-    return LeadRepository.obtener_o_crear(conversacion["id"], telefono=TELEFONO)
+    conversacion = ConversacionRepository.crear(id_externo=TELEFONO, origen="directo")
+    return LeadRepository.obtener_o_crear(conversacion["id"], conversacion["contacto_id"], telefono=TELEFONO)
 
 
 class TestEntregaEnElLead:
@@ -93,12 +92,12 @@ class TestPedidoPrevio:
     ])
     def test_solo_cuentan_los_pedidos_ya_cerrados(self, lead, estado, esperado):
         self._con_estado(lead, estado)
-        assert LeadRepository.existe_pedido_previo_por_telefono(TELEFONO) is esperado
+        assert LeadRepository.existe_pedido_previo(lead["contacto_id"]) is esperado
 
 
 class TestConversacionEnGestion:
     def test_marcar_en_gestion_limpia_vista_en_y_se_cuenta_aparte(self):
-        conversacion = ConversacionRepository.crear(telefono=TELEFONO, origen="directo")
+        conversacion = ConversacionRepository.crear(id_externo=TELEFONO, origen="directo")
         ConversacionRepository.marcar_vista(conversacion["id"])
         antes = ConversacionRepository.contar_por_filtro_rapido()
 
@@ -111,7 +110,7 @@ class TestConversacionEnGestion:
         assert despues["escaladas"] == antes["escaladas"]
 
     def test_se_puede_filtrar_la_lista_por_en_gestion(self):
-        conversacion = ConversacionRepository.crear(telefono=TELEFONO, origen="directo")
+        conversacion = ConversacionRepository.crear(id_externo=TELEFONO, origen="directo")
         ConversacionRepository.marcar_en_gestion(conversacion["id"])
         lista = ConversacionRepository.listar(estado="en_gestion", origen=None, q=None, page=1, page_size=50)
         assert conversacion["id"] in [c["id"] for c in lista["items"]]

@@ -325,6 +325,6 @@ class TestFotoDelProducto:
         # no escribe nada. Aquí se da por leído para que el resto de la prohibición sea estricta.
         monkeypatch.setattr("src.config.parametros.repository.ParametrosRepository.listar", staticmethod(lambda: {}))
         monkeypatch.setattr("src.config.database._get_pool", prohibido)
-        monkeypatch.setattr("src.routes.whatsapp.tools.get_whatsapp_client", prohibido)
+        monkeypatch.setattr("src.routes.whatsapp.tools.get_registro_canales", prohibido)
         r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")))
         assert len(r.fotos) == 1 and len(responses.calls) == 0

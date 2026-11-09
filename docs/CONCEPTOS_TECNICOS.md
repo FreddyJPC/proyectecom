@@ -1424,3 +1424,35 @@ días» es el máximo que indica Meta; el momento exacto lo decide Meta.
 abierta, ni si los mensajes siguientes al primero también traen el paquete `referral`; por eso se guarda todo en cuanto
 llega. Y **todavía no ha llegado ningún anuncio real** al sistema: la primera vez hay que revisar que lo guardado coincida
 con lo esperado (pendiente #66).
+
+---
+
+## 44. Contactos y canales: una persona, varias formas de escribirte
+**Para qué sirve:** que el negocio pueda vender por WhatsApp, Instagram y Messenger sin perder la pista de quién es quién,
+y poder limpiar el espacio de la base sin perder lo que sirve para vender.
+
+**Las tres piezas (el modelo que usan los CRM grandes):**
+- **Contacto** (`contactos`): *la persona*. Existe una sola vez y para siempre. Guarda su nombre y su teléfono si se conoce.
+- **Conversación** (`conversaciones`): *un hilo de chat con esa persona en un canal*. Una por canal: la misma persona puede
+  tener una en WhatsApp y otra en Instagram. Se encuentra por `canal` + `id_externo` (el teléfono en WhatsApp; un
+  identificador de Meta en Instagram y Messenger).
+- **Lead** (`leads`) y **venta** (`ventas`): cada intención de compra y lo vendido. Cuelgan del contacto.
+
+**No confundir canal con origen.** El **canal** es *por dónde conversa* (WhatsApp, Instagram, Messenger). El **origen** es *cómo
+llegó* (por un anuncio, o escribió directo). Un cliente puede llegar por un anuncio de Instagram: canal Instagram, origen anuncio.
+(Antes el origen se llamaba `fep`, que es jerga de WhatsApp; ahora se llama `anuncio` y vale para todos.)
+
+**Qué se borra y qué no.** La base **se niega** a borrar una conversación que tiene leads, llegadas por anuncio o solicitudes de
+gestión: el historial del contacto no se pierde por accidente. Lo único que sí se podrá depurar con el tiempo son los mensajes y la
+cola ya procesada (plan en `docs/PLAN_LEADS_CRM.md` §10). Un contacto no se borra.
+
+**Cómo enviamos por cada canal.** El bot, el panel y las fotos no saben nada de WhatsApp: piden «envía esto a este cliente por
+este canal» al registro de canales (`src/integrations/canales.py`). Hoy solo WhatsApp está conectado; si se pide Instagram o
+Messenger, el sistema responde con un mensaje claro de que ese canal todavía no está conectado (no falla en silencio).
+
+**Un mismo teléfono = un mismo contacto.** Si un cliente de Instagram da su teléfono y ya existe por WhatsApp, la conversación
+se cuelga del mismo contacto y se reconoce que ya compró. Fusionar contactos que el sistema no pudo emparejar (por ejemplo un
+usuario de Instagram que nunca dio su teléfono) será una acción manual del dueño (pendiente #71).
+
+**Dos mensajes a la vez.** Si un cliente nuevo escribe dos mensajes seguidos, ambos se procesan: crear la conversación es «crear o
+traer» y el segundo recibe la que creó el primero (antes el segundo podía fallar por duplicado y perderse).

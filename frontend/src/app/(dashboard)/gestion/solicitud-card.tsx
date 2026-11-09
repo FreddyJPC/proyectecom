@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiError } from "@/lib/api";
 import { estadoDeCobro, tipoSolicitudInfo } from "@/lib/estados";
+import { nombreCanal } from "@/lib/canales";
 import { formatFechaHora, formatMoney, formatPhone, tiempoRelativo } from "@/lib/format";
 import type { Solicitud, VentaAccionada } from "@/types/gestion";
 
@@ -49,10 +50,11 @@ export function SolicitudCard({ solicitud: s, onCambio }: { solicitud: Solicitud
   const [texto, setTexto] = useState("");
   const [guardando, setGuardando] = useState(false);
   const pendiente = s.estado === "pendiente";
-  const nombre = s.nombreCliente || formatPhone(s.telefono);
+  const nombre = s.nombreCliente || (s.telefono ? formatPhone(s.telefono) : null) || s.idExterno || "Cliente";
   const destino = [s.direccion, s.canton, s.provincia].filter(Boolean).join(", ");
   const producto = s.producto ? `${s.cantidad && s.cantidad > 1 ? `${s.cantidad} × ` : ""}${s.producto}${s.variante ? ` (${s.variante})` : ""}` : null;
-  // Abre el chat de WhatsApp del cliente en el teléfono o en WhatsApp Web (solo dígitos).
+  // Abre el chat de WhatsApp del cliente en el teléfono o en WhatsApp Web (solo dígitos). Un cliente de otro canal que ya
+  // dio su teléfono también se puede contactar por WhatsApp; sin teléfono no hay enlace.
   const enlaceWhatsApp = s.telefono ? `https://wa.me/${s.telefono.replace(/\D/g, "")}` : null;
   const cancelada = s.ventaEstado === "cancelada";
 
@@ -135,7 +137,10 @@ export function SolicitudCard({ solicitud: s, onCambio }: { solicitud: Solicitud
               {s.proveedor && <span className="text-xs text-muted-foreground">{s.proveedor}</span>}
             </div>
             <p className="mt-1.5 truncate text-base font-semibold">{nombre}</p>
-            <p className="tabular text-sm text-muted-foreground">{formatPhone(s.telefono)}</p>
+            <p className="tabular text-sm text-muted-foreground">
+              {s.canal && s.canal !== "whatsapp" ? `${nombreCanal(s.canal)} · ` : ""}
+              {s.telefono ? formatPhone(s.telefono) : "Aún sin teléfono"}
+            </p>
           </div>
           <p className="text-xs text-muted-foreground" title={formatFechaHora(s.creadaEn)}>
             {tiempoRelativo(s.creadaEn)}

@@ -14,6 +14,8 @@ export type Solicitud = {
   atendidaPor: string | null;
   creadaEn: string | null;
   atendidaEn: string | null;
+  canal: string | null;
+  idExterno: string | null;
   telefono: string | null;
   nombreCliente: string | null;
   direccion: string | null;

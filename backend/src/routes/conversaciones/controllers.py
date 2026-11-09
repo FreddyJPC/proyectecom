@@ -23,12 +23,13 @@ def _build_service() -> ConversacionesService:
 def listar_conversaciones():
     estado = request.args.get("estado")
     origen = request.args.get("origen")
+    canal = request.args.get("canal")
     q = request.args.get("q")
     page = request.args.get("page", 1, type=int)
     page_size = min(request.args.get("pageSize", 20, type=int), 100)
 
     resultado = _build_service().listar_conversaciones(
-        estado=estado, origen=origen, q=q, page=page, page_size=page_size
+        estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal
     )
     return jsonify(conversacion_lista_schema.dump(asdict(resultado))), 200
 
@@ -56,7 +57,7 @@ def enviar_mensaje(conversacion_id: int):
     except VentanaMensajeriaCerradaError as exc:
         return jsonify(error=str(exc)), 409
     except EnvioWhatsAppFallidoError as exc:
-        return jsonify(error=f"El mensaje se guardó pero no se pudo enviar por WhatsApp: {exc}"), 502
+        return jsonify(error=f"El mensaje se guardó pero no se pudo enviar: {exc}"), 502
 
     return jsonify(mensaje_schema.dump(asdict(mensaje))), 200
 

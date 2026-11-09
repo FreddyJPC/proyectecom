@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from src.integrations.whatsapp import get_whatsapp_client
+from src.integrations.canales import get_registro_canales
 
 from .repository import ColaMensajeRepository, MensajeRepository
 from .worker import BotWorker
@@ -14,7 +14,7 @@ def get_bot_worker() -> BotWorker:
     el caso de que create_app() se ejecute más de una vez en el mismo
     proceso (ver PROGRESS.md, Fase 3, nota sobre app.py)."""
     worker = BotWorker(
-        whatsapp_client=get_whatsapp_client(),
+        canales=get_registro_canales(),
         mensaje_repository=MensajeRepository(),
         cola_repository=ColaMensajeRepository(),
     )

@@ -79,7 +79,9 @@ class VictoriaConversationService:
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
-        lead = self._leads.obtener_o_crear(conversacion_id, telefono=conversacion["telefono"])
+        lead = self._leads.obtener_o_crear(
+            conversacion_id, contacto_id=conversacion["contacto_id"], telefono=conversacion.get("telefono")
+        )
 
         producto_contexto = self._resolver_producto_contexto(lead, conversacion)
         plantilla = self._plantilla_fija if self._plantilla_fija is not None else instrucciones_vigentes.plantilla()

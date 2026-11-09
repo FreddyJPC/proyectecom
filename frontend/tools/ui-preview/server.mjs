@@ -61,19 +61,22 @@ const pedidoDetalle = (id) => {
 
 // ---------- Conversaciones ----------
 const convs = [
-  ["593987654321", "María Fernanda Loor", "fep", "escalada", "Audífonos Bluetooth Pro", true, "cliente", "Mejor prefiero hablar con una persona, ¿pueden llamarme?", 4],
-  ["593998877665", "Carlos Andrade", "fep", "esperando_pago", "Reloj Inteligente Serie 7", false, "bot", "Perfecto Carlos, te comparto los datos para la transferencia.", 26],
+  ["593987654321", "María Fernanda Loor", "anuncio", "escalada", "Audífonos Bluetooth Pro", true, "cliente", "Mejor prefiero hablar con una persona, ¿pueden llamarme?", 4],
+  ["593998877665", "Carlos Andrade", "anuncio", "esperando_pago", "Reloj Inteligente Serie 7", false, "bot", "Perfecto Carlos, te comparto los datos para la transferencia.", 26],
   ["593961234567", "Lucía Mendoza", "directo", "activa", "Lámpara LED Recargable", false, "bot", "¿Me confirmas tu dirección completa y el cantón?", 41],
-  ["593976543210", null, "fep", "activa", null, false, "cliente", "Hola, vi el anuncio, ¿cuánto cuesta?", 55],
+  ["593976543210", null, "anuncio", "activa", null, false, "cliente", "Hola, vi el anuncio, ¿cuánto cuesta?", 55],
   ["593984455667", "Daniela Vera", "web_formulario", "escalada", "Cargador Rápido 33W", true, "cliente", "Mi pedido llegó con el cable roto", 120],
   ["593991122334", "Pedro Villacís", "directo", "cerrada", "Reloj Inteligente Serie 7", false, "bot", "¡Gracias por tu compra, Pedro! Tu pedido va en camino.", 60 * 20],
-  ["593958899001", "Andrea Salazar", "fep", "fria", "Audífonos Bluetooth Pro", false, "bot", "Quedo atenta por si deseas continuar con tu pedido.", 60 * 52],
-  ["593967788990", "Santiago Caicedo", "fep", "activa", "Lámpara LED Recargable", false, "cliente", "Sí, la quiero en color blanco", 8],
+  ["593958899001", "Andrea Salazar", "anuncio", "fria", "Audífonos Bluetooth Pro", false, "bot", "Quedo atenta por si deseas continuar con tu pedido.", 60 * 52],
+  ["593967788990", "Santiago Caicedo", "anuncio", "activa", "Lámpara LED Recargable", false, "cliente", "Sí, la quiero en color blanco", 8],
   ["593972233445", "Gabriela Núñez", "directo", "esperando_pago", "Audífonos Bluetooth Pro", false, "cliente", "Ya hice la transferencia, te envío el comprobante", 15],
-  ["593955667788", "Marcelo Ortiz", "fep", "en_gestion", "Zapatos de cuero", true, "bot", "Listo, le avisé al dueño: te escribe enseguida para coordinar 🙋", 12],
+  ["593955667788", "Marcelo Ortiz", "anuncio", "en_gestion", "Zapatos de cuero", true, "bot", "Listo, le avisé al dueño: te escribe enseguida para coordinar 🙋", 12],
+  ["17841400000000002", "Valeria Quishpe", "anuncio", "activa", "Lámpara LED Recargable", false, "cliente", "¿Hacen envíos a Loja? Vi su anuncio en Instagram", 6, "instagram"],
+  ["7391850264412009", null, "directo", "escalada", "Cargador Rápido 33W", true, "cliente", "¿Pueden llamarme? Mi número es 0991112233", 33, "messenger"],
 ];
 const conversaciones = convs.map((c, i) => ({
-  id: 301 - i, telefono: c[0], nombreCliente: c[1], origen: c[2], estado: c[3], productoInteres: c[4], sinRevisar: c[5],
+  id: 301 - i, canal: c[9] || "whatsapp", idExterno: c[0], telefono: c[9] ? null : c[0], nombre: c[9] ? (c[1] || "usuario_" + c[0].slice(-4)) : c[1],
+  nombreCliente: c[1], origen: c[2], estado: c[3], productoInteres: c[4], sinRevisar: c[5],
   ultimoMensaje: { rol: c[6], contenido: c[7], creadoEn: ago(c[8]) }, creadaEn: ago(c[8] + 300), actualizadaEn: ago(c[8]),
 }));
 const mensajesDe = (c) => {
@@ -97,7 +100,7 @@ const anunciosMeta = {
 const vinculosAnuncio = { "120210000123": { sku: "AUD-BT-001", nombre: "Video principal" }, "120210000456": { sku: "LMP-LED-220", nombre: null } };
 const nombreProductoBot = (sku) => (productosBot.find((f) => f.sku === sku) || {}).nombre || sku;
 const anuncioDeConv = (c) => {
-  if (c.origen !== "fep") return { id: null, llegadas: [] };
+  if (c.origen !== "anuncio") return { id: null, llegadas: [] };
   const id = c.telefono === "593976543210" ? "120210000789" : c.telefono === "593998877665" ? "120210000456" : "120210000123";
   const extra = c.telefono === "593987654321" ? [{ idAnuncio: "120210000456", titulo: anunciosMeta["120210000456"].titulo, creadoEn: ago(60 * 24 * 12) }] : [];
   return { id, llegadas: [{ idAnuncio: id, titulo: anunciosMeta[id].titulo, creadoEn: c.creadaEn }, ...extra] };
@@ -114,7 +117,8 @@ const convDetalle = (id) => {
     : { estado: "abierta", expiraEn: new Date(now + 5 * 86400000).toISOString(), responderAntesDe: null };
   return {
     conversacion: {
-      id: c.id, telefono: c.telefono, origen: c.origen, estado: c.estado, idAnuncio: ad.id,
+      id: c.id, contactoId: c.id, canal: c.canal, idExterno: c.idExterno, telefono: c.telefono, nombre: c.nombre,
+      origen: c.origen, estado: c.estado, idAnuncio: ad.id,
       notasInternas: c.estado === "escalada" ? "Cliente pidió llamada. Escribirle primero por aquí." : "",
       ventanaAbierta: !cerrada, ventanaExpiraEn: cerrada ? null : new Date(now + 17 * 3600000).toISOString(), creadaEn: c.creadaEn, actualizadaEn: c.actualizadaEn,
       ventanaGratuita: gratuita,
@@ -858,7 +862,7 @@ function manejarProductosBot(req, res, p, q, send) {
 const ETIQUETAS_SOLICITUD = { quiere_comprar: "Quiere comprar", quiere_pagar: "Quiere pagar", pide_envio: "Pide envío", quiere_ver_producto: "Quiere ver el producto", quiere_negociar: "Quiere negociar", sin_cobertura: "Sin cobertura de envío", pedido_cerrado: "Pedido cerrado, gestionar envío", otro: "Otro" };
 const solicitud = (id, conversacionId, tipo, detalle, min, extra = {}) => ({
   id, conversacionId, tipo, tipoEtiqueta: ETIQUETAS_SOLICITUD[tipo], detalle, estado: "pendiente", notaAtencion: null, atendidaPor: null, creadaEn: ago(min), atendidaEn: null,
-  telefono: null, nombreCliente: null, direccion: null, canton: null, provincia: null, producto: null, variante: null, cantidad: null, metodoPago: null, entrega: null, total: null, proveedor: "propio", tienePedido: false,
+  canal: "whatsapp", idExterno: null, telefono: null, nombreCliente: null, direccion: null, canton: null, provincia: null, producto: null, variante: null, cantidad: null, metodoPago: null, entrega: null, total: null, proveedor: "propio", tienePedido: false,
   // La venta ligada: cobro y cancelación (migración 022). Las acciones disponibles las calcula `conAcciones`.
   ventaId: null, ventaEstado: null, ventaCobradaEn: null, ventaCobradaPor: null, ventaNotaCobro: null, ventaCanceladaEn: null, ventaCanceladaPor: null, ventaMotivoCancelacion: null,
   puedeCobrar: false, puedeDeshacerCobro: false, puedeCancelar: false, ...extra,
@@ -874,6 +878,7 @@ const solicitudesGestion = [
     telefono: "593955667788", nombreCliente: "Marcelo Ortiz", direccion: "Av. Remigio Crespo 3-45", canton: "Cuenca", provincia: "Azuay", producto: "Zapatos de cuero", variante: "Talla 41, negro",
     cantidad: 1, metodoPago: "contraentrega", entrega: "Envío dentro de Cuenca", total: "47.00", tienePedido: true, ventaId: 61, ventaEstado: "por_gestionar",
   }),
+  solicitud(7, 295, "quiere_comprar", "Quiere la lámpara; aún no dio su teléfono.", 14, { canal: "instagram", idExterno: "17841400000000002", telefono: null, nombreCliente: "Valeria Quishpe", producto: "Lámpara LED Recargable", canton: "Loja", provincia: "Loja" }),
   solicitud(5, 298, "quiere_ver_producto", "Quiere probarse los zapatos antes de comprarlos.", 32, { telefono: "593961234567", nombreCliente: "Lucía Mendoza", producto: "Zapatos de cuero", canton: "Cuenca", provincia: "Azuay" }),
   solicitud(4, 299, "quiere_negociar", "Pide una rebaja si lleva dos pares.", 75, { telefono: "593976543210", nombreCliente: null, producto: "Zapatos de cuero", cantidad: 2 }),
   solicitud(3, 296, "sin_cobertura", "Vive en Galápagos y ninguna opción de entrega cubre ese destino.", 240, { telefono: "593958899001", nombreCliente: "Andrea Salazar", canton: "San Cristóbal", provincia: "Galápagos", producto: "Camiseta de algodón" }),
@@ -1000,7 +1005,8 @@ const server = http.createServer((req, res) => {
       let items = conversaciones;
       if (q.get("estado")) items = items.filter((c) => c.estado === q.get("estado"));
       if (q.get("origen")) items = items.filter((c) => c.origen === q.get("origen"));
-      if (q.get("q")) items = items.filter((c) => (c.telefono + (c.nombreCliente || "")).toLowerCase().includes(q.get("q").toLowerCase()));
+      if (q.get("canal")) items = items.filter((c) => c.canal === q.get("canal"));
+      if (q.get("q")) items = items.filter((c) => (c.idExterno + (c.telefono || "") + (c.nombre || "") + (c.nombreCliente || "")).toLowerCase().includes(q.get("q").toLowerCase()));
       return send({ ...paginar(items, q), totalesPorFiltroRapido: totalesConv() });
     }
     let m;

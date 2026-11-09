@@ -2,12 +2,18 @@
 
 > Pedido de Freddy (2026-11-09): un panel de leads con tabla y filtros, una **temperatura** por lead
 > (caliente / tibio / frío / perdido / ganado) que **Victoria define** al leer la conversación, la protección de
-> «no contactar», y el seguimiento de clientes que se enfrían (pendiente #67). Estado: **plan, sin implementar**.
+> «no contactar», y el seguimiento de clientes que se enfrían (pendiente #67). Estado: **plan; la Fase 0 (cimientos
+> multicanal, ADR-014, migración 024) ya está hecha y probada localmente, sin desplegar; falta lo demás**.
+>
+> **Aclaración del 2026-11-09 (cambia el plan):** el negocio venderá también por **Instagram y Messenger**, y los datos
+> actuales son de prueba. Por eso el contacto ya **no** vive dentro de `conversaciones`: hay una tabla `contactos` y una
+> conversación por canal. Donde este documento dice «la conversación es el contacto», léase «el contacto (`contactos`)».
+> Las migraciones se renumeran: **024 = Fase 0 (hecha)**, **025 = leads CRM (F1)**, **026 = seguimientos (F4)**.
 
 ## 1. Cómo está hoy (verificado en el código y en producción, 2026-11-09)
 - `leads` es la **hoja de venta** de un cliente: nombre, dirección, producto, método de pago y la etapa técnica
   (`recopilando_datos`, `esperando_pago`, `listo_para_despacho`, `despachado`, `por_gestionar`, `cancelado`).
-- **Hay un solo lead por conversación (= por teléfono) en el código, no en la base**: la tabla no tiene restricción
+- **Hay un solo lead por conversación en el código, no en la base**: la tabla no tiene restricción
   única. Solo 3 lugares lo suponen (`obtener_por_conversacion`, `obtener_o_crear` y la regla de «cliente con pedido
   previo»), por eso cambiarlo es abordable.
 - Consecuencia: un cliente que ya compró y vuelve **no lo atiende Victoria**, pasa siempre al dueño (regla 2 del
@@ -16,8 +22,8 @@
 - Producción: 6 conversaciones y 5 leads (datos de prueba; nada real todavía).
 
 ## 2. Decisiones de diseño (recomendadas)
-**2.1 Contacto y lead son cosas distintas.** La **conversación** (teléfono) es el *contacto*, que dura para siempre. Un
-**lead** es una *oportunidad de compra*: puede haber varios con el tiempo, **uno abierto a la vez**. Así «José, audífonos
+**2.1 Contacto y lead son cosas distintas.** El **contacto** (`contactos`, Fase 0) es la persona y dura para siempre; sus
+**conversaciones** son un hilo por canal (WhatsApp, Instagram, Messenger). Un **lead** es una *oportunidad de compra*: puede haber varios con el tiempo, **uno abierto a la vez**. Así «José, audífonos
 en octubre» y «José, zapatos en noviembre» son dos leads del mismo contacto, y la recompra deja de ser un problema.
 
 **2.2 Dos ejes, para no mezclar «dónde va» con «qué tan probable es».**
@@ -43,7 +49,8 @@ en octubre» y «José, zapatos en noviembre» son dos leads del mismo contacto,
 Cada cambio queda en un **historial** (de → a, quién, motivo, cuándo): así se ve por qué un lead cambió y se puede
 medir si la IA acierta.
 
-**2.4 «No contactar» es del contacto, no del lead.** Marca en la conversación (`no_contactar`, motivo, fecha, quién).
+**2.4 «No contactar» es del contacto, no del lead ni del canal.** Marca en `contactos` (`no_contactar`, motivo, fecha, quién):
+si pidió que no le escriban por WhatsApp, tampoco se le escribe por Instagram.
 Victoria la pone con una herramienta `no_contactar` cuando el cliente dice que no le interesa o que no le escriban; el
 dueño la puede quitar. **Bloquea todo mensaje que enviemos por iniciativa propia** (empujón y plantilla). No impide
 responder si el cliente vuelve a escribir él.
@@ -61,15 +68,15 @@ marketing** por compra. Cómo encaja aquí (comprobado en el esquema el 2026-11-
 
 | En un CRM grande | Aquí | Observación |
 |---|---|---|
-| **Contacto** (único, deduplicado por teléfono) | `conversaciones` | `telefono` ya es `unique`: no hay duplicados posibles. No se crea tabla nueva; hoy es 1 a 1. **Sus filas no se borran nunca** (ver §10) |
+| **Contacto** (único, deduplicado por teléfono) | `contactos` (Fase 0, ADR-014) | Teléfono único cuando existe; un cliente de Instagram puede no tenerlo. Cada canal es una `conversaciones` que cuelga del contacto. **El contacto no se borra nunca** (ver §10) |
 | **Oportunidad / Deal** | `leads` | Una fila por intención de compra. Se conserva el nombre `leads` en código y base (renombrar tocaría todo sin ganar nada) |
 | **Lead** (sin calificar) | la *temperatura* (frío/tibio) | No es una tabla aparte: calificar = subir la temperatura |
 | **Actividades / línea de tiempo** | `mensajes` + `conversacion_anuncios` + `lead_historial` | Se muestran juntas en la ficha |
 
 Lo que esta referencia **agrega al plan** (no estaba):
-1. **Atribución por oportunidad (corrige un defecto de lo desplegado el 2026-11-09).** Hoy `conversaciones.origen` pasa a
-   «fep» con el primer anuncio y **no vuelve nunca a «directo»**, y `ventas.canal`/`ventas.id_anuncio` copian ese valor al
-   cerrar la venta. Con el ejemplo de José (anuncio en enero, laptop en mayo sin anuncio) la venta de mayo se contaría
+1. **Atribución por oportunidad (corrige un defecto de lo desplegado el 2026-11-09; sigue pendiente, es de F1).** Hoy
+   `conversaciones.origen` pasa a «anuncio» (antes «fep») con el primer anuncio y **no vuelve nunca a «directo»**, y
+   `ventas.origen`/`ventas.id_anuncio` (antes `ventas.canal`) copian ese valor al cerrar la venta. Con el ejemplo de José (anuncio en enero, laptop en mayo sin anuncio) la venta de mayo se contaría
    como venta del anuncio de enero. Corrección: **cada lead guarda su propio origen y anuncio** (`leads.origen`,
    `leads.id_anuncio`, `leads.ctwa_clid`), fijados al abrirse y actualizados si llega otro anuncio mientras sigue
    abierto. Un lead nuevo hereda el anuncio **solo si la llegada por anuncio es reciente** (parámetro
@@ -84,9 +91,9 @@ Lo que esta referencia **agrega al plan** (no estaba):
    equivalente a lo que ve el vendedor en pantalla.
 6. **Motivo de pérdida estructurado** (catálogo: precio, no respondió, compró en otro lado, sin cobertura, sin stock, no le
    interesó, otro) además del texto libre, para poder reportar **por qué se pierde**.
-7. **Nombre del contacto:** hoy el nombre solo vive en el lead (`nombre_cliente`, lo que dio para el envío) y el sistema
-   **no guarda el nombre del perfil de WhatsApp**. Se agrega `conversaciones.nombre` (perfil de WhatsApp, o el último
-   nombre dado a un lead).
+7. **Nombre del contacto:** *(hecho en la Fase 0)* `contactos.nombre` (el del perfil del canal o el último que dio al
+   comprar) y `conversaciones.nombre_perfil`; el webhook de WhatsApp ya lo toma de `contacts[].profile.name` (por confirmar
+   con un mensaje real).
 
 **Diferencias a propósito con los CRM grandes:** (a) **un solo lead abierto a la vez** por contacto (ellos permiten
 varias oportunidades abiertas): así Victoria atiende un producto cada vez y el panel no se llena de duplicados; si el
@@ -94,14 +101,11 @@ cliente quiere dos productos, van como líneas de la misma venta; (b) **sin «Cu
 (c) **sin etapas configurables ni probabilidad por etapa** (la temperatura cubre eso; puede venir en F5).
 
 ## 3. Cambios de datos
-- **Migración 024:** `leads.temperatura` (+ `temperatura_motivo`, `temperatura_origen` = ia/regla/dueño,
+- **Migración 025 (F1; la 024 ya es la Fase 0):** `leads.temperatura` (+ `temperatura_motivo`, `temperatura_origen` = ia/regla/dueño,
   `temperatura_en`, `temperatura_fijada_hasta`); `leads.origen`, `leads.id_anuncio`, `leads.ctwa_clid` (atribución por
-  oportunidad) y `leads.motivo_perdida`; `conversaciones.nombre`; `conversaciones.no_contactar` (+ motivo, fecha,
-  quién); tabla `lead_historial`. **Relleno** de los leads existentes por reglas (ganado/perdido; el resto tibio; el
-  origen del lead se toma de la conversación). **Además (§10):** las claves de `leads`, `conversacion_anuncios` y
-  `solicitudes_gestion` hacia `conversaciones` pasan de «borrar en cascada» a «impedir el borrado», para que la base se
-  niegue a borrar un contacto con historial.
-- **Migración 025 (con el seguimiento):** tabla `seguimientos` (qué se envió a quién y cuándo; impide repetir).
+  oportunidad) y `leads.motivo_perdida`; `contactos.no_contactar` (+ motivo, fecha, quién); tabla `lead_historial`. **Relleno** de los leads existentes por reglas (ganado/perdido; el resto tibio; el
+  origen del lead se toma de la conversación).
+- **Migración 026 (con el seguimiento):** tabla `seguimientos` (qué se envió a quién y cuándo; impide repetir).
 - Solo se agregan objetos; no se edita nada ya aplicado.
 
 ## 4. Victoria
@@ -138,14 +142,17 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
   empujón y una plantilla por contacto en toda su vida**; tope diario; horario 9:00–20:00 (Ecuador); dos interruptores
   **apagados por defecto**; el mensaje se guarda en la conversación para que Victoria sepa que ya se le escribió.
 - La temperatura decide a quién conviene escribir (no a los fríos sin señal de interés ni a los perdidos).
+- **Por canal:** las plantillas de Meta son de WhatsApp; el seguimiento solo escribe por los canales que lo permiten y
+  tienen adaptador (hoy, WhatsApp). La ventana de cada canal (hoy solo se conoce la de WhatsApp) se define al conectarlo.
 
 ## 7. Fases (en este orden)
 | Fase | Qué se entrega | Tamaño relativo |
 |---|---|---|
-| **F1** | Migración 024, **varios leads por contacto**, **atribución por oportunidad** (la venta copia el origen del lead), «no contactar», historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
+| **F0** (hecha) | **Cimientos multicanal (ADR-014, migración 024):** `contactos`, una conversación por canal, canal separado de origen, registro de canales de envío, claves protegidas contra el borrado. 1608 pruebas; **sin desplegar** | Hecho |
+| **F1** | Migración 025, **varios leads por contacto** (ojo: `ConversacionRepository.listar` une `leads` por conversación y con varios leads repetiría filas: usar el lead más reciente), **atribución por oportunidad** (la venta copia el origen del lead), «no contactar» en el contacto, historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
 | **F2** | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente con el historial del contacto en su contexto**, simulación. Tests | Mediano, el de más riesgo |
 | **F3** | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
-| **F4** | Seguimiento: migración 025, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
+| **F4** | Seguimiento: migración 026, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
 | **F5** (opcional) | Tablero Kanban, exportar a CSV, recordatorios al dueño, conversión por temperatura y por anuncio | A pedido |
 | **R** (retención, cuando haga falta) | Depurar solo lo pesado y sin valor comercial (mensajes viejos de conversaciones cerradas, cola ya procesada, webhooks crudos), con interruptor apagado; ver §10 | Mediano; no urgente |
 
@@ -176,14 +183,14 @@ Varios usuarios o asignar leads a vendedores, tareas y calendario, importar cont
 nombres, teléfonos, intereses, ventas, anuncios). **Comprobado en producción (solo lectura) y en las migraciones:**
 
 **10.1 Lo que hay hoy**
-- `conversaciones` es a la vez el *contacto* (teléfono único) y el *estado de la charla*, pero su fila es diminuta
-  (11 columnas, casi todas cortas): **no ocupa espacio**. Lo que crece es `mensajes` (unos 108 caracteres de media por
+- *(Antes de la Fase 0)* `conversaciones` era a la vez el *contacto* y el *estado de la charla*, pero su fila es diminuta:
+  **no ocupa espacio**. Lo que crece es `mensajes` (unos 108 caracteres de media por
   mensaje; ~350 bytes por mensaje con sus índices, estimado con los 38 mensajes de prueba).
 - **No hay ningún borrado automático** en el sistema: ni mensajes, ni la cola (`cola_mensajes`, hoy 8 filas, todas ya
   procesadas), ni `webhook_events` (el JSON crudo de Rocketfy, que trae datos del cliente que ya están en `ventas` y
   `pedidos`). `stock_snapshots` crecería con el monitor de stock (hoy 0 filas porque no hay SKUs monitoreados; la
   velocidad real no se midió).
-- **El riesgo real es la cascada:** borrar una fila de `conversaciones` arrastra `mensajes` y `cola_mensajes` (bien)
+- **El riesgo real era la cascada (resuelto en la Fase 0, migración 024):** borrar una fila de `conversaciones` arrastraba `mensajes` y `cola_mensajes` (bien)
   **pero también `leads`, `conversacion_anuncios` y `solicitudes_gestion`** (el historial de intereses y de anuncios,
   justo lo que se quiere conservar). `ventas` está a salvo: copia nombre, teléfono, dirección, productos, costos y
   origen, y su clave a la conversación es «dejar en blanco», no «borrar».
@@ -191,16 +198,16 @@ nombres, teléfonos, intereses, ventas, anuncios). **Comprobado en producción (
 **10.2 Clasificación**
 | Se conserva siempre | Se puede depurar con el tiempo |
 |---|---|
-| `conversaciones` (el contacto), `leads`, `lead_historial`, `seguimientos`, `conversacion_anuncios`, `ventas`, `ventas_lineas`, `solicitudes_gestion`, `pedidos` (auditoría contra duplicados), `anuncios_productos`, productos y parámetros con sus historiales | `mensajes` de conversaciones viejas y cerradas; `cola_mensajes` ya procesada; `webhook_events` ya procesados; `stock_snapshots` antiguos |
+| `contactos`, `conversaciones` (sin sus mensajes), `leads`, `lead_historial`, `seguimientos`, `conversacion_anuncios`, `ventas`, `ventas_lineas`, `solicitudes_gestion`, `pedidos` (auditoría contra duplicados), `anuncios_productos`, productos y parámetros con sus historiales | `mensajes` de conversaciones viejas y cerradas; `cola_mensajes` ya procesada; `webhook_events` ya procesados; `stock_snapshots` antiguos |
 
 **10.3 Decisiones de arquitectura (solo lo necesario)**
-- **No se crea una tabla `contactos` aparte.** Separarla no ahorraría espacio (la fila del contacto pesa unos cientos de
-  bytes) y obligaría a tocar el webhook, el bot, la API, leads, ventas y anuncios. Se reconsidera si un contacto llega a
-  tener más de un canal (por ejemplo Instagram).
-- **Sí se protege el contacto de borrados accidentales** (migración 024): las claves de `leads`,
+- **Sí hay una tabla `contactos` aparte** *(decisión cambiada el 2026-11-09)*: el análisis de espacio decía que no hacía
+  falta (la fila pesa unos cientos de bytes), pero Freddy aclaró que el negocio venderá por Instagram y Messenger, y ahí un
+  contacto tiene más de un canal: se hizo en la Fase 0 (ADR-014).
+- **El contacto está protegido de borrados accidentales** (migración 024, hecha): las claves de `leads`,
   `conversacion_anuncios` y `solicitudes_gestion` pasan a «impedir el borrado»; `mensajes` y `cola_mensajes` siguen en
-  cascada porque es lo depurable. Costo: unos diez archivos de pruebas y la herramienta `chat_con_victoria.py` limpian
-  borrando la conversación y necesitarán un ayudante que borre antes sus hijos. Si algún día un cliente pide que se
+  cascada porque es lo depurable. Costo (ya pagado): las pruebas y la herramienta `chat_con_victoria.py` limpiaban
+  borrando la conversación; ahora usan un ayudante que borra antes sus hijos. Si algún día un cliente pide que se
   borren sus datos, habrá que hacerlo con un procedimiento explícito (hoy no existe).
 - **El interés sobrevive a los mensajes:** producto del lead, temperatura, motivo escrito por Victoria, origen, valor y
   anuncio quedan en el lead; el contenido de la charla es lo único que se depura.

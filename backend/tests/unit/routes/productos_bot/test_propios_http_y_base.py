@@ -158,8 +158,12 @@ class TestEntregasRepositorio:
         fila = Repo.crear_propio(_datos(), [])
         with get_connection() as conn:
             with conn.cursor() as cur:
+                cur.execute("insert into contactos (telefono) values ('test-ventas-30d') returning id")
+                contacto_id = cur.fetchone()[0]
                 cur.execute(
-                    "insert into ventas (proveedor_id, estado, subtotal, total, telefono) values (2, 'por_gestionar', 30, 30, 'test-ventas-30d') returning id"
+                    "insert into ventas (contacto_id, proveedor_id, estado, subtotal, total, telefono) "
+                    "values (%s, 2, 'por_gestionar', 30, 30, 'test-ventas-30d') returning id",
+                    (contacto_id,),
                 )
                 venta_id = cur.fetchone()[0]
                 cur.execute(
@@ -172,6 +176,7 @@ class TestEntregasRepositorio:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("delete from ventas where telefono = 'test-ventas-30d'")
+                    cur.execute("delete from contactos where telefono = 'test-ventas-30d'")
 
 
 CUERPO_PROPIO = {

@@ -70,7 +70,7 @@ def upsert_solicitud(
 _SELECT_LISTA = """
     select s.id, s.conversacion_id, s.tipo, s.detalle, s.estado, s.nota_atencion, s.atendida_por,
            s.creada_en, s.atendida_en,
-           c.telefono, c.estado as estado_conversacion,
+           c.canal, c.id_externo, ct.telefono, c.estado as estado_conversacion,
            l.nombre_cliente, l.direccion, l.canton, l.provincia, l.producto_nombre, l.producto_variante,
            l.cantidad, l.metodo_pago, l.entrega_nombre, l.entrega_tipo, l.costo_envio,
            v.id as venta_id, v.total as venta_total, v.estado as venta_estado,
@@ -80,6 +80,7 @@ _SELECT_LISTA = """
            pr.nombre as proveedor_nombre, pr.cierre as proveedor_cierre
       from solicitudes_gestion s
       join conversaciones c on c.id = s.conversacion_id
+      join contactos ct on ct.id = c.contacto_id
       left join leads l on l.id = s.lead_id
       left join ventas v on v.id = s.venta_id
       left join proveedores pr on pr.id = v.proveedor_id

@@ -70,7 +70,7 @@ class GestionService:
         lead_id: Optional[int],
         clave_tipo: str,
         detalle: Optional[str],
-        telefono: str,
+        cliente: str,
     ) -> ResultadoSolicitud:
         """Registra (o completa) la solicitud pendiente de la conversación y avisa al dueño por Telegram
         la primera vez o cuando la solicitud sube de categoría (p. ej. de «quiere comprar» a «quiere
@@ -81,7 +81,7 @@ class GestionService:
         if resultado.creada or resultado.cambio_de_tipo:
             etiqueta = tipo_de(resultado.tipo).etiqueta
             origen = self.describir_origen(conversacion_id)
-            self._avisar(lambda t: t.notificar_gestion(etiqueta, conversacion_id, telefono, detalle or "", origen=origen))
+            self._avisar(lambda t: t.notificar_gestion(etiqueta, conversacion_id, cliente, detalle or "", origen=origen))
         return ResultadoSolicitud(solicitud=resultado, traspasa=tipo.traspasa, etiqueta=tipo.etiqueta)
 
     def avisar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
@@ -132,6 +132,8 @@ class GestionService:
             "atendida_por": fila.get("atendida_por"),
             "creada_en": _iso(fila.get("creada_en")),
             "atendida_en": _iso(fila.get("atendida_en")),
+            "canal": fila.get("canal"),
+            "id_externo": fila.get("id_externo"),
             "telefono": fila.get("telefono"),
             "nombre_cliente": fila.get("nombre_cliente"),
             "direccion": fila.get("direccion"),

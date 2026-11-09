@@ -17,8 +17,11 @@ class ConversacionResumenDTO:
     que el frontend no tenga que pedirlos aparte por conversación."""
 
     id: int
-    telefono: str
-    nombre_cliente: Optional[str]
+    canal: str                      # whatsapp | instagram | messenger
+    id_externo: Optional[str]       # identificador del cliente en ese canal (WhatsApp: su teléfono)
+    telefono: Optional[str]         # puede faltar en canales que no lo dan
+    nombre: Optional[str]           # nombre del contacto (perfil del canal o el que dio al comprar)
+    nombre_cliente: Optional[str]   # nombre que dio en el lead actual
     origen: str
     estado: str
     producto_interes: Optional[str]
@@ -104,7 +107,11 @@ class LlegadaPorAnuncioDTO:
 @dataclass
 class ConversacionDetalleDTO:
     id: int
-    telefono: str
+    contacto_id: int
+    canal: str
+    id_externo: str
+    telefono: Optional[str]
+    nombre: Optional[str]
     origen: str
     estado: str
     id_anuncio: Optional[str]

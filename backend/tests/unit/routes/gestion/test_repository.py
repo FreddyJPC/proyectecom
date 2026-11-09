@@ -6,14 +6,13 @@ import pytest
 from src.config.database import get_connection
 from src.routes.gestion.repository import SolicitudGestionRepository as Repo
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository
+from tests.helpers_db import borrar_conversaciones_de_prueba
 
 TELEFONO = "593900005678"
 
 
 def _limpiar():
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("delete from conversaciones where telefono = %s", (TELEFONO,))
+    borrar_conversaciones_de_prueba(TELEFONO)
 
 
 @pytest.fixture(autouse=True)
@@ -25,8 +24,8 @@ def limpio():
 
 @pytest.fixture
 def conversacion():
-    c = ConversacionRepository.crear(telefono=TELEFONO, origen="directo")
-    lead = LeadRepository.obtener_o_crear(c["id"], telefono=TELEFONO)
+    c = ConversacionRepository.crear(id_externo=TELEFONO, origen="directo")
+    lead = LeadRepository.obtener_o_crear(c["id"], c["contacto_id"], telefono=TELEFONO)
     return c["id"], lead["id"]
 
 
@@ -95,9 +94,9 @@ class TestListarYAtender:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "insert into ventas (lead_id, conversacion_id, proveedor_id, estado, subtotal, total, telefono) "
-                    "values (%s, %s, 2, 'por_gestionar', %s, %s, %s) returning id",
-                    (lead_id, conversacion_id, Decimal("30.00"), Decimal("30.00"), TELEFONO),
+                    "insert into ventas (lead_id, conversacion_id, contacto_id, proveedor_id, estado, subtotal, total, telefono) "
+                    "select %s, %s, contacto_id, 2, 'por_gestionar', %s, %s, %s from conversaciones where id = %s returning id",
+                    (lead_id, conversacion_id, Decimal("30.00"), Decimal("30.00"), TELEFONO, conversacion_id),
                 )
                 venta_id = cur.fetchone()[0]
         nueva = Repo.solicitar(conversacion_id, lead_id, "pedido_cerrado", "pedido", venta_id=venta_id)

@@ -383,7 +383,8 @@ export type VentaManualSimulada = {
   ganancia: string | null;
   entrega: string | null;
   metodoPago: string | null;
-  canal: string;
+  /** Cómo llegó el cliente: «anuncio» o «directo». */
+  origen: string;
 };
 
 export type SolicitudSimulada = { tipo: string; etiqueta: string; detalle: string };

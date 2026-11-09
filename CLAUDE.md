@@ -65,6 +65,11 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
 - El webhook de WhatsApp exige la firma `X-Hub-Signature-256`
   (`WHATSAPP_APP_SECRET`); falla cerrado.
 - Un solo worker de gunicorn (el bot y los jobs viven en el mismo proceso).
+- **Multicanal (ADR-014):** una persona es un `contactos` (único, permanente) y cada canal por el que escribe es una
+  `conversaciones` (`canal` + `id_externo`). **Canal** (por dónde conversa: whatsapp/instagram/messenger) **no es
+  origen** (cómo llegó: anuncio/directo). Se envía siempre por `integrations/canales.py` (`registro.para(canal)`), nunca
+  llamando directo al cliente de WhatsApp. **No borrar conversaciones, leads ni contactos**: la base lo impide; solo
+  `mensajes` y la cola son depurables. En las pruebas, limpiar con `tests/helpers_db.py`.
 
 **Código**
 - Cambios con tests. Seguir el patrón de capas existente
@@ -105,7 +110,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **1580 tests pasando**.
+   desde `backend/`. Estado actual: **1608 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -250,6 +255,11 @@ posible y rotarlos.
   `conversacion_anuncios`). Cada llegada por anuncio se guarda completa; pantalla «Anuncios»; panel «Origen»
   en cada conversación; el texto libre del panel depende solo de las 24 h (la ventana gratuita de anuncio, «hasta 7 días
   desde que respondemos», es informativa). **Aún no ha llegado un anuncio real** (pendiente #66).
+- **Cimientos multicanal (ADR-014, migración 024) — implementado y probado EN LOCAL, SIN DESPLEGAR** (a la espera de
+  Freddy): `contactos`, conversación por canal, `ventas.canal`→`origen` + `canal` nuevo, `fep`→`anuncio`, claves a
+  `restrict`. La migración y el código **van juntos** (el código anterior no entiende las columnas nuevas ni las
+  retiradas): aplicar la migración en Supabase y desplegar el backend enseguida. Instagram y Messenger **no están
+  conectados** (pendiente #71); hoy solo WhatsApp. Plan de Leads/CRM: `docs/PLAN_LEADS_CRM.md` (F1 en adelante).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

@@ -71,10 +71,10 @@ class TelegramFalso:
     def __init__(self, falla=False):
         self.gestiones, self.cerrados, self.falla, self.origenes = [], [], falla, []
 
-    def notificar_gestion(self, etiqueta, conversacion_id, telefono, detalle="", origen=""):
+    def notificar_gestion(self, etiqueta, conversacion_id, cliente, detalle="", origen=""):
         if self.falla:
             raise RuntimeError("telegram caído")
-        self.gestiones.append((etiqueta, conversacion_id, telefono, detalle))
+        self.gestiones.append((etiqueta, conversacion_id, cliente, detalle))
         self.origenes.append(origen)
 
     def notificar_pedido_cerrado(self, datos):

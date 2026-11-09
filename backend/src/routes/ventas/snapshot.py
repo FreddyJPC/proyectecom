@@ -50,8 +50,11 @@ def armar_venta(
     venta = {
         "lead_id": lead["id"],
         "conversacion_id": lead.get("conversacion_id"),
+        "contacto_id": lead.get("contacto_id") or (conversacion or {}).get("contacto_id"),
         "proveedor_id": producto.get("proveedor_id") or 1,
-        "canal": (conversacion or {}).get("origen") or "directo",
+        # ORIGEN = cómo llegó el cliente (anuncio | directo); CANAL = por dónde conversa (whatsapp | instagram | messenger).
+        "origen": (conversacion or {}).get("origen") or "directo",
+        "canal": (conversacion or {}).get("canal") or "whatsapp",
         "id_anuncio": (conversacion or {}).get("id_anuncio"),
         "estado": estado,
         "metodo_pago": lead.get("metodo_pago"),

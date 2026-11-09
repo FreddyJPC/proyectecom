@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.routes.whatsapp.worker import BotWorker
+from tests.helpers_canales import registro_de_whatsapp
 
 
 class FakeMensajeRepository:
@@ -64,7 +65,8 @@ class FakeColaMensajeRepository:
                 "conversacion_id": f["conversacion_id"],
                 "modo": f["modo"],
                 "texto_fijo": f["texto_fijo"],
-                "telefono": self._telefonos.get(f["conversacion_id"], "593987654321"),
+                "canal": "whatsapp",
+                "id_externo": self._telefonos.get(f["conversacion_id"], "593987654321"),
                 "mensaje_cliente_texto": None,
             }
             for f in self.filas.values()
@@ -81,16 +83,16 @@ class TestPersistenciaDeCola:
         # estado='pendiente', que es justo lo que recuperar_pendientes()
         # busca).
         worker_caido = BotWorker(
-            whatsapp_client=MagicMock(),
+            canales=registro_de_whatsapp(MagicMock()),
             mensaje_repository=FakeMensajeRepository(),
             cola_repository=cola_repo,
         )
-        worker_caido.encolar(conversacion_id=1, telefono="593987654321", modo="fijo", texto_fijo="hola de prueba")
+        worker_caido.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="hola de prueba")
 
         cliente_nuevo = MagicMock()
         msg_repo_nuevo = FakeMensajeRepository()
         worker_nuevo = BotWorker(
-            whatsapp_client=cliente_nuevo,
+            canales=registro_de_whatsapp(cliente_nuevo),
             mensaje_repository=msg_repo_nuevo,
             cola_repository=cola_repo,
         )
@@ -116,14 +118,14 @@ class TestPersistenciaDeCola:
         conversation_service = ConversationServiceFalso()
 
         worker = BotWorker(
-            whatsapp_client=cliente,
+            canales=registro_de_whatsapp(cliente),
             mensaje_repository=msg_repo,
             cola_repository=cola_repo,
             conversation_service=conversation_service,
         )
         worker.iniciar()
         worker.encolar(
-            conversacion_id=5, telefono="593987654321", modo="ia", texto_mensaje_cliente="Quiero comprar"
+            conversacion_id=5, canal="whatsapp", id_externo="593987654321", modo="ia", texto_mensaje_cliente="Quiero comprar"
         )
         worker._cola.join()
 
@@ -140,16 +142,44 @@ class TestPersistenciaDeCola:
         cliente.enviar_texto.side_effect = [RuntimeError("boom"), None]
 
         worker = BotWorker(
-            whatsapp_client=cliente,
+            canales=registro_de_whatsapp(cliente),
             mensaje_repository=FakeMensajeRepository(),
             cola_repository=cola_repo,
         )
         worker.iniciar()
-        worker.encolar(conversacion_id=1, telefono="593987654321", modo="fijo", texto_fijo="primero")
-        worker.encolar(conversacion_id=1, telefono="593987654321", modo="fijo", texto_fijo="segundo")
+        worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="primero")
+        worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="segundo")
         worker._cola.join()
 
         assert cola_repo.filas[1]["estado"] == "error"
         assert "boom" in cola_repo.filas[1]["error_detalle"]
         assert cola_repo.filas[1]["intentos"] == 1
         assert cola_repo.filas[2]["estado"] == "completado"
+
+
+class TestCanales:
+    def test_la_respuesta_sale_por_el_canal_de_la_tarea(self):
+        cola_repo = FakeColaMensajeRepository()
+        cliente = MagicMock()
+        worker = BotWorker(
+            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo
+        )
+        worker.iniciar()
+        worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="hola")
+        worker._cola.join()
+        cliente.enviar_texto.assert_called_once_with(telefono="593987654321", mensaje="hola")
+
+    def test_un_canal_sin_conectar_deja_la_tarea_en_error_y_el_worker_sigue(self):
+        cola_repo = FakeColaMensajeRepository()
+        cliente = MagicMock()
+        worker = BotWorker(
+            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo
+        )
+        worker.iniciar()
+        worker.encolar(conversacion_id=1, canal="instagram", id_externo="1784", modo="fijo", texto_fijo="no sale")
+        worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="sí sale")
+        worker._cola.join()
+
+        assert cola_repo.filas[1]["estado"] == "error" and "todavía no está conectado" in cola_repo.filas[1]["error_detalle"]
+        assert cola_repo.filas[2]["estado"] == "completado"
+        cliente.enviar_texto.assert_called_once_with(telefono="593987654321", mensaje="sí sale")

@@ -15,15 +15,16 @@ from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.whatsapp.controllers import _extraer_mensajes
 from src.routes.whatsapp.repository import ConversacionRepository, MensajeRepository
 from src.routes.whatsapp.services import WebhookService
+from tests.helpers_db import borrar_conversaciones_de_prueba
 
 TELEFONO = "593900008001"
 ANUNCIO_1, ANUNCIO_2 = "test-anuncio-p1", "test-anuncio-p2"
 
 
 def _limpiar():
+    borrar_conversaciones_de_prueba(TELEFONO)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("delete from conversaciones where telefono = %s", (TELEFONO,))
             cur.execute("delete from anuncios_productos where id_anuncio like 'test-anuncio-%'")
 
 
@@ -68,8 +69,8 @@ def test_un_cliente_nuevo_que_llega_por_un_anuncio_queda_con_todos_los_datos():
 
     _procesar(_payload("wamid.P1", ANUNCIO_1), telegram, bot)
 
-    conversacion = ConversacionRepository.obtener_por_telefono(TELEFONO)
-    assert (conversacion["origen"], conversacion["id_anuncio"], conversacion["ctwa_clid"]) == ("fep", ANUNCIO_1, f"clic-{ANUNCIO_1}")
+    conversacion = ConversacionRepository.obtener_por_canal("whatsapp", TELEFONO)
+    assert (conversacion["origen"], conversacion["id_anuncio"], conversacion["ctwa_clid"]) == ("anuncio", ANUNCIO_1, f"clic-{ANUNCIO_1}")
     llegada = AnuncioRepository.llegadas_de(conversacion["id"])[0]
     assert llegada["titulo"] == f"Titular {ANUNCIO_1}"
     assert llegada["texto"] == "Texto principal del anuncio"
@@ -87,20 +88,20 @@ def test_el_mismo_webhook_reenviado_por_meta_no_duplica_nada():
     _procesar(_payload("wamid.P1", ANUNCIO_1))
     _procesar(_payload("wamid.P1", ANUNCIO_1))
 
-    conversacion = ConversacionRepository.obtener_por_telefono(TELEFONO)
+    conversacion = ConversacionRepository.obtener_por_canal("whatsapp", TELEFONO)
     assert len(AnuncioRepository.llegadas_de(conversacion["id"])) == 1
     assert len(MensajeRepository.obtener_por_conversacion(conversacion["id"])) == 1
 
 
 def test_un_cliente_que_ya_existia_y_vuelve_por_otro_anuncio_actualiza_el_origen():
     _procesar(_payload("wamid.P1"))  # primero escribió directo
-    assert ConversacionRepository.obtener_por_telefono(TELEFONO)["origen"] == "directo"
+    assert ConversacionRepository.obtener_por_canal("whatsapp", TELEFONO)["origen"] == "directo"
 
     _procesar(_payload("wamid.P2", ANUNCIO_1))
     _procesar(_payload("wamid.P3", ANUNCIO_2))
 
-    conversacion = ConversacionRepository.obtener_por_telefono(TELEFONO)
-    assert (conversacion["origen"], conversacion["id_anuncio"]) == ("fep", ANUNCIO_2)
+    conversacion = ConversacionRepository.obtener_por_canal("whatsapp", TELEFONO)
+    assert (conversacion["origen"], conversacion["id_anuncio"]) == ("anuncio", ANUNCIO_2)
     assert [l["id_anuncio"] for l in AnuncioRepository.llegadas_de(conversacion["id"])] == [ANUNCIO_2, ANUNCIO_1]
 
 
@@ -124,7 +125,7 @@ def test_con_el_anuncio_vinculado_victoria_sabe_de_que_producto_hablar_sin_pregu
         _procesar(_payload("wamid.P1", ANUNCIO_1), telegram)
 
         telegram.notificar_aviso.assert_not_called()  # ya estaba vinculado: no es un anuncio «nuevo sin vincular»
-        conversacion = ConversacionRepository.obtener_por_telefono(TELEFONO)
+        conversacion = ConversacionRepository.obtener_por_canal("whatsapp", TELEFONO)
         assert ProductoBotRepository.obtener_por_id_anuncio(conversacion["id_anuncio"])["sku"] == sku
     finally:
         with get_connection() as conn, conn.cursor() as cur:

@@ -23,7 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useApi } from "@/hooks/use-api";
 import { estadoConversacionInfo } from "@/lib/estados";
-import { formatPhone, tiempoRelativo } from "@/lib/format";
+import { CANALES, nombreCanal, nombreDeCliente } from "@/lib/canales";
+import { tiempoRelativo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ConversacionesListado } from "@/types/conversacion";
 
@@ -33,9 +34,11 @@ const REFRESCO_MS = 20_000;
 const ORIGENES: Record<string, string> = {
   todos: "Todos los orígenes",
   directo: "Directo",
-  fep: "Anuncio (FEP)",
+  anuncio: "Anuncio",
   web_formulario: "Formulario web",
 };
+
+const FILTRO_CANALES: Record<string, string> = { todos: "Todos los canales", ...CANALES };
 
 /** Lista de conversaciones con búsqueda, filtros rápidos y refresco
  * automático. Vive en el layout, así que no pierde su estado al abrir un
@@ -44,6 +47,7 @@ export function InboxList() {
   const { id: idActivo } = useParams<{ id?: string }>();
   const [vista, setVista] = useState("todas");
   const [origen, setOrigen] = useState("todos");
+  const [canal, setCanal] = useState("todos");
   const [entrada, setEntrada] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(1);
@@ -60,6 +64,7 @@ export function InboxList() {
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
   if (vista !== "todas") params.set("estado", vista);
   if (origen !== "todos") params.set("origen", origen);
+  if (canal !== "todos") params.set("canal", canal);
   if (busqueda) params.set("q", busqueda);
 
   const { data, error, cargando, actualizando, recargar } = useApi<ConversacionesListado>(`/conversaciones?${params}`, {
@@ -79,7 +84,7 @@ export function InboxList() {
     { value: "en_gestion", label: "En gestión", count: totales?.enGestion },
   ];
 
-  const hayFiltros = vista !== "todas" || origen !== "todos" || busqueda !== "";
+  const hayFiltros = vista !== "todas" || origen !== "todos" || canal !== "todos" || busqueda !== "";
 
   return (
     <>
@@ -99,7 +104,7 @@ export function InboxList() {
             <Input
               type="search"
               inputMode="search"
-              placeholder="Buscar teléfono o nombre"
+              placeholder="Buscar nombre o teléfono"
               aria-label="Buscar conversaciones"
               className="pr-9 pl-9"
               value={entrada}
@@ -119,9 +124,9 @@ export function InboxList() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="Filtrar por origen" className="relative shrink-0">
+              <Button variant="outline" size="icon" aria-label="Filtrar por origen o canal" className="relative shrink-0">
                 <Filter />
-                {origen !== "todos" && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" aria-hidden />}
+                {(origen !== "todos" || canal !== "todos") && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" aria-hidden />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
@@ -134,6 +139,20 @@ export function InboxList() {
                 }}
               >
                 {Object.entries(ORIGENES).map(([valor, etiqueta]) => (
+                  <DropdownMenuRadioItem key={valor} value={valor}>
+                    {etiqueta}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuLabel>Canal</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={canal}
+                onValueChange={(v) => {
+                  setCanal(v);
+                  setPage(1);
+                }}
+              >
+                {Object.entries(FILTRO_CANALES).map(([valor, etiqueta]) => (
                   <DropdownMenuRadioItem key={valor} value={valor}>
                     {etiqueta}
                   </DropdownMenuRadioItem>
@@ -174,7 +193,7 @@ export function InboxList() {
             icon={Inbox}
             title={hayFiltros ? "Sin resultados" : "Aún no hay conversaciones"}
             description={
-              hayFiltros ? "Prueba con otro filtro o borra la búsqueda." : "Cuando un cliente escriba por WhatsApp, aparecerá aquí."
+              hayFiltros ? "Prueba con otro filtro o borra la búsqueda." : "Cuando un cliente escriba, aparecerá aquí."
             }
             action={
               hayFiltros ? (
@@ -183,6 +202,7 @@ export function InboxList() {
                   onClick={() => {
                     setVista("todas");
                     setOrigen("todos");
+                    setCanal("todos");
                     setEntrada("");
                   }}
                 >
@@ -196,7 +216,7 @@ export function InboxList() {
             {data?.items.map((c) => {
               const info = estadoConversacionInfo(c.estado);
               const activa = String(c.id) === idActivo;
-              const nombre = c.nombreCliente ?? formatPhone(c.telefono);
+              const nombre = nombreDeCliente(c);
               const deCliente = c.ultimoMensaje?.rol === "cliente";
               return (
                 <li key={c.id}>
@@ -209,7 +229,7 @@ export function InboxList() {
                     )}
                   >
                     {c.sinRevisar && <span className="absolute inset-y-0 left-0 w-1 bg-status-danger" aria-hidden />}
-                    <AvatarInitials nombre={c.nombreCliente ?? c.telefono} semilla={c.telefono} className="size-11" />
+                    <AvatarInitials nombre={c.nombreCliente ?? c.nombre ?? c.telefono} semilla={c.idExterno ?? c.telefono ?? String(c.id)} className="size-11" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className={cn("truncate", c.sinRevisar ? "font-semibold" : "font-medium")}>{nombre}</p>
@@ -229,6 +249,9 @@ export function InboxList() {
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <StatusBadge label={info.label} variant={info.variant} className="h-5 px-2 text-[0.7rem]" />
+                        {c.canal !== "whatsapp" && (
+                          <span className="rounded-full border px-2 py-0.5 text-[0.7rem] text-muted-foreground">{nombreCanal(c.canal)}</span>
+                        )}
                         {c.productoInteres && (
                           <span className="max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">
                             {c.productoInteres}

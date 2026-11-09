@@ -9,7 +9,10 @@ class UltimoMensajeSchema(Schema):
 
 class ConversacionResumenSchema(Schema):
     id = fields.Int()
-    telefono = fields.Str()
+    canal = fields.Str()
+    id_externo = fields.Str(data_key="idExterno", allow_none=True)
+    telefono = fields.Str(allow_none=True)
+    nombre = fields.Str(allow_none=True)
     nombre_cliente = fields.Str(data_key="nombreCliente", allow_none=True)
     origen = fields.Str()
     estado = fields.Str()
@@ -87,7 +90,11 @@ class LlegadaPorAnuncioSchema(Schema):
 
 class ConversacionDetalleSchema(Schema):
     id = fields.Int()
-    telefono = fields.Str()
+    contacto_id = fields.Int(data_key="contactoId")
+    canal = fields.Str()
+    id_externo = fields.Str(data_key="idExterno")
+    telefono = fields.Str(allow_none=True)
+    nombre = fields.Str(allow_none=True)
     origen = fields.Str()
     estado = fields.Str()
     id_anuncio = fields.Str(data_key="idAnuncio", allow_none=True)

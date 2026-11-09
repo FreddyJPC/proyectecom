@@ -10,7 +10,8 @@ actualizar_notas, marcar_esperando_pago).
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-from src.integrations.whatsapp import WhatsAppBusinessError, WhatsAppClient, WhatsAppRequestError, get_whatsapp_client
+from src.integrations.canales import CanalNoDisponibleError, RegistroCanales, get_registro_canales
+from src.integrations.whatsapp import WhatsAppBusinessError, WhatsAppRequestError
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO as ESTADOS_QUE_ESPERAN_AL_DUENO
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository, MensajeRepository
@@ -42,14 +43,14 @@ def _iso(valor) -> Optional[str]:
 class ConversacionesService:
     def __init__(
         self,
-        whatsapp_client: Optional[WhatsAppClient] = None,
+        canales: Optional[RegistroCanales] = None,
         conversacion_repo: Optional[ConversacionRepository] = None,
         lead_repo: Optional[LeadRepository] = None,
         mensaje_repo: Optional[MensajeRepository] = None,
         anuncio_servicio: Optional[AnuncioServicio] = None,
     ):
         self._anuncios = anuncio_servicio or AnuncioServicio()
-        self._whatsapp = whatsapp_client or get_whatsapp_client()
+        self._canales = canales or get_registro_canales()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._leads = lead_repo or LeadRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
@@ -73,8 +74,11 @@ class ConversacionesService:
         q: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
+        canal: Optional[str] = None,
     ) -> ListaConversacionesDTO:
-        resultado = self._conversaciones.listar(estado=estado, origen=origen, q=q, page=page, page_size=page_size)
+        resultado = self._conversaciones.listar(
+            estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal
+        )
 
         items = []
         for fila in resultado["items"]:
@@ -88,7 +92,10 @@ class ConversacionesService:
             items.append(
                 ConversacionResumenDTO(
                     id=fila["id"],
-                    telefono=fila["telefono"],
+                    canal=fila.get("canal") or "whatsapp",
+                    id_externo=fila.get("id_externo"),
+                    telefono=fila.get("telefono"),
+                    nombre=fila.get("contacto_nombre") or fila.get("nombre_perfil"),
                     nombre_cliente=fila.get("nombre_cliente"),
                     origen=fila["origen"],
                     estado=fila["estado"],
@@ -153,7 +160,11 @@ class ConversacionesService:
 
         conversacion_dto = ConversacionDetalleDTO(
             id=conversacion["id"],
-            telefono=conversacion["telefono"],
+            contacto_id=conversacion["contacto_id"],
+            canal=conversacion["canal"],
+            id_externo=conversacion["id_externo"],
+            telefono=conversacion.get("telefono"),
+            nombre=conversacion.get("contacto_nombre") or conversacion.get("nombre_perfil"),
             origen=conversacion["origen"],
             estado=conversacion["estado"],
             id_anuncio=conversacion.get("id_anuncio"),
@@ -213,8 +224,8 @@ class ConversacionesService:
         )
 
         try:
-            self._whatsapp.enviar_texto(telefono=conversacion["telefono"], mensaje=contenido)
-        except (WhatsAppRequestError, WhatsAppBusinessError) as exc:
+            self._canales.para(conversacion["canal"]).enviar_texto(conversacion["id_externo"], contenido)
+        except (WhatsAppRequestError, WhatsAppBusinessError, CanalNoDisponibleError) as exc:
             # El mensaje YA quedó guardado arriba -- el dueño necesita
             # saber que probablemente no llegó, no que se pierda en
             # silencio.

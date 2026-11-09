@@ -50,7 +50,7 @@ import queue
 import threading
 from typing import Optional
 
-from src.integrations.whatsapp import WhatsAppClient
+from src.integrations.canales import RegistroCanales
 
 from .conversation_service import VictoriaConversationService
 from .dto import TareaRespuestaDTO
@@ -62,13 +62,13 @@ logger = logging.getLogger(__name__)
 class BotWorker:
     def __init__(
         self,
-        whatsapp_client: WhatsAppClient,
+        canales: RegistroCanales,
         mensaje_repository: MensajeRepository,
         cola_repository: Optional[ColaMensajeRepository] = None,
         conversation_service: Optional[VictoriaConversationService] = None,
     ):
         self._cola: "queue.Queue[TareaRespuestaDTO]" = queue.Queue()
-        self._whatsapp_client = whatsapp_client
+        self._canales = canales
         self._mensaje_repository = mensaje_repository
         self._cola_repository = cola_repository or ColaMensajeRepository()
         self._conversation_service = conversation_service
@@ -90,7 +90,8 @@ class BotWorker:
     def encolar(
         self,
         conversacion_id: int,
-        telefono: str,
+        canal: str,
+        id_externo: str,
         modo: str = "ia",
         mensaje_id: Optional[int] = None,
         texto_fijo: Optional[str] = None,
@@ -109,7 +110,8 @@ class BotWorker:
             TareaRespuestaDTO(
                 cola_mensajes_id=fila["id"],
                 conversacion_id=conversacion_id,
-                telefono=telefono,
+                canal=canal,
+                id_externo=id_externo,
                 modo=modo,
                 texto_fijo=texto_fijo,
                 texto_mensaje_cliente=texto_mensaje_cliente,
@@ -126,7 +128,8 @@ class BotWorker:
                 TareaRespuestaDTO(
                     cola_mensajes_id=fila["id"],
                     conversacion_id=fila["conversacion_id"],
-                    telefono=fila["telefono"],
+                    canal=fila["canal"],
+                    id_externo=fila["id_externo"],
                     modo=fila["modo"],
                     texto_fijo=fila["texto_fijo"],
                     texto_mensaje_cliente=fila.get("mensaje_cliente_texto"),
@@ -180,4 +183,4 @@ class BotWorker:
                 wamid=None,
             )
 
-        self._whatsapp_client.enviar_texto(telefono=tarea.telefono, mensaje=texto_respuesta)
+        self._canales.para(tarea.canal).enviar_texto(tarea.id_externo, texto_respuesta)

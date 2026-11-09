@@ -27,7 +27,8 @@ import { useApi } from "@/hooks/use-api";
 import { useMontado } from "@/hooks/use-montado";
 import { estadoConversacionInfo, estadoLocalInfo, rocketfyStatusInfo, tipoAlertaStockInfo } from "@/lib/estados";
 import { resumenAlertaStock } from "@/lib/alertas";
-import { formatFecha, formatMoney, formatPhone, tiempoRelativo } from "@/lib/format";
+import { nombreDeCliente } from "@/lib/canales";
+import { formatFecha, formatMoney, tiempoRelativo } from "@/lib/format";
 import type { ConversacionesListado } from "@/types/conversacion";
 import type { AlertaStock, EventoWebhook, Paginado } from "@/types/incidencia";
 import type { MetricasGenerales } from "@/types/metricas";
@@ -203,10 +204,10 @@ export default function Home() {
                       href={`/conversaciones/${c.id}`}
                       className="flex items-center gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted sm:px-5"
                     >
-                      <AvatarInitials nombre={c.nombreCliente ?? c.telefono} semilla={c.telefono} />
+                      <AvatarInitials nombre={c.nombreCliente ?? c.nombre ?? c.telefono} semilla={c.idExterno ?? c.telefono ?? String(c.id)} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-medium">{c.nombreCliente ?? formatPhone(c.telefono)}</p>
+                          <p className="truncate font-medium">{nombreDeCliente(c)}</p>
                           {c.sinRevisar && <span className="size-2 shrink-0 rounded-full bg-status-danger" aria-label="Sin revisar" />}
                         </div>
                         <p className="truncate text-sm text-muted-foreground">{c.ultimoMensaje?.contenido ?? "Sin mensajes"}</p>

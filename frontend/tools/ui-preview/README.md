@@ -43,8 +43,9 @@ Notas:
 - Productos propios (ADR-012): el servidor falso trae `PROP-0001` (zapatos, activo, 3 opciones de entrega, 2 fotos) y `PROP-0002`
   (camiseta, borrador, sin control de stock), categorías, «Por gestionar» (`/gestion`) y imita Supabase Storage
   (`/storage/v1/object/...`): las fotos «subidas» se sirven como imágenes de relleno. «Por gestionar» trae ventas por cobrar, cobradas y canceladas, y `/ventas/<id>/cobrar|deshacer-cobro|cancelar` cambian su estado en memoria (reinicia el servidor para volver a los datos originales).
-- Anuncios (ADR-013): el servidor falso trae 4 anuncios (uno sin vincular, dos vinculados con rendimiento y uno vinculado de antemano sin clientes), el resumen por origen, `PUT/DELETE /anuncios/<id>/producto` (con el 409 de «ya está vinculado a otro producto») y, en las conversaciones de anuncio (`fep`), el panel de origen con el anuncio, su historial y la ventana gratuita.
+- Anuncios (ADR-013): el servidor falso trae 4 anuncios (uno sin vincular, dos vinculados con rendimiento y uno vinculado de antemano sin clientes), el resumen por origen, `PUT/DELETE /anuncios/<id>/producto` (con el 409 de «ya está vinculado a otro producto») y, en las conversaciones de anuncio (origen `anuncio`), el panel de origen con el anuncio, su historial y la ventana gratuita.
 - `parametros-catalogo.json` e `instrucciones-secciones.json` salen del backend (catálogo de Parámetros y secciones de las instrucciones de Victoria) en la forma que devuelve la API
   (así la pantalla se ve con las explicaciones y rangos reales). Si cambias `backend/src/config/parametros/catalogo.py`,
   regénéralo desde `backend/` con el entorno de pruebas activo: `python tools/exportar_para_preview.py`.
 - No uses `pkill -f server.mjs` desde un comando que contenga ese mismo texto: se mata a sí mismo.
+- Multicanal (ADR-014): el servidor falso trae dos conversaciones de otros canales sin teléfono (Instagram y Messenger), el filtro `?canal=` y una solicitud de «Por gestionar» de un cliente de Instagram. En las pantallas se ve el canal y «Aún sin teléfono».

@@ -12,6 +12,8 @@ class SolicitudSchema(Schema):
     atendida_por = fields.Str(data_key="atendidaPor", allow_none=True)
     creada_en = fields.Str(data_key="creadaEn", allow_none=True)
     atendida_en = fields.Str(data_key="atendidaEn", allow_none=True)
+    canal = fields.Str(allow_none=True)
+    id_externo = fields.Str(data_key="idExterno", allow_none=True)
     telefono = fields.Str(allow_none=True)
     nombre_cliente = fields.Str(data_key="nombreCliente", allow_none=True)
     direccion = fields.Str(allow_none=True)
