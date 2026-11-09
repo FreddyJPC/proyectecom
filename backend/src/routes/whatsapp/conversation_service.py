@@ -78,7 +78,22 @@ class VictoriaConversationService:
         # si no hay, el archivo del código); «Probar con Victoria» puede pasar las del borrador.
         self._plantilla_fija = plantilla
 
-    def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
+    def procesar_turno(self, conversacion_id: int, mensaje_cliente: Optional[str] = None) -> str:
+        """Responde lo que el cliente escribió y Victoria todavía no contestó.
+
+        Lee de `mensajes` TODO el bloque de mensajes seguidos del cliente que no tienen respuesta (si escribió
+        «Hola», «buenas tardes» y «quiero unos audífonos», los ve juntos y contesta una vez). Si no queda nada sin
+        responder (otro turno ya lo contestó, p. ej. tras un reinicio), devuelve "" y no se envía nada.
+        `mensaje_cliente` solo sirve de respaldo cuando la conversación aún no tiene mensajes guardados."""
+        filas = self._mensajes.obtener_por_conversacion(conversacion_id)
+        historial_filas, pendientes = self._separar_sin_responder(filas)
+        if pendientes:
+            texto_cliente = "\n".join(f["contenido"] for f in pendientes)
+        elif not filas and mensaje_cliente:
+            texto_cliente = mensaje_cliente
+        else:
+            return ""
+
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(
             conversacion_id,
@@ -108,17 +123,17 @@ class VictoriaConversationService:
         enviar_fotos = self._enviar_fotos_fijo if self._enviar_fotos_fijo is not None else parametros.valor("bot.enviar_fotos")
         herramientas = herramientas_de_victoria(enviar_fotos)
 
-        mensajes: List[MensajeLLM] = self._construir_historial(conversacion_id, max_historial)
-        mensajes.append(MensajeLLM(rol="user", texto=mensaje_cliente))
+        mensajes: List[MensajeLLM] = self._construir_historial(historial_filas, max_historial)
+        mensajes.append(MensajeLLM(rol="user", texto=texto_cliente))
 
-        texto_final = ""
+        partes_de_texto: List[str] = []
         ya_escalo = False
 
         for _ in range(max_turnos):
             respuesta = llm.generar_respuesta(
                 system=system_prompt, mensajes=mensajes, herramientas=herramientas
             )
-            texto_final += respuesta.texto
+            partes_de_texto.append(respuesta.texto)
 
             if respuesta.razon_de_parada in ("fin", "limite_alcanzado"):
                 break
@@ -156,7 +171,7 @@ class VictoriaConversationService:
                 despedida = llm.generar_respuesta(
                     system=system_prompt, mensajes=mensajes, herramientas=herramientas
                 )
-                texto_final += despedida.texto
+                partes_de_texto.append(despedida.texto)
                 break
         else:
             logger.warning(
@@ -170,23 +185,62 @@ class VictoriaConversationService:
                 entrada={"motivo": "Se alcanzó el límite de turnos de herramientas sin resolver"},
                 id_llamada="limite-interno",
             )
+            partes_de_texto = [parametros.valor("bot.texto_limite_alcanzado")]
+
+        # Lo que Victoria escribe antes y después de usar una herramienta («Un momento…» / «¡Listo!…») sale como
+        # UN solo mensaje: se junta con un renglón en blanco, no pegado («Un momento…¡Listo!»).
+        texto_final = "\n\n".join(p.strip() for p in partes_de_texto if p and p.strip())
+        if not texto_final:
+            # La IA terminó sin escribir nada. Un mensaje vacío no se puede enviar, y callar dejaría al cliente
+            # esperando: se pasa la conversación a una persona y se le avisa.
+            logger.warning("Victoria terminó sin texto para el cliente -- se escala", extra={"conversacion_id": conversacion_id})
+            if not ya_escalo:
+                self._ejecutor.ejecutar(
+                    nombre="escalar_a_humano",
+                    lead_id=lead["id"],
+                    conversacion_id=conversacion_id,
+                    entrada={"motivo": "La IA no generó ninguna respuesta para el cliente"},
+                    id_llamada="sin-texto-interno",
+                )
             texto_final = parametros.valor("bot.texto_limite_alcanzado")
 
-        self._mensajes.crear(conversacion_id=conversacion_id, rol="bot", contenido=texto_final, tipo="texto", wamid=None)
+        self._guardar_respuesta(conversacion_id, texto_final, ultima_leida=filas[-1] if filas else None)
         return texto_final
+
+    def _guardar_respuesta(self, conversacion_id: int, texto: str, ultima_leida: Optional[dict]) -> None:
+        """Guarda la respuesta del bot. Si el cliente escribió OTRO mensaje mientras Victoria redactaba, la
+        respuesta se guarda con la hora del último mensaje que sí leyó: así el mensaje nuevo queda después de ella,
+        sigue «sin responder» y el siguiente turno lo contesta (si no, parecería ya respondido y se perdería)."""
+        creado_en = None
+        if ultima_leida is not None and ultima_leida.get("id") is not None:
+            llego_otro = any(
+                f["rol"] == "cliente" and (f.get("id") or 0) > ultima_leida["id"]
+                for f in self._mensajes.obtener_por_conversacion(conversacion_id)
+            )
+            if llego_otro:
+                creado_en = ultima_leida.get("creado_en")
+        if creado_en is not None:
+            self._mensajes.crear(conversacion_id=conversacion_id, rol="bot", contenido=texto, tipo="texto", wamid=None, creado_en=creado_en)
+        else:
+            self._mensajes.crear(conversacion_id=conversacion_id, rol="bot", contenido=texto, tipo="texto", wamid=None)
 
     def _pasó_a_manos_de_una_persona(self, conversacion_id: int) -> bool:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         return bool(conversacion) and conversacion.get("estado") in ESTADOS_EN_MANOS_DEL_DUENO
 
-    def _construir_historial(self, conversacion_id: int, max_historial: int) -> List[MensajeLLM]:
-        """Excluye la última fila a propósito: para cuando procesar_turno()
-        corre, el mensaje del cliente que se está por responder YA quedó
-        guardado en `mensajes` (WebhookService lo guarda antes de encolar
-        -- ver services.py) -- incluirlo acá Y agregarlo de nuevo como
-        mensaje_cliente lo duplicaría en lo que ve el LLM."""
-        filas = self._mensajes.obtener_por_conversacion(conversacion_id)
-        anteriores = filas[:-1] if filas else []
+    @staticmethod
+    def _separar_sin_responder(filas: List[dict]) -> tuple:
+        """(lo anterior, mensajes seguidos del cliente al final sin respuesta). Lo «sin responder» es la racha de
+        filas del cliente que cierra la conversación; en cuanto hay algo del bot (o del dueño) después, está contestado."""
+        corte = len(filas)
+        while corte > 0 and filas[corte - 1]["rol"] == "cliente":
+            corte -= 1
+        return filas[:corte], filas[corte:]
+
+    @staticmethod
+    def _construir_historial(anteriores: List[dict], max_historial: int) -> List[MensajeLLM]:
+        """Lo que se habló ANTES de los mensajes que se están por responder (esos van aparte, juntos, como el último
+        mensaje del cliente)."""
         if max_historial:
             anteriores = anteriores[-max_historial:]
         return [

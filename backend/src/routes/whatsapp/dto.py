@@ -43,4 +43,6 @@ class TareaRespuestaDTO:
         # fijo  -> enviar texto_fijo tal cual, sin pasar por el LLM
     texto_fijo: Optional[str] = None
     texto_mensaje_cliente: Optional[str] = None
+    # Cuántas veces ya falló la generación de la respuesta (ver BotWorker: se reintenta unas pocas veces).
+    intentos: int = 0
 

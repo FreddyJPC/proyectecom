@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from src.config.database import get_connection
@@ -316,16 +317,26 @@ class MensajeRepository:
                 return int(cur.fetchone()[0])
 
     @staticmethod
-    def crear(conversacion_id: Optional[int], rol: str, contenido: str, tipo: str = "texto", wamid: Optional[str] = None) -> dict:
+    def crear(
+        conversacion_id: Optional[int],
+        rol: str,
+        contenido: str,
+        tipo: str = "texto",
+        wamid: Optional[str] = None,
+        creado_en: Optional[datetime] = None,
+    ) -> dict:
+        """`creado_en` solo se pasa para ubicar la respuesta del bot ANTES de un mensaje del cliente que llegó
+        mientras Victoria la redactaba (ver `VictoriaConversationService.procesar_turno`): así ese mensaje sigue
+        figurando como «sin responder». Sin él, vale la hora de la base de datos."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid)
-                    values (%s, %s, %s, %s, %s)
+                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid, creado_en)
+                    values (%s, %s, %s, %s, %s, coalesce(%s, now()))
                     returning {_COLUMNAS_MENSAJE}
                     """,
-                    (conversacion_id, rol, contenido, tipo, wamid),
+                    (conversacion_id, rol, contenido, tipo, wamid, creado_en),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
@@ -339,7 +350,7 @@ class MensajeRepository:
                     f"""
                     select {_COLUMNAS_MENSAJE} from mensajes
                     where conversacion_id = %s
-                    order by creado_en asc
+                    order by creado_en asc, id asc
                     """,
                     (conversacion_id,),
                 )
@@ -401,11 +412,31 @@ class ColaMensajeRepository:
                 )
 
     @staticmethod
+    def marcar_para_reintento(cola_mensajes_id: int, error_detalle: str) -> int:
+        """La IA falló al generar la respuesta (sobrecarga, corte de red…): la tarea vuelve a 'pendiente' para
+        intentarlo de nuevo en unos segundos. Devuelve cuántos intentos lleva."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update cola_mensajes
+                    set estado = 'pendiente', error_detalle = %s, intentos = intentos + 1
+                    where id = %s
+                    returning intentos
+                    """,
+                    (error_detalle, cola_mensajes_id),
+                )
+                return int(cur.fetchone()[0])
+
+    @staticmethod
     def obtener_pendientes() -> List[dict]:
         """Tareas a recuperar al arrancar el worker: las que quedaron
-        'pendiente' (nunca se llegó a procesar) y las que quedaron
-        'procesando' hace más de 5 minutos (huérfanas de un proceso
-        anterior que murió a medio trabajar). Trae el canal y el identificador
+        'pendiente' (nunca se llegó a procesar) y TODAS las 'procesando'
+        (huérfanas de un proceso anterior que murió a medio trabajar: hay un
+        solo worker, así que al arrancar ninguna está realmente en marcha;
+        antes solo se recuperaban las de más de 5 minutos y una tarea
+        cortada por un reinicio se perdía en silencio. Si Victoria ya había
+        contestado, `procesar_turno` lo detecta y no responde dos veces). Trae el canal y el identificador
         del cliente (vía conversaciones) y el texto del cliente (vía mensajes, solo aplica
         a modo='ia') porque TareaRespuestaDTO los necesita y, al ser una
         recuperación tras reinicio, no hay contexto en memoria del que
@@ -414,13 +445,12 @@ class ColaMensajeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    select cm.id, cm.conversacion_id, cm.modo, cm.texto_fijo,
+                    select cm.id, cm.conversacion_id, cm.modo, cm.texto_fijo, cm.intentos,
                            c.canal, c.id_externo, m.contenido as mensaje_cliente_texto
                     from cola_mensajes cm
                     join conversaciones c on c.id = cm.conversacion_id
                     left join mensajes m on m.id = cm.mensaje_id
-                    where cm.estado = 'pendiente'
-                       or (cm.estado = 'procesando' and cm.creado_en < now() - interval '5 minutes')
+                    where cm.estado in ('pendiente', 'procesando')
                     order by cm.creado_en asc
                     """
                 )

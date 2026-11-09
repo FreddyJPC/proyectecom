@@ -113,7 +113,7 @@ class TestLoopDeHerramientas:
 
         resultado = servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Quiero el producto X")
 
-        assert resultado == "Un momento...¡Listo! Ya registré tu producto."
+        assert resultado == "Un momento...\n\n¡Listo! Ya registré tu producto."
         assert len(llm.llamadas) == 2
         assert len(ejecutor.llamadas) == 1
         assert ejecutor.llamadas[0]["nombre"] == "registrar_producto"
@@ -154,7 +154,7 @@ class TestLoopDeHerramientas:
 
         resultado = servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Quiero hablar con una persona")
 
-        assert resultado == "Ya te conecto con un asesor. ¡Que tengas un buen día!"
+        assert resultado == "Ya te conecto con un asesor.\n\n¡Que tengas un buen día!"
         assert len(llm.llamadas) == 2
         assert len(ejecutor.llamadas) == 1
         assert ejecutor.llamadas[0]["nombre"] == "escalar_a_humano"
@@ -563,3 +563,161 @@ class TestConversacionEnManosDelDueno:
         lead = {"nombre_cliente": "Ana", "entrega_nombre": "Envío en Cuenca"}
         texto = VictoriaConversationService._formatear_contexto_lead(lead, {"envio_incluido": False})
         assert "Entrega: Envío en Cuenca" in texto.split("Todavía falta")[0]
+
+
+class MensajesConId:
+    """Mensajes con id y hora, como en la base: ordenados por hora y, a igual hora, por id. Permite probar qué pasa
+    cuando el cliente escribe mientras Victoria redacta (`al_generar` simula ese mensaje)."""
+
+    def __init__(self, filas):
+        self.filas = [{"id": i + 1, "creado_en": i + 1, "tipo": "texto", **f} for i, f in enumerate(filas)]
+        self.al_generar = None
+
+    def _siguiente_id(self):
+        return max((f["id"] for f in self.filas), default=0) + 1
+
+    def agregar_cliente(self, texto):
+        # Llega después de todo lo que hay: id y hora nuevos.
+        ultimo = max((f["creado_en"] for f in self.filas), default=0)
+        self.filas.append({"id": self._siguiente_id(), "creado_en": ultimo + 1, "rol": "cliente", "contenido": texto, "tipo": "texto"})
+
+    def obtener_por_conversacion(self, conversacion_id):
+        return sorted(self.filas, key=lambda f: (f["creado_en"], f["id"]))
+
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, creado_en=None):
+        ultimo = max((f["creado_en"] for f in self.filas), default=0)
+        fila = {"id": self._siguiente_id(), "creado_en": creado_en if creado_en is not None else ultimo + 1,
+                "rol": rol, "contenido": contenido, "tipo": tipo}
+        self.filas.append(fila)
+        return fila
+
+
+class LLMQueEscribeMientrasRedacta(LLMProviderFalso):
+    def __init__(self, respuestas, mensajes, texto_nuevo=None):
+        super().__init__(respuestas)
+        self._mensajes = mensajes
+        self._texto_nuevo = texto_nuevo
+
+    def generar_respuesta(self, system, mensajes, herramientas, max_tokens=1024):
+        resultado = super().generar_respuesta(system, mensajes, herramientas, max_tokens)
+        if self._texto_nuevo:
+            self._mensajes.agregar_cliente(self._texto_nuevo)
+            self._texto_nuevo = None
+        return resultado
+
+
+def _servicio_con(llm, mensajes):
+    return VictoriaConversationService(
+        llm_client=llm,
+        lead_repo=FakeLeadRepository(),
+        conversacion_repo=FakeConversacionRepository({1: {"id": 1, "contacto_id": 1, "telefono": "593987654321", "id_anuncio": None}}),
+        mensaje_repo=mensajes,
+        producto_repo=FakeProductoBotRepository(),
+        ejecutor_herramientas=EjecutorHerramientasFalso(),
+        max_turnos_herramientas=5,
+        max_mensajes_historial=40,
+    )
+
+
+def _fin(texto):
+    return RespuestaLLM(texto=texto, llamadas_herramientas=[], razon_de_parada="fin")
+
+
+class TestMensajesSeguidosDelCliente:
+    def test_los_mensajes_seguidos_se_leen_juntos_como_un_solo_mensaje(self):
+        mensajes = MensajesConId([
+            {"rol": "cliente", "contenido": "Hola"},
+            {"rol": "bot", "contenido": "¡Hola! ¿En qué te ayudo?"},
+            {"rol": "cliente", "contenido": "Buenas tardes"},
+            {"rol": "cliente", "contenido": "Quiero"},
+            {"rol": "cliente", "contenido": "Unos audífonos"},
+        ])
+        llm = LLMProviderFalso([_fin("Claro, te cuento de los audífonos.")])
+
+        resultado = _servicio_con(llm, mensajes).procesar_turno(1, "Unos audífonos")
+
+        enviado = llm.llamadas[0]["mensajes"]
+        assert [(m.rol, m.texto) for m in enviado] == [
+            ("user", "Hola"),
+            ("assistant", "¡Hola! ¿En qué te ayudo?"),
+            ("user", "Buenas tardes\nQuiero\nUnos audífonos"),
+        ]
+        assert resultado == "Claro, te cuento de los audífonos."
+
+    def test_si_ya_estaba_respondido_no_vuelve_a_responder(self):
+        mensajes = MensajesConId([{"rol": "cliente", "contenido": "Hola"}, {"rol": "bot", "contenido": "¡Hola!"}])
+        llm = LLMProviderFalso([])
+
+        resultado = _servicio_con(llm, mensajes).procesar_turno(1, "Hola")
+
+        assert resultado == ""
+        assert llm.llamadas == []
+        assert [f["rol"] for f in mensajes.filas] == ["cliente", "bot"]
+
+    def test_la_respuesta_anterior_de_victoria_si_aparece_en_el_historial_del_siguiente_turno(self):
+        mensajes = MensajesConId([{"rol": "cliente", "contenido": "Hola"}])
+        llm = LLMProviderFalso([_fin("¡Hola! ¿Qué buscas?"), _fin("Tenemos de varios precios.")])
+        servicio = _servicio_con(llm, mensajes)
+
+        servicio.procesar_turno(1, "Hola")
+        mensajes.agregar_cliente("Unos audífonos")
+        servicio.procesar_turno(1, "Unos audífonos")
+
+        assert [(m.rol, m.texto) for m in llm.llamadas[1]["mensajes"]] == [
+            ("user", "Hola"),
+            ("assistant", "¡Hola! ¿Qué buscas?"),
+            ("user", "Unos audífonos"),
+        ]
+
+    def test_un_mensaje_que_llega_mientras_redacta_sigue_sin_responder_para_el_siguiente_turno(self):
+        mensajes = MensajesConId([{"rol": "cliente", "contenido": "Hola"}])
+        llm = LLMQueEscribeMientrasRedacta([_fin("¡Hola!"), _fin("Sí, tenemos.")], mensajes, texto_nuevo="¿Tienen audífonos?")
+        servicio = _servicio_con(llm, mensajes)
+
+        primera = servicio.procesar_turno(1, "Hola")
+        # El mensaje nuevo quedó DESPUÉS de la respuesta: no parece contestado.
+        assert [f["rol"] for f in mensajes.obtener_por_conversacion(1)] == ["cliente", "bot", "cliente"]
+        segunda = servicio.procesar_turno(1, "¿Tienen audífonos?")
+
+        assert primera == "¡Hola!" and segunda == "Sí, tenemos."
+        assert [(m.rol, m.texto) for m in llm.llamadas[1]["mensajes"]] == [
+            ("user", "Hola"),
+            ("assistant", "¡Hola!"),
+            ("user", "¿Tienen audífonos?"),
+        ]
+
+    def test_sin_mensajes_guardados_usa_el_mensaje_recibido(self):
+        llm = LLMProviderFalso([_fin("Hola")])
+        servicio = _servicio_con(llm, MensajesConId([]))
+
+        assert servicio.procesar_turno(1, "Hola") == "Hola"
+        assert [(m.rol, m.texto) for m in llm.llamadas[0]["mensajes"]] == [("user", "Hola")]
+
+
+class TestRespuestaVacia:
+    def test_si_la_ia_no_escribe_nada_se_escala_y_el_cliente_recibe_el_aviso(self):
+        mensajes = MensajesConId([{"rol": "cliente", "contenido": "Hola"}])
+        llm = LLMProviderFalso([_fin("   ")])
+        ejecutor = EjecutorHerramientasFalso()
+        servicio = _servicio_con(llm, mensajes)
+        servicio._ejecutor = ejecutor
+
+        resultado = servicio.procesar_turno(1, "Hola")
+
+        assert resultado.strip() != ""
+        assert [l["nombre"] for l in ejecutor.llamadas] == ["escalar_a_humano"]
+        # Lo que se guarda y se envía es el aviso, no un mensaje vacío.
+        assert mensajes.filas[-1]["rol"] == "bot" and mensajes.filas[-1]["contenido"] == resultado
+
+    def test_el_texto_de_antes_y_de_despues_de_una_herramienta_sale_separado_por_un_renglon(self):
+        llm = LLMProviderFalso([
+            RespuestaLLM(
+                texto="Un momento, lo reviso.",
+                llamadas_herramientas=[LlamadaHerramienta(id="t1", nombre="ver_ficha_producto", entrada={"producto_sku": "X"})],
+                razon_de_parada="necesita_herramientas",
+            ),
+            _fin("Cuesta $20."),
+        ])
+        servicio = _servicio_con(llm, MensajesConId([{"rol": "cliente", "contenido": "¿Cuánto cuesta?"}]))
+
+        assert servicio.procesar_turno(1, "¿Cuánto cuesta?") == "Un momento, lo reviso.\n\nCuesta $20."
