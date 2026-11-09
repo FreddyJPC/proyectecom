@@ -50,10 +50,10 @@ class TestSinLogin:
 
 class TestVer:
     @responses.activate
-    def test_al_principio_rige_el_original_y_se_ven_las_nueve_secciones(self):
+    def test_al_principio_rige_el_original_y_se_ven_las_diez_secciones(self):
         cuerpo = _llamar("get", "").get_json()
         assert cuerpo["usando"] == "original" and cuerpo["publicada"] is None and cuerpo["borrador"] is None
-        assert [s["id"] for s in cuerpo["secciones"]] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "estado", "fecha"]
+        assert [s["id"] for s in cuerpo["secciones"]] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "clasificacion", "estado", "fecha"]
         assert cuerpo["maximoTotal"] == 8000 and cuerpo["caracteresFijos"] > 0
 
         personalidad = next(s for s in cuerpo["secciones"] if s["id"] == "personalidad")

@@ -104,11 +104,16 @@ class WebhookService:
         if conversacion["estado"] in ESTADOS_EN_MANOS_DEL_DUENO:
             return
 
-        # Regla 2: postventa mínimo -- un teléfono con un pedido previo (despachado por Rocketfy, o de un
+        # Regla 2: postventa mínimo -- un contacto con un pedido previo (despachado por Rocketfy, o de un
         # producto propio que el dueño está gestionando) que vuelve a escribir se escala
         # directo, nunca pasa por Victoria (versión mínima del "Flujo 3"
         # de docs/BotPlanifiacion.md -- no el árbol completo de postventa).
-        if self._leads.existe_pedido_previo(conversacion["contacto_id"]):
+        # Desde el módulo de Leads, Victoria ATIENDE por defecto a ese cliente como a un cliente conocido (ve su historial,
+        # abre un lead nuevo si quiere comprar otra vez y escala lo de su pedido anterior): esta regla solo rige si el dueño
+        # apaga el parámetro «bot.atender_clientes_recurrentes».
+        if not parametros.valor("bot.atender_clientes_recurrentes") and self._leads.existe_pedido_previo(
+            conversacion["contacto_id"]
+        ):
             self._escalar(conversacion, motivo="Cliente con pedido previo escribió de nuevo")
             self._bot_worker.encolar(
                 conversacion_id=conversacion_id,

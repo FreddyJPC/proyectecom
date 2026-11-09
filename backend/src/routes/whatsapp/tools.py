@@ -291,6 +291,44 @@ HERRAMIENTAS_VICTORIA = [
             "required": ["motivo"],
         },
     ),
+    HerramientaLLM(
+        nombre="clasificar_lead",
+        descripcion=(
+            "Registra, sin que el cliente lo note, qué tan decidido está a comprar. Úsala cuando lo que dice el cliente "
+            "cambie tu impresión (por ejemplo: pregunta cómo pagar, da sus datos, dice que lo va a pensar o deja de "
+            "interesarse). No es una pregunta para el cliente y no le menciones esta herramienta. Temperaturas: caliente = "
+            "quiere comprar ya; tibio = interesado pero no decidido; frio = poco interés; perdido = ya no se va a vender "
+            "(dijo que no, que es muy caro, que compró en otro lado…). «ganado» no existe para ti: lo pone el sistema cuando "
+            "se cierra la venta. En motivo escribe en una frase corta POR QUÉ lo clasificas así. Si es perdido, indica el "
+            "motivo_perdida. Puedes llamarla en el mismo turno que otras herramientas."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "temperatura": {"type": "string", "enum": ["caliente", "tibio", "frio", "perdido"]},
+                "motivo": {"type": "string", "description": "Una frase corta que explique por qué."},
+                "motivo_perdida": {
+                    "type": "string",
+                    "enum": ["precio", "sin_respuesta", "compro_en_otro_lado", "sin_cobertura", "sin_stock", "no_le_interesa", "otro"],
+                    "description": "Solo si la temperatura es perdido.",
+                },
+            },
+            "required": ["temperatura", "motivo"],
+        },
+    ),
+    HerramientaLLM(
+        nombre="no_contactar",
+        descripcion=(
+            "Úsala SOLO cuando el cliente diga con claridad que no le interesa o que no quiere que le vuelvan a escribir. "
+            "Desde ese momento el sistema no le enviará mensajes por iniciativa propia (si él escribe, se le sigue "
+            "atendiendo). Después despídete con amabilidad. No la uses por un simple «lo voy a pensar» ni por una duda."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {"motivo": {"type": "string", "description": "Lo que dijo el cliente, en una frase corta."}},
+            "required": [],
+        },
+    ),
 ]
 
 # Fase G2: no va en HERRAMIENTAS_VICTORIA porque se puede apagar (parámetro «Enviar fotos»,
@@ -335,6 +373,7 @@ class HerramientasVictoria:
         minimo_repo: Optional[MinimoObservadoRepository] = None,
         mensaje_repo: Optional[MensajeRepository] = None,
         canales=None,
+        leads_servicio=None,
         enviar_fotos: Optional[bool] = None,
         entrega_repo: Optional[EntregaRepository] = None,
         gestion_service: Optional[GestionService] = None,
@@ -356,6 +395,8 @@ class HerramientasVictoria:
         self._imagenes = imagen_repo or ImagenRepository()
         # Perezoso: el registro de canales solo se arma si de verdad se envía una foto.
         self._canales = canales
+        # Perezoso, igual que los canales: el servicio de leads (temperatura y «no contactar») se arma al usarlo.
+        self._leads_servicio_fijo = leads_servicio
         # None = lo decide el parámetro «Enviar fotos» en cada llamada (se cambia desde la
         # app, sin reiniciar); True/False lo fija a la fuerza («Probar con Victoria» y los tests).
         self._enviar_fotos_fijo = enviar_fotos
@@ -368,8 +409,44 @@ class HerramientasVictoria:
             "solicitar_gestion": self._handle_solicitar_gestion,
             "cerrar_venta": self._handle_cerrar_venta,
             "escalar_a_humano": self._handle_escalar_a_humano,
+            "clasificar_lead": self._handle_clasificar_lead,
+            "no_contactar": self._handle_no_contactar,
             "enviar_foto_producto": self._handle_enviar_foto_producto,
         }
+
+    def _servicio_de_leads(self):
+        if self._leads_servicio_fijo is None:
+            from src.routes.leads.servicio import LeadsServicio  # perezoso: evita un ciclo de importación al arrancar
+
+            self._leads_servicio_fijo = LeadsServicio()
+        return self._leads_servicio_fijo
+
+    def _handle_clasificar_lead(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        """Victoria dice qué tan decidido está el cliente. Es juicio suyo, no un dato: el servicio decide si se aplica (no pisa
+        lo que fijó el dueño ni una venta cerrada) y aquí solo se le informa, en lenguaje que ella entienda."""
+        try:
+            resultado = self._servicio_de_leads().clasificar_por_ia(
+                lead_id, str(entrada.get("temperatura") or ""), entrada.get("motivo"), entrada.get("motivo_perdida")
+            )
+        except Exception:
+            # Clasificar nunca debe interrumpir la venta: si falla, se registra y Victoria sigue.
+            logger.exception("No se pudo clasificar el lead %s", lead_id)
+            return "No se pudo registrar la clasificación; no importa, sigue con la conversación."
+        if resultado["aplicado"]:
+            return "Clasificación registrada. No se lo menciones al cliente y sigue con la conversación."
+        return f"No se cambió la clasificación: {resultado['razon']} Sigue con la conversación."
+
+    def _handle_no_contactar(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id)
+        try:
+            self._servicio_de_leads().no_contactar_por_ia(lead["contacto_id"], entrada.get("motivo"))
+        except Exception:
+            logger.exception("No se pudo marcar «no contactar» del lead %s", lead_id)
+            return "No se pudo registrar; despídete con amabilidad de todos modos."
+        return (
+            "Listo: no se le escribirá por iniciativa nuestra. Despídete con amabilidad y brevedad, sin insistir ni ofrecer "
+            "nada más. Este es tu último mensaje."
+        )
 
     def _fotos_activas(self) -> bool:
         return self._enviar_fotos_fijo if self._enviar_fotos_fijo is not None else parametros.valor("bot.enviar_fotos")

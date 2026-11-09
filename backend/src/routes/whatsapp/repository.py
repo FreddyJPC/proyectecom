@@ -758,6 +758,25 @@ class LeadRepository:
                 fijar_temperatura(cur, lead_id, GANADO, ORIGEN_REGLA, "Pedido despachado por Rocketfy")
 
     @staticmethod
+    def resumen_del_contacto(contacto_id: int, lead_actual_id: int) -> dict:
+        """Lo que Victoria necesita saber del pasado de un contacto: sus leads anteriores (el actual se excluye) y cuántas
+        veces compró (ventas no canceladas)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select producto_nombre, temperatura, motivo_perdida, creado_en, cerrado_en from leads
+                    where contacto_id = %s and id <> %s order by creado_en desc, id desc limit 5
+                    """,
+                    (contacto_id, lead_actual_id),
+                )
+                cols = [d[0] for d in cur.description]
+                previos = [dict(zip(cols, fila)) for fila in cur.fetchall()]
+                cur.execute("select count(*) from ventas where contacto_id = %s and estado <> 'cancelada'", (contacto_id,))
+                compras = cur.fetchone()[0]
+        return {"previos": previos, "compras": compras}
+
+    @staticmethod
     def existe_pedido_previo(contacto_id: int) -> bool:
         """¿Este contacto ya tiene un pedido cerrado, por el canal que sea? `despachado` (Rocketfy lo creó) o
         `por_gestionar` (producto propio: el dueño lo está gestionando)."""

@@ -279,13 +279,28 @@ CATALOGO: Tuple[Parametro, ...] = (
             "Los precios son de referencia: confírmalos en tu cuenta de Anthropic."
         ),
     ),
+    Parametro(
+        clave="bot.atender_clientes_recurrentes",
+        grupo="victoria",
+        nombre="Que Victoria atienda a los clientes que ya compraron",
+        para_que_sirve=(
+            "Si está activo, un cliente que ya tiene un pedido y vuelve a escribir lo atiende Victoria como a un cliente conocido: "
+            "ve lo que compró o preguntó antes, le ayuda con lo nuevo y le abre un pedido nuevo si quiere volver a comprar. "
+            "Lo que sea de su pedido anterior (envío, reclamos, garantía) sigue pasando a una persona. Si lo apagas, vuelve el "
+            "comportamiento de antes: el sistema envía el mensaje «Cliente que ya tiene un pedido despachado» y avisa a una persona."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
     # ----------------------------------------------------------------- Textos
     Parametro(
         clave="bot.texto_postventa",
         grupo="textos",
         nombre="Cliente que ya tiene un pedido despachado",
         para_que_sirve=(
-            "Lo que se responde cuando escribe un cliente que ya tiene un pedido despachado. En ese caso Victoria no interviene: "
+            "Lo que se responde cuando escribe un cliente que ya tiene un pedido despachado y Victoria NO está atendiendo a los "
+            "clientes recurrentes (ver «Que Victoria atienda a los clientes que ya compraron»). En ese caso Victoria no interviene: "
             "el sistema envía este mensaje y avisa a una persona para que lo atienda."
         ),
         tipo=TIPO_TEXTO,

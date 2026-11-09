@@ -472,6 +472,8 @@ class ProbarInputSchema(Schema):
     escalada = fields.Bool(load_default=False)
     # Probar con el borrador de las instrucciones de Victoria en vez de con las que rigen hoy.
     usar_borrador = fields.Bool(data_key="usarBorrador", load_default=False)
+    # Escenario «cliente recurrente»: Victoria ve el historial de un cliente que ya compró (de ejemplo) antes de contestar.
+    cliente_recurrente = fields.Bool(data_key="clienteRecurrente", load_default=False)
 
     @post_load
     def _limpiar(self, data, **kwargs):

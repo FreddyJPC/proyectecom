@@ -89,6 +89,11 @@ SECCIONES = (
         "Qué hace Victoria cuando el producto tiene colores, tallas u otras variantes.", True, 2000,
     ),
     Seccion(
+        "clasificacion", "Cómo clasificas a cada cliente", "Cómo clasifica a cada cliente",
+        "Qué significa caliente, tibio, frío y perdido para Victoria, y cómo trata a un cliente que ya compró o ya había hablado "
+        "con la tienda. Su juicio queda en el panel de Leads para que sepas a quién atender primero.", True, 2500,
+    ),
+    Seccion(
         "estado", "Estado actual de este lead (lo que ya se sabe de este cliente)", "Lo que ya se sabe del cliente",
         "El sistema escribe aquí, en cada mensaje, los datos que ya se guardaron del cliente y los que faltan. No se edita.", False,
     ),

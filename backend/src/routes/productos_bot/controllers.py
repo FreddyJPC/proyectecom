@@ -287,6 +287,7 @@ def probar_con_victoria(sku: str):
             escalada=data["escalada"],
             usuario=_usuario(),
             usar_borrador=data["usar_borrador"],
+            cliente_recurrente=data["cliente_recurrente"],
         )
     except _ERRORES_CONOCIDOS as exc:
         return _responder_error(exc)

@@ -118,6 +118,7 @@ class PruebasService:
         escalada: bool,
         usuario: Optional[str],
         usar_borrador: bool = False,
+        cliente_recurrente: bool = False,
     ) -> TurnoSimuladoDTO:
         sku = (sku or "").strip()
         ficha = self._repo.obtener(sku)
@@ -154,6 +155,7 @@ class PruebasService:
                 # Se leen ANTES de la simulación (que no abre la base): son las opciones de envío guardadas.
                 entregas=entregas,
                 imagenes=imagenes,
+                cliente_recurrente=cliente_recurrente,
             )
         except LLMAuthError as exc:
             self._registrar(ficha["sku"], usuario, modelo, "fallo")
