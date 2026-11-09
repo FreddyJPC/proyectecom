@@ -95,6 +95,7 @@ class TestPersistenciaDeCola:
             canales=registro_de_whatsapp(MagicMock()),
             mensaje_repository=FakeMensajeRepository(),
             cola_repository=cola_repo,
+            telegram=MagicMock(),
         )
         worker_caido.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="hola de prueba")
 
@@ -104,6 +105,7 @@ class TestPersistenciaDeCola:
             canales=registro_de_whatsapp(cliente_nuevo),
             mensaje_repository=msg_repo_nuevo,
             cola_repository=cola_repo,
+            telegram=MagicMock(),
         )
         worker_nuevo.iniciar()
         worker_nuevo._cola.join()
@@ -155,6 +157,7 @@ class TestPersistenciaDeCola:
             canales=registro_de_whatsapp(cliente),
             mensaje_repository=FakeMensajeRepository(),
             cola_repository=cola_repo,
+            telegram=MagicMock(),
         )
         worker.iniciar()
         worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="primero")
@@ -172,7 +175,8 @@ class TestCanales:
         cola_repo = FakeColaMensajeRepository()
         cliente = MagicMock()
         worker = BotWorker(
-            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo
+            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo,
+            telegram=MagicMock(),
         )
         worker.iniciar()
         worker.encolar(conversacion_id=1, canal="whatsapp", id_externo="593987654321", modo="fijo", texto_fijo="hola")
@@ -183,7 +187,8 @@ class TestCanales:
         cola_repo = FakeColaMensajeRepository()
         cliente = MagicMock()
         worker = BotWorker(
-            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo
+            canales=registro_de_whatsapp(cliente), mensaje_repository=FakeMensajeRepository(), cola_repository=cola_repo,
+            telegram=MagicMock(),
         )
         worker.iniciar()
         worker.encolar(conversacion_id=1, canal="instagram", id_externo="1784", modo="fijo", texto_fijo="no sale")

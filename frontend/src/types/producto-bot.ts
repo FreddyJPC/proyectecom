@@ -342,6 +342,9 @@ export type EstadoPrueba = {
   estado: "recopilando_datos" | "esperando_pago" | "despachado" | "por_gestionar";
   idPedidoLocal: number | null;
   idPedidoRocketfy: number | null;
+  /** «Reloj» de la prueba: en qué mensaje se pidió / se dio la confirmación de los datos (lo maneja el servidor). */
+  datosConfirmacionPedidaEn: number | null;
+  datosConfirmadosEn: number | null;
 };
 
 export type LlamadaHerramienta = {

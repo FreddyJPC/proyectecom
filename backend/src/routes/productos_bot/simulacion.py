@@ -94,6 +94,9 @@ def lead_inicial() -> Dict[str, Any]:
         "estado": "recopilando_datos",
         "id_pedido_local": None,
         "id_pedido_rocketfy": None,
+        # «Reloj» de la prueba: la posición del mensaje en la conversación cuando se pidió / se dio la confirmación.
+        "datos_confirmacion_pedida_en": None,
+        "datos_confirmados_en": None,
     }
 
 
@@ -122,7 +125,7 @@ def lead_desde_estado(estado: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         lead["metodo_pago"] = estado["metodo_pago"]
     if estado.get("estado") in ESTADOS_DEL_LEAD:
         lead["estado"] = estado["estado"]
-    for campo in ("id_pedido_local", "id_pedido_rocketfy"):
+    for campo in ("id_pedido_local", "id_pedido_rocketfy", "datos_confirmacion_pedida_en", "datos_confirmados_en"):
         valor = estado.get(campo)
         if isinstance(valor, int) and not isinstance(valor, bool):
             lead[campo] = valor
@@ -142,6 +145,8 @@ def estado_desde_lead(lead: Dict[str, Any]) -> Dict[str, Any]:
         estado=lead.get("estado"),
         id_pedido_local=lead.get("id_pedido_local"),
         id_pedido_rocketfy=lead.get("id_pedido_rocketfy"),
+        datos_confirmacion_pedida_en=lead.get("datos_confirmacion_pedida_en"),
+        datos_confirmados_en=lead.get("datos_confirmados_en"),
     )
     return salida
 
@@ -184,6 +189,22 @@ class LeadsEnMemoria:
     def __init__(self, lead: Dict[str, Any], historial: Optional[Dict[str, Any]] = None):
         self.lead = lead
         self._historial = historial or {"previos": [], "compras": 0}
+        # Hora de la prueba: la posición del último mensaje (la fija `simular_turno`). Hace el papel de `now()` de la base.
+        self.reloj = lambda: 0
+
+    def _cambiaron(self, **nuevos) -> bool:
+        return any(valor is not None and self.lead.get(campo) != valor for campo, valor in nuevos.items())
+
+    def _reiniciar_confirmacion(self) -> None:
+        self.lead["datos_confirmacion_pedida_en"] = None
+        self.lead["datos_confirmados_en"] = None
+
+    def marcar_confirmacion_pedida(self, lead_id) -> None:
+        self.lead["datos_confirmacion_pedida_en"] = self.reloj()
+        self.lead["datos_confirmados_en"] = None
+
+    def confirmar_datos(self, lead_id) -> None:
+        self.lead["datos_confirmados_en"] = self.reloj()
 
     def obtener_o_crear(
         self, conversacion_id: int, contacto_id: int, telefono: Optional[str], dias_atribucion: int = 30
@@ -201,18 +222,18 @@ class LeadsEnMemoria:
         return dict(self.lead)
 
     def actualizar_datos_cliente(self, lead_id, nombre_cliente=None, direccion=None, canton=None, provincia=None) -> None:
-        # Mismo criterio que el UPDATE real (`coalesce`): lo que no llega no se borra.
-        for campo, valor in (
-            ("nombre_cliente", nombre_cliente),
-            ("direccion", direccion),
-            ("canton", canton),
-            ("provincia", provincia),
-        ):
+        # Mismo criterio que el UPDATE real (`coalesce`): lo que no llega no se borra; y cambiar un dato obliga a confirmar otra vez.
+        nuevos = dict(nombre_cliente=nombre_cliente, direccion=direccion, canton=canton, provincia=provincia)
+        if self._cambiaron(**nuevos):
+            self._reiniciar_confirmacion()
+        for campo, valor in nuevos.items():
             if valor is not None:
                 self.lead[campo] = valor
 
     def actualizar_producto(self, lead_id, producto_sku, producto_nombre, total, variante=None, cantidad=1) -> None:
         # Igual que el UPDATE real: `total` es el subtotal y cambiar de producto borra la entrega elegida.
+        if self.lead.get("producto_sku") != producto_sku or int(self.lead.get("cantidad") or 1) != int(cantidad) or self._cambiaron(producto_variante=variante) or self.lead.get("entrega_opcion_id") is not None:
+            self._reiniciar_confirmacion()
         self.lead.update(
             producto_sku=producto_sku, producto_nombre=producto_nombre, total=total, subtotal=total, cantidad=cantidad,
             entrega_opcion_id=None, entrega_nombre=None, entrega_tipo=None, costo_envio=Decimal("0.00"),
@@ -221,12 +242,16 @@ class LeadsEnMemoria:
             self.lead["producto_variante"] = variante
 
     def actualizar_entrega(self, lead_id, opcion_id, nombre, tipo, costo_envio, total) -> None:
+        if self.lead.get("entrega_opcion_id") != opcion_id or self.lead.get("entrega_nombre") != nombre:
+            self._reiniciar_confirmacion()
         self.lead.update(
             entrega_opcion_id=opcion_id, entrega_nombre=nombre, entrega_tipo=tipo,
             costo_envio=Decimal(str(costo_envio)), total=total,
         )
 
     def actualizar_metodo_pago(self, lead_id, metodo_pago, esperar_comprobante=True) -> None:
+        if self.lead.get("metodo_pago") != metodo_pago:
+            self._reiniciar_confirmacion()
         self.lead["metodo_pago"] = metodo_pago
         if esperar_comprobante and metodo_pago == "transferencia":
             self.lead["estado"] = "esperando_pago"
@@ -245,13 +270,16 @@ class MensajesEnMemoria:
     def __init__(self, historial: List[Dict[str, str]], mensaje_nuevo: str):
         self.filas = [{"rol": h["rol"], "contenido": h["contenido"], "tipo": "texto"} for h in historial]
         self.filas.append({"rol": "cliente", "contenido": mensaje_nuevo, "tipo": "texto"})
+        # «Hora» de cada mensaje = su posición en la conversación (la app reenvía el historial completo en cada turno).
+        for posicion, fila in enumerate(self.filas, start=1):
+            fila["creado_en"] = posicion
         self.fotos_de_este_turno: List[str] = []
 
     def obtener_por_conversacion(self, conversacion_id: int) -> List[Dict[str, str]]:
         return list(self.filas)
 
     def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None) -> Dict[str, str]:
-        fila = {"rol": rol, "contenido": contenido, "tipo": tipo}
+        fila = {"rol": rol, "contenido": contenido, "tipo": tipo, "creado_en": len(self.filas) + 1}
         self.filas.append(fila)
         if tipo == "imagen":
             self.fotos_de_este_turno.append(contenido)
@@ -566,6 +594,7 @@ def simular_turno(
     conversaciones = ConversacionesEnMemoria(desde_anuncio)
     leads = LeadsEnMemoria(lead, _historial_de_un_cliente_recurrente() if cliente_recurrente else None)
     mensajes = MensajesEnMemoria(historial, mensaje)
+    leads.reloj = lambda: len(mensajes.filas)
     productos = ProductosEnEnsayo(producto)
     rocketfy = RocketfyDeEnsayo()
     telegram = TelegramGrabador()

@@ -721,3 +721,16 @@ class TestRespuestaVacia:
         servicio = _servicio_con(llm, MensajesConId([{"rol": "cliente", "contenido": "¿Cuánto cuesta?"}]))
 
         assert servicio.procesar_turno(1, "¿Cuánto cuesta?") == "Un momento, lo reviso.\n\nCuesta $20."
+
+
+class TestContextoDeConfirmacion:
+    def test_si_ya_confirmo_lo_sabe_victoria(self):
+        texto = VictoriaConversationService._formatear_contexto_lead({"nombre_cliente": "Ana", "datos_confirmados_en": 5})
+        assert "ya confirmó el resumen" in texto
+
+    def test_si_se_pidio_la_confirmacion_espera_la_respuesta(self):
+        texto = VictoriaConversationService._formatear_contexto_lead({"datos_confirmacion_pedida_en": 5})
+        assert "espera su respuesta" in texto and "ya confirmó" not in texto
+
+    def test_sin_nada_no_dice_nada_de_confirmacion(self):
+        assert "confirm" not in VictoriaConversationService._formatear_contexto_lead({"nombre_cliente": "Ana"})

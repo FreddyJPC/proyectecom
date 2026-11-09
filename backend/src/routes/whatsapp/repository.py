@@ -35,8 +35,11 @@ _COLUMNAS_LEAD = (
     "entrega_opcion_id, entrega_nombre, entrega_tipo, costo_envio, "
     "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en, "
     "temperatura, temperatura_motivo, temperatura_origen, temperatura_en, temperatura_fijada_hasta, motivo_perdida, "
-    "cerrado_en, origen, id_anuncio, ctwa_clid"
+    "cerrado_en, origen, id_anuncio, ctwa_clid, datos_confirmacion_pedida_en, datos_confirmados_en"
 )
+
+# Si cambia cualquier dato que aparece en el resumen de confirmación, el cliente tiene que volver a confirmar.
+_BORRAR_CONFIRMACION = "datos_confirmacion_pedida_en = null, datos_confirmados_en = null"
 
 
 # Una conversación acumula varios leads con el tiempo (uno por intención de compra): en la lista se muestra el ABIERTO o, si
@@ -692,17 +695,43 @@ class LeadRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    "select nombre_cliente, direccion, canton, provincia from leads where id = %s for update", (lead_id,)
+                )
+                actual = cur.fetchone()
+                nuevos = (nombre_cliente, direccion, canton, provincia)
+                # Solo cuenta si de verdad cambia un dato (repetir el mismo no obliga a confirmar otra vez).
+                cambio = actual is not None and any(n is not None and n != a for n, a in zip(nuevos, actual))
+                cur.execute(
+                    f"""
                     update leads set
                         nombre_cliente = coalesce(%s, nombre_cliente),
                         direccion      = coalesce(%s, direccion),
                         canton         = coalesce(%s, canton),
                         provincia      = coalesce(%s, provincia),
+                        {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
                         actualizado_en = now()
                     where id = %s
                     """,
                     (nombre_cliente, direccion, canton, provincia, lead_id),
                 )
+
+    @staticmethod
+    def marcar_confirmacion_pedida(lead_id: int) -> None:
+        """Victoria le mostró el resumen al cliente: queda anotado cuándo (y se descarta una confirmación anterior)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update leads set datos_confirmacion_pedida_en = now(), datos_confirmados_en = null, "
+                    "actualizado_en = now() where id = %s",
+                    (lead_id,),
+                )
+
+    @staticmethod
+    def confirmar_datos(lead_id: int) -> None:
+        """El cliente confirmó el resumen: ahora sí se puede cerrar la venta."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("update leads set datos_confirmados_en = now(), actualizado_en = now() where id = %s", (lead_id,))
 
     @staticmethod
     def actualizar_producto(
@@ -725,12 +754,24 @@ class LeadRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    "select producto_sku, cantidad, producto_variante, entrega_nombre from leads where id = %s for update", (lead_id,)
+                )
+                actual = cur.fetchone()
+                # Registrar el producto también borra la entrega elegida (ver abajo): si había una, el resumen ya no vale.
+                cambio = actual is not None and (
+                    actual[0] != producto_sku
+                    or int(actual[1] or 1) != int(cantidad)
+                    or (variante is not None and actual[2] != variante)
+                    or actual[3] is not None
+                )
+                cur.execute(
+                    f"""
                     update leads set
                         producto_sku = %s, producto_nombre = %s, total = %s, subtotal = %s,
                         cantidad = %s,
                         producto_variante = coalesce(%s, producto_variante),
                         entrega_opcion_id = null, entrega_nombre = null, entrega_tipo = null, costo_envio = 0,
+                        {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
                         actualizado_en = now()
                     where id = %s
                     """,
@@ -744,11 +785,16 @@ class LeadRepository:
         """Guarda la entrega elegida y el total ya con el envío (lo calcula el sistema, no Victoria)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
+                cur.execute("select entrega_opcion_id, entrega_nombre from leads where id = %s for update", (lead_id,))
+                actual = cur.fetchone()
+                cambio = actual is not None and (actual[0] != opcion_id or actual[1] != nombre)
                 cur.execute(
-                    """
+                    f"""
                     update leads set
                         entrega_opcion_id = %s, entrega_nombre = %s, entrega_tipo = %s,
-                        costo_envio = %s, total = %s, actualizado_en = now()
+                        costo_envio = %s, total = %s,
+                        {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
+                        actualizado_en = now()
                     where id = %s
                     """,
                     (opcion_id, nombre, tipo, costo_envio, total, lead_id),
@@ -761,11 +807,15 @@ class LeadRepository:
         que le pide el comprobante a Victoria)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
+                cur.execute("select metodo_pago from leads where id = %s for update", (lead_id,))
+                actual = cur.fetchone()
+                cambio = actual is not None and actual[0] != metodo_pago
                 cur.execute(
-                    """
+                    f"""
                     update leads set
                         metodo_pago = %s,
                         estado = case when %s and %s = 'transferencia' then 'esperando_pago' else estado end,
+                        {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
                         actualizado_en = now()
                     where id = %s
                     """,

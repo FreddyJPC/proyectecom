@@ -46,6 +46,8 @@ const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   registrar_producto: "Registró el producto",
   ver_ficha_producto: "Leyó la ficha del producto",
   registrar_metodo_pago: "Registró el método de pago",
+  mostrar_resumen_para_confirmar: "Armó el resumen para que el cliente confirme",
+  confirmar_datos_envio: "Registró que el cliente confirmó sus datos",
   cerrar_venta: "Intentó cerrar la venta",
   escalar_a_humano: "Pasó la conversación a una persona",
   enviar_foto_producto: "Envió fotos del producto",

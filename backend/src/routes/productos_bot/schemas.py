@@ -452,6 +452,8 @@ class EstadoDeLaPruebaSchema(Schema):
     estado = fields.Str(allow_none=True)
     id_pedido_local = fields.Int(data_key="idPedidoLocal", allow_none=True)
     id_pedido_rocketfy = fields.Int(data_key="idPedidoRocketfy", allow_none=True)
+    datos_confirmacion_pedida_en = fields.Int(data_key="datosConfirmacionPedidaEn", allow_none=True)
+    datos_confirmados_en = fields.Int(data_key="datosConfirmadosEn", allow_none=True)
 
 
 class ProbarInputSchema(Schema):

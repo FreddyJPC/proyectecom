@@ -327,6 +327,10 @@ class VictoriaConversationService:
         faltantes = [etiqueta for etiqueta, valor in campos.items() if not valor]
 
         partes = []
+        if lead.get("datos_confirmados_en"):
+            partes.append("El cliente ya confirmó el resumen de sus datos de envío.")
+        elif lead.get("datos_confirmacion_pedida_en"):
+            partes.append("Ya le enviaste el resumen para confirmar: espera su respuesta.")
         if conocidos:
             partes.append("Ya se sabe: " + "; ".join(conocidos) + ".")
         if faltantes:

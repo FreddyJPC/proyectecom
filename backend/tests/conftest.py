@@ -35,3 +35,24 @@ def _sin_memoria_de_configuracion():
     yield
     parametros.invalidar()
     instrucciones_vigentes.invalidar()
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "confirma_datos: la prueba usa la confirmación de datos con el cliente ENCENDIDA (como en producción)"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _confirmacion_de_datos_apagada(request, monkeypatch):
+    """La confirmación de datos antes de cerrar (`bot.confirmar_datos_antes_de_cerrar`) viene encendida de fábrica. Las
+    pruebas de cierre de venta que no tratan de ella la dejan apagada para no repetir el paso de confirmar en cada una;
+    las que sí la prueban llevan `@pytest.mark.confirma_datos`."""
+    if request.node.get_closest_marker("confirma_datos"):
+        return
+    from src.config.parametros import parametros
+
+    real = parametros.valor
+    monkeypatch.setattr(
+        parametros, "valor", lambda clave: False if clave == "bot.confirmar_datos_antes_de_cerrar" else real(clave)
+    )

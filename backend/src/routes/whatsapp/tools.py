@@ -22,6 +22,7 @@ escala siempre con el mensaje de la excepción como motivo (ver
 PROGRESS.md, Fase 3.2, para el detalle completo de esta decisión).
 """
 import logging
+import re
 import time
 import unicodedata
 from decimal import Decimal, InvalidOperation
@@ -44,6 +45,10 @@ from src.routes.entregas.logica import describir, elegir_opcion, opciones_aplica
 from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.services import GestionService
 from src.routes.gestion.tipos import TIPOS_QUE_PIDE_VICTORIA
+from src.catalogs.ecuador_locations import get_catalog
+from .coincidencia import base, buscar
+from .confirmacion import datos_que_faltan, texto_de_confirmacion
+from .ubicacion import revisar_ubicacion
 from src.routes.imagenes.logica import galeria_para_enviar
 from src.routes.imagenes.repository import ImagenRepository
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
@@ -228,6 +233,26 @@ HERRAMIENTAS_VICTORIA = [
         parametros={"type": "object", "properties": {}},
     ),
     HerramientaLLM(
+        nombre="mostrar_resumen_para_confirmar",
+        descripcion=(
+            "Antes de cerrar la venta: te devuelve el resumen del pedido (nombre, dirección, ciudad, teléfono, producto, "
+            "total y forma de pago) ya redactado, para que se lo envíes al cliente y le pidas que confirme que todo está "
+            "correcto para el envío. Úsala cuando ya tengas TODOS los datos. Si falta alguno, te dice cuál. Después de "
+            "enviar el resumen, espera la respuesta del cliente: no cierres todavía."
+        ),
+        parametros={"type": "object", "properties": {}},
+    ),
+    HerramientaLLM(
+        nombre="confirmar_datos_envio",
+        descripcion=(
+            "Registra que el cliente CONFIRMÓ el resumen que le mostraste (respondió que sí, que está correcto). Úsala solo "
+            "después de que el cliente haya contestado afirmativamente; si pidió corregir algo, no la uses: guarda el cambio y "
+            "vuelve a mostrar el resumen con mostrar_resumen_para_confirmar. Solo con los datos confirmados puedes usar "
+            "cerrar_venta."
+        ),
+        parametros={"type": "object", "properties": {}},
+    ),
+    HerramientaLLM(
         nombre="registrar_entrega",
         descripcion=(
             "Solo para productos cuyo envío NO está incluido en el precio (lo dice su ficha). Sin parámetros "
@@ -378,7 +403,9 @@ class HerramientasVictoria:
         gestion_service: Optional[GestionService] = None,
         ventas_service: Optional[VentasService] = None,
         imagen_repo: Optional[ImagenRepository] = None,
+        catalogo_ubicaciones=None,
     ):
+        self._catalogo_fijo = catalogo_ubicaciones
         self._leads = lead_repo or LeadRepository()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._productos = producto_repo or ProductoBotRepository()
@@ -406,6 +433,8 @@ class HerramientasVictoria:
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
             "registrar_entrega": self._handle_registrar_entrega,
             "solicitar_gestion": self._handle_solicitar_gestion,
+            "mostrar_resumen_para_confirmar": self._handle_mostrar_resumen_para_confirmar,
+            "confirmar_datos_envio": self._handle_confirmar_datos_envio,
             "cerrar_venta": self._handle_cerrar_venta,
             "escalar_a_humano": self._handle_escalar_a_humano,
             "clasificar_lead": self._handle_clasificar_lead,
@@ -461,18 +490,49 @@ class HerramientasVictoria:
         return ResultadoHerramienta(id_llamada=id_llamada, contenido=contenido)
 
     def _handle_guardar_datos_cliente(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        nombre = entrada.get("nombre_cliente")
+        direccion = entrada.get("direccion")
+        canton = entrada.get("canton")
+        provincia = entrada.get("provincia")
+        aviso_ubicacion = ""
+        if canton or provincia:
+            canton, provincia, aviso_ubicacion, nota_ubicacion = self._ubicacion_a_guardar(lead_id, canton, provincia)
+        else:
+            nota_ubicacion = ""
+
         self._leads.actualizar_datos_cliente(
-            lead_id,
-            nombre_cliente=entrada.get("nombre_cliente"),
-            direccion=entrada.get("direccion"),
-            canton=entrada.get("canton"),
-            provincia=entrada.get("provincia"),
+            lead_id, nombre_cliente=nombre, direccion=direccion, canton=canton, provincia=provincia
         )
-        if entrada.get("canton") or entrada.get("provincia"):
+        guardado_algo = any([nombre, direccion, canton, provincia])
+        if (canton or provincia) and not aviso_ubicacion:
             aviso = self._revalidar_entrega_elegida(lead_id)
             if aviso:
                 return f"Datos guardados correctamente. {aviso}"
+        if nota_ubicacion:
+            return f"Datos guardados correctamente. {nota_ubicacion}"
+        if aviso_ubicacion:
+            base = "Datos guardados, pero con un detalle en la ubicación." if guardado_algo else "No se guardó la ubicación."
+            return f"{base} {aviso_ubicacion}"
         return "Datos guardados correctamente."
+
+    def _ubicacion_a_guardar(self, lead_id: int, canton, provincia):
+        """Revisa el cantón y la provincia contra el catálogo de entregas ANTES de guardarlos (ver `ubicacion.py`).
+        Devuelve (cantón, provincia, aviso para Victoria, nota): lo que sí se guarda y qué falta aclarar con el cliente."""
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        catalogo = self._catalogo_fijo or get_catalog()
+        revision = revisar_ubicacion(catalogo, canton or lead.get("canton"), provincia or lead.get("provincia"))
+        if not revision.hay_problema:
+            return (revision.canton or canton), (revision.provincia or provincia), "", revision.nota
+
+        producto = self._productos.obtener_por_sku(lead["producto_sku"]) if lead.get("producto_sku") else None
+        if es_de_cierre_manual(producto):
+            # El dueño gestiona este envío: el lugar puede no estar en el catálogo de Rocketfy. Se guarda lo que dijo el
+            # cliente y solo se avisa si hay un nombre parecido.
+            if revision.sugerencias:
+                return canton, provincia, f"Se guardó tal como lo escribió el cliente. {revision.mensaje}", ""
+            return canton, provincia, "", ""
+        # Solo se guarda lo que sí es válido (p. ej. la provincia); lo dudoso se aclara con el cliente.
+        return None, (revision.provincia if provincia else None), revision.mensaje, ""
 
     def _revalidar_entrega_elegida(self, lead_id: int) -> str:
         """Si el cliente ya había elegido una opción de entrega y cambia su destino, la opción puede dejar
@@ -642,23 +702,45 @@ class HerramientasVictoria:
         total = self._calcular_total(producto_real, cantidad)
         self._avisar_si_el_llm_envio_otro_total(entrada, total, contexto)
 
+        variante, nota_variante = self._variante_oficial(producto_real, entrada.get("variante"))
         self._leads.actualizar_producto(
             lead_id,
             producto_sku=producto_real["sku"],
             producto_nombre=producto_real["nombre"],
             total=total,
-            variante=entrada.get("variante"),
+            variante=variante,
             cantidad=cantidad,
         )
         if not producto_real.get("envio_incluido", True):
             return (
                 f"Producto registrado: {cantidad} x {producto_real['nombre']}. Subtotal: ${total}, SIN el envío: "
                 "este producto cobra el envío aparte. Cuando tengas el cantón y la provincia del cliente, usa "
-                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta."
+                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta." + nota_variante
             )
         return (
             f"Producto registrado: {cantidad} x {producto_real['nombre']}. "
-            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
+            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies." + nota_variante
+        )
+
+    @staticmethod
+    def _variante_oficial(producto: dict, variante: Optional[str]):
+        """La variante con el nombre de la ficha («negrp» -> «Negro»), sin preguntarle al cliente lo que es evidente. Si no se
+        reconoce, NO se guarda una variante inventada: se le dice a Victoria cuáles hay para preguntar una vez (la variante
+        nunca frena la venta). Devuelve (variante a guardar, nota para Victoria)."""
+        variante = (variante or "").strip()
+        opciones = [v.strip() for v in re.split(r"[,;/\n]", producto.get("variantes") or "") if v.strip()]
+        # Solo si la ficha ENUMERA las variantes («Negro, blanco»). Si es una descripción libre («talla 38 a 42») no hay una
+        # lista contra la cual comparar: se guarda lo que dijo el cliente.
+        if not variante or len(opciones) < 2:
+            return (variante or None), ""
+        m = buscar(variante, opciones)
+        if m.segura:
+            if base(variante) != base(m.oficial):
+                return m.oficial, f" Variante: «{variante}» se guardó como «{m.oficial}»; no hace falta preguntarle."
+            return m.oficial, ""
+        return None, (
+            f" No identifiqué la variante «{variante}»: las disponibles son {', '.join(opciones)}. Pregúntale UNA vez cuál "
+            "prefiere; si no lo aclara, sigue sin variante."
         )
 
     def _stock_disponible(self, producto: dict, fresco: bool = False) -> Optional[int]:
@@ -767,6 +849,46 @@ class HerramientasVictoria:
             self._conversaciones.marcar_esperando_pago(conversacion_id)
         return "Método de pago registrado."
 
+    def _handle_mostrar_resumen_para_confirmar(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        producto = self._productos.obtener_por_sku(lead["producto_sku"]) if lead.get("producto_sku") else None
+        faltan = datos_que_faltan(lead, producto)
+        if faltan:
+            return f"Todavía no se puede mostrar el resumen: falta {', '.join(faltan)}. Pídeselo al cliente primero."
+        self._leads.marcar_confirmacion_pedida(lead_id)
+        return (
+            "Envíale al cliente este resumen tal cual (puedes agregar un saludo breve) y espera su respuesta. No cierres la "
+            "venta todavía. Si responde que sí, usa confirmar_datos_envio; si quiere corregir algo, guarda el cambio y vuelve a "
+            "usar mostrar_resumen_para_confirmar.\n\n" + texto_de_confirmacion(lead)
+        )
+
+    def _handle_confirmar_datos_envio(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        if lead.get("datos_confirmados_en"):
+            return "Los datos ya estaban confirmados. Puedes cerrar la venta con cerrar_venta."
+        pedida_en = lead.get("datos_confirmacion_pedida_en")
+        if not pedida_en:
+            return (
+                "Todavía no le mostraste el resumen al cliente (o cambió algún dato desde entonces). Usa "
+                "mostrar_resumen_para_confirmar, envíaselo y espera su respuesta."
+            )
+        if not self._cliente_respondio_despues(conversacion_id, pedida_en):
+            return (
+                "El cliente todavía no respondió al resumen. Envíaselo (si no lo has hecho) y espera su respuesta: solo "
+                "puedes confirmar cuando él diga que está correcto."
+            )
+        self._leads.confirmar_datos(lead_id)
+        return "Datos confirmados por el cliente. Ya puedes cerrar la venta con cerrar_venta."
+
+    def _cliente_respondio_despues(self, conversacion_id: int, momento) -> bool:
+        """¿El cliente escribió algo DESPUÉS de que se le pidió confirmar? Es la red de seguridad contra confirmar sin que él
+        haya contestado (que Victoria pida el resumen y lo confirme en el mismo turno)."""
+        ultimo = None
+        for fila in self._mensajes.obtener_por_conversacion(conversacion_id):
+            if fila.get("rol") == "cliente":
+                ultimo = fila
+        return ultimo is not None and ultimo.get("creado_en") is not None and ultimo["creado_en"] > momento
+
     def _handle_cerrar_venta(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         lead = self._leads.obtener_por_id(lead_id)
         faltantes = [campo for campo in _CAMPOS_REQUERIDOS_CIERRE if not lead.get(campo)]
@@ -779,6 +901,13 @@ class HerramientasVictoria:
 
         if lead.get("estado") == ESTADO_LEAD_CANCELADO:
             return self._pasar_nuevo_pedido_al_dueno(lead, conversacion_id)
+
+        # El cliente tiene que haber confirmado el resumen de sus datos (si el dueño no apagó esta revisión).
+        if parametros.valor("bot.confirmar_datos_antes_de_cerrar") and not lead.get("datos_confirmados_en"):
+            return (
+                "Antes de cerrar, el cliente debe confirmar sus datos: usa mostrar_resumen_para_confirmar, envíale el "
+                "resumen y, cuando responda que sí, usa confirmar_datos_envio. Después vuelve a intentar cerrar."
+            )
 
         producto = self._productos.obtener_por_sku(lead["producto_sku"])
         manual = es_de_cierre_manual(producto)
