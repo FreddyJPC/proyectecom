@@ -262,12 +262,12 @@ posible y rotarlos.
 - **Cimientos multicanal (ADR-014, migración 024) — desplegado 2026-11-09 (PR #27):** `contactos`, conversación por canal,
   `ventas.canal`→`origen` + `canal` nuevo, `fep`→`anuncio`, claves a `restrict`. Instagram y Messenger **no están
   conectados** (pendiente #71); hoy solo WhatsApp.
-- **Leads (CRM) y seguimiento (ADR-015, migraciones 025 y 026) — implementado y probado EN LOCAL, SIN DESPLEGAR:** temperatura de
+- **Leads (CRM) y seguimiento (ADR-015, migraciones 025 y 026) — desplegado 2026-11-09 (PR #28):** temperatura de
   cada lead (caliente/tibio/frío/perdido/ganado) que fijan el dueño, los hechos, Victoria (`clasificar_lead`) y el tiempo (solo
   enfría), historial, un lead abierto por contacto, atribución por lead, «no contactar» en el contacto, Victoria atiende al
   cliente recurrente, pantalla **Leads** y seguimiento automático (`seguimientos`) con **dos interruptores apagados** y la
-  plantilla `retomar_conversacion` **sin crear en Meta** (pendiente #67). **Al desplegar: primero las migraciones 025 y 026 en
-  Supabase, después el código** (el código nuevo lee columnas y tablas que no existen antes). Plan: `docs/PLAN_LEADS_CRM.md`.
+  plantilla `retomar_conversacion` **sin crear en Meta** (pendiente #67). Aún no se ha visto la pantalla Leads con el login real ni a
+  Victoria clasificando con conversaciones reales (pendiente #69). **Al desplegar una migración: primero la migración, después el código.** Plan: `docs/PLAN_LEADS_CRM.md`.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
