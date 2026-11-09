@@ -60,6 +60,8 @@ _A_CAMEL = {
     "metodo_pago": "metodoPago",
     "id_pedido_local": "idPedidoLocal",
     "id_pedido_rocketfy": "idPedidoRocketfy",
+    "datos_confirmacion_pedida_en": "datosConfirmacionPedidaEn",
+    "datos_confirmados_en": "datosConfirmadosEn",
 }
 
 

@@ -269,6 +269,21 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="bot.confirmar_datos_antes_de_cerrar",
+        grupo="victoria",
+        nombre="Confirmar los datos con el cliente antes de cerrar",
+        para_que_sirve=(
+            "Si está encendido, antes de cerrar una venta Victoria le envía al cliente un resumen (nombre, dirección, "
+            "ciudad, producto, total y forma de pago) y le pide que confirme que todo está correcto para el envío. "
+            "Solo si el cliente responde que sí se cierra la venta; si quiere corregir algo, se corrige y se vuelve a "
+            "mostrar el resumen. Así un dato mal entendido se arregla antes de crear el pedido. Apagado, Victoria cierra "
+            "apenas tiene todos los datos, como antes."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
         clave="bot.enviar_fotos",
         grupo="victoria",
         nombre="Enviar fotos del producto",

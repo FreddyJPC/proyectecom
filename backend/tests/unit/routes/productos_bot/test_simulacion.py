@@ -159,11 +159,15 @@ class TestReglasRealesDeLasHerramientas:
         assert len(r.avisos) == 1 and r.avisos[0]["canal"] == "telegram"
         assert "recaudo" in r.avisos[0]["texto"].lower()
 
-    def test_un_canton_que_no_existe_escala(self):
+    def test_un_canton_que_no_existe_no_se_guarda_y_no_se_cierra(self):
+        # Antes se guardaba y recién al cerrar la venta el pedido fallaba y se escalaba; ahora se revisa al guardarlo.
         datos = ("guardar_datos_cliente", {**DATOS[1], "canton": "Narnia"})
-        llm = LLMGuionado(herramientas(datos, PRODUCTO, CONTRAENTREGA, CERRAR), texto("Un asesor te contacta."))
+        llm = LLMGuionado(herramientas(datos, PRODUCTO, CONTRAENTREGA, CERRAR), texto("¿De qué ciudad es?"))
         r = turno(llm)
-        assert r.pedido is None and r.escalada is True
+        assert r.pedido is None and r.escalada is False
+        assert r.estado["canton"] is None
+        assert "No encontré el cantón" in r.herramientas[0]["resultado"]
+        assert "Faltan datos" in r.herramientas[-1]["resultado"] and "canton" in r.herramientas[-1]["resultado"]
 
     def test_escalar_a_humano_avisa_pero_no_manda_nada(self):
         llm = LLMGuionado(herramientas(("escalar_a_humano", {"motivo": "Pregunta fuera de la ficha"})), texto("Te paso con un asesor."))
@@ -331,3 +335,48 @@ class TestFotoDelProducto:
         monkeypatch.setattr("src.routes.whatsapp.tools.get_registro_canales", prohibido)
         r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), imagenes=[FOTO_SUBIDA])
         assert len(r.fotos) == 1 and len(responses.calls) == 0
+
+
+@pytest.mark.confirma_datos
+class TestConfirmacionDeDatos:
+    """«Probar con Victoria» con la confirmación encendida: dos turnos, como en una conversación real."""
+
+    RESUMEN = ("mostrar_resumen_para_confirmar", {})
+    CONFIRMAR = ("confirmar_datos_envio", {})
+
+    def test_el_pedido_no_se_crea_hasta_que_el_cliente_confirma(self):
+        # Turno 1: con todos los datos Victoria muestra el resumen; intentar cerrar de una vez no funciona.
+        llm1 = LLMGuionado(
+            herramientas(DATOS, PRODUCTO, CONTRAENTREGA, self.RESUMEN, CERRAR), texto("(le envía el resumen al cliente)")
+        )
+        r1 = turno(llm1, mensaje="Quiero los audifonos, soy Ana")
+        assert r1.pedido is None
+        assert "debe confirmar" in r1.herramientas[-1]["resultado"]
+        assert r1.estado["datos_confirmacion_pedida_en"] is not None and r1.estado["datos_confirmados_en"] is None
+        assert "Nombre: Ana Prueba" in r1.herramientas[3]["resultado"]
+
+        # Turno 2: el cliente responde «sí»; ahora Victoria confirma y cierra.
+        historial = [
+            {"rol": "cliente", "contenido": "Quiero los audifonos, soy Ana"},
+            {"rol": "bot", "contenido": "(le envía el resumen al cliente)"},
+        ]
+        llm2 = LLMGuionado(herramientas(self.CONFIRMAR, CERRAR), texto("¡Listo, su pedido va en camino!"))
+        r2 = turno(llm2, mensaje="Sí, todo correcto", historial=historial, estado=r1.estado)
+        assert r2.pedido is not None and r2.pedido["confirmado"] is True
+        assert r2.estado["datos_confirmados_en"] is not None
+
+    def test_confirmar_en_el_mismo_turno_que_el_resumen_no_vale(self):
+        llm = LLMGuionado(herramientas(DATOS, PRODUCTO, CONTRAENTREGA, self.RESUMEN, self.CONFIRMAR, CERRAR), texto("ok"))
+        r = turno(llm)
+        assert r.pedido is None
+        assert "todavía no respondió" in r.herramientas[4]["resultado"]
+
+    def test_si_el_cliente_corrige_un_dato_hay_que_volver_a_confirmar(self):
+        llm1 = LLMGuionado(herramientas(DATOS, PRODUCTO, CONTRAENTREGA, self.RESUMEN), texto("(resumen)"))
+        r1 = turno(llm1)
+        historial = [{"rol": "cliente", "contenido": "hola"}, {"rol": "bot", "contenido": "(resumen)"}]
+        corregir = ("guardar_datos_cliente", {"direccion": "Calle Nueva 5"})
+        llm2 = LLMGuionado(herramientas(corregir, CERRAR), texto("(otra vez el resumen)"))
+        r2 = turno(llm2, mensaje="No, la dirección es Calle Nueva 5", historial=historial, estado=r1.estado)
+        assert r2.pedido is None and r2.estado["datos_confirmados_en"] is None
+        assert "debe confirmar" in r2.herramientas[-1]["resultado"]

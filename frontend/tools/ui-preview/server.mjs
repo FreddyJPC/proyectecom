@@ -752,7 +752,7 @@ function turnoVictoria(f, b) {
   const msg = String(b.mensaje || ""), bajo = msg.toLowerCase();
   const e = {
     nombreCliente: null, direccion: null, canton: null, provincia: null, productoSku: null, productoNombre: null, productoVariante: null, cantidad: 1, total: null, subtotal: null, costoEnvio: "0.00",
-    entregaOpcionId: null, entregaNombre: null, entregaTipo: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, ...(b.estado || {}),
+    entregaOpcionId: null, entregaNombre: null, entregaTipo: null, metodoPago: null, estado: "recopilando_datos", idPedidoLocal: null, idPedidoRocketfy: null, datosConfirmacionPedidaEn: null, datosConfirmadosEn: null, ...(b.estado || {}),
   };
   const herramientas = [], avisos = [], fotos = [], solicitudes = [];
   let escalada = false, pedido = null, respuesta = "", ventaManual = null;
