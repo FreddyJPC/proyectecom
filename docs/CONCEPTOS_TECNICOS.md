@@ -1517,3 +1517,24 @@ cliente escribe mientras Victoria redacta, su respuesta queda antes de ese mensa
 así no se puede responder, o WhatsApp no deja enviar, te llega un aviso por Telegram con la conversación para que le respondas a mano.
 Si el servidor se reinicia a mitad de una respuesta, al volver retoma lo que quedó pendiente.
 
+## 47. Datos mal escritos: la ciudad que se revisa y el resumen que el cliente confirma
+
+**El problema.** La gente escribe «kito», «guayakil» o «cuenka». Rocketfy solo entiende los nombres exactos de su lista de
+ciudades; antes, el error se descubría al final, cuando el pedido fallaba y la conversación pasaba a una persona.
+
+**La ciudad se revisa al guardarla.** Si el nombre coincide con la lista (aunque cambien mayúsculas o tildes) se guarda con su nombre
+oficial. Si se parece a uno («kito» → Quito), **no se guarda**: Victoria le pregunta al cliente «¿Será Quito, en Pichincha?» y guarda lo
+que él confirme. El sistema nunca corrige solo un error de ortografía. Si dicen solo «Quito», se completa la provincia (Pichincha);
+si dicen «Quito, Guayas», se detecta que no cuadra. En los productos propios, que gestionas tú, el lugar se guarda como lo escribió el
+cliente y solo se avisa si hay un nombre parecido.
+
+**El resumen que el cliente confirma.** Antes de cerrar una venta, Victoria le manda al cliente un resumen con su nombre, dirección,
+ciudad, teléfono, producto, total y forma de pago, y le pide que confirme que todo está correcto para el envío. Ejemplo: «Para dejar listo su
+pedido, ¿me confirma que estos datos están correctos? • Nombre: Ana… • Total: $24.99 … Respóndame «sí» o dígame qué corregir». Reglas
+que protege el sistema:
+- El resumen lo escribe el **código** con lo que está guardado, no la IA: lo que el cliente confirma es exactamente lo que se va a enviar.
+- La venta **no se cierra** hasta que el cliente responda: si Victoria intenta confirmar en el mismo momento en que muestra el resumen, el
+  sistema se lo impide.
+- Si el cliente corrige algo («no, la dirección es otra»), el dato nuevo borra la confirmación y se vuelve a mostrar el resumen.
+- Se puede apagar en Parámetros («Confirmar los datos con el cliente antes de cerrar»).
+
