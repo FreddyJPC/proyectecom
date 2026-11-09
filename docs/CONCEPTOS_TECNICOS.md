@@ -1522,11 +1522,14 @@ Si el servidor se reinicia a mitad de una respuesta, al volver retoma lo que que
 **El problema.** La gente escribe «kito», «guayakil» o «cuenka». Rocketfy solo entiende los nombres exactos de su lista de
 ciudades; antes, el error se descubría al final, cuando el pedido fallaba y la conversación pasaba a una persona.
 
-**La ciudad se revisa al guardarla.** Si el nombre coincide con la lista (aunque cambien mayúsculas o tildes) se guarda con su nombre
-oficial. Si se parece a uno («kito» → Quito), **no se guarda**: Victoria le pregunta al cliente «¿Será Quito, en Pichincha?» y guarda lo
-que él confirme. El sistema nunca corrige solo un error de ortografía. Si dicen solo «Quito», se completa la provincia (Pichincha);
-si dicen «Quito, Guayas», se detecta que no cuadra. En los productos propios, que gestionas tú, el lugar se guarda como lo escribió el
-cliente y solo se avisa si hay un nombre parecido.
+**La ciudad se corrige con sentido común.** Victoria no le pregunta al cliente lo que es obvio. Si escribe «quto», «kito» o «Quito», todo es
+Quito: el sistema lo guarda bien escrito y el cliente lo verá bien escrito en el resumen que confirma. Si dice solo «Guayaquil», la provincia es
+Guayas y tampoco se pregunta. Para decidir, el sistema mira cómo se escribe **y cómo suena** (k/c/qu, b/v, ll/y, h muda) y entiende abreviaturas
+(«sto» = santo). Solo se pregunta cuando hay **dos opciones razonables** («¿El Coca o San Sebastián del Coca?») o algo **no cuadra**
+(«Guayaquil, Pichincha»: Guayaquil está en Guayas). Si no se parece a nada, no se inventa: se le pide que lo repita y, si no se aclara, la
+conversación pasa a una persona. Lo mismo vale para la variante del producto («negrp» = Negro). En los productos propios, que gestionas tú, lo
+dudoso se guarda tal cual lo escribió el cliente. Probado con unos 2.400 errores de escritura automáticos sobre los nombres reales: ~95 % se
+corrige bien, ~4,5 % se pregunta y ninguno se corrige a otro lugar.
 
 **El resumen que el cliente confirma.** Antes de cerrar una venta, Victoria le manda al cliente un resumen con su nombre, dirección,
 ciudad, teléfono, producto, total y forma de pago, y le pide que confirme que todo está correcto para el envío. Ejemplo: «Para dejar listo su

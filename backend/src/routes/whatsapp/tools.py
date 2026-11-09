@@ -22,6 +22,7 @@ escala siempre con el mensaje de la excepción como motivo (ver
 PROGRESS.md, Fase 3.2, para el detalle completo de esta decisión).
 """
 import logging
+import re
 import time
 import unicodedata
 from decimal import Decimal, InvalidOperation
@@ -45,6 +46,7 @@ from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.services import GestionService
 from src.routes.gestion.tipos import TIPOS_QUE_PIDE_VICTORIA
 from src.catalogs.ecuador_locations import get_catalog
+from .coincidencia import base, buscar
 from .confirmacion import datos_que_faltan, texto_de_confirmacion
 from .ubicacion import revisar_ubicacion
 from src.routes.imagenes.logica import galeria_para_enviar
@@ -700,23 +702,45 @@ class HerramientasVictoria:
         total = self._calcular_total(producto_real, cantidad)
         self._avisar_si_el_llm_envio_otro_total(entrada, total, contexto)
 
+        variante, nota_variante = self._variante_oficial(producto_real, entrada.get("variante"))
         self._leads.actualizar_producto(
             lead_id,
             producto_sku=producto_real["sku"],
             producto_nombre=producto_real["nombre"],
             total=total,
-            variante=entrada.get("variante"),
+            variante=variante,
             cantidad=cantidad,
         )
         if not producto_real.get("envio_incluido", True):
             return (
                 f"Producto registrado: {cantidad} x {producto_real['nombre']}. Subtotal: ${total}, SIN el envío: "
                 "este producto cobra el envío aparte. Cuando tengas el cantón y la provincia del cliente, usa "
-                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta."
+                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta." + nota_variante
             )
         return (
             f"Producto registrado: {cantidad} x {producto_real['nombre']}. "
-            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
+            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies." + nota_variante
+        )
+
+    @staticmethod
+    def _variante_oficial(producto: dict, variante: Optional[str]):
+        """La variante con el nombre de la ficha («negrp» -> «Negro»), sin preguntarle al cliente lo que es evidente. Si no se
+        reconoce, NO se guarda una variante inventada: se le dice a Victoria cuáles hay para preguntar una vez (la variante
+        nunca frena la venta). Devuelve (variante a guardar, nota para Victoria)."""
+        variante = (variante or "").strip()
+        opciones = [v.strip() for v in re.split(r"[,;/\n]", producto.get("variantes") or "") if v.strip()]
+        # Solo si la ficha ENUMERA las variantes («Negro, blanco»). Si es una descripción libre («talla 38 a 42») no hay una
+        # lista contra la cual comparar: se guarda lo que dijo el cliente.
+        if not variante or len(opciones) < 2:
+            return (variante or None), ""
+        m = buscar(variante, opciones)
+        if m.segura:
+            if base(variante) != base(m.oficial):
+                return m.oficial, f" Variante: «{variante}» se guardó como «{m.oficial}»; no hace falta preguntarle."
+            return m.oficial, ""
+        return None, (
+            f" No identifiqué la variante «{variante}»: las disponibles son {', '.join(opciones)}. Pregúntale UNA vez cuál "
+            "prefiere; si no lo aclara, sigue sin variante."
         )
 
     def _stock_disponible(self, producto: dict, fresco: bool = False) -> Optional[int]:
