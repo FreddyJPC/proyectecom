@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BarChart3, Boxes, ClipboardList, LayoutDashboard, MessageCircle, Package, PlusCircle, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, BarChart3, Boxes, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal } from "lucide-react";
 
 /** Metadata y navegación del sitio. Única fuente de verdad: cualquier
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
@@ -35,6 +35,7 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
     items: [
       { title: "Incidencias y alertas", short: "Alertas", url: "/incidencias", icon: AlertTriangle },
       { title: "Catálogo y stock", short: "Catálogo", url: "/catalogo", icon: Boxes },
+      { title: "Anuncios", short: "Anuncios", url: "/anuncios", icon: Megaphone },
       { title: "Métricas", short: "Métricas", url: "/metricas", icon: BarChart3 },
       { title: "Parámetros", short: "Ajustes", url: "/parametros", icon: SlidersHorizontal },
     ],

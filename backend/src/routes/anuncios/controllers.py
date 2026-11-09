@@ -78,4 +78,5 @@ def desvincular_anuncio(id_anuncio: str):
         return jsonify(error=str(exc)), 422
     except AnuncioNoVinculadoError as exc:
         return jsonify(error=str(exc)), 404
-    return "", 204
+    # 200 con cuerpo (no 204): el cliente de la app siempre espera JSON en las respuestas correctas.
+    return jsonify(ok=True), 200

@@ -246,6 +246,7 @@ class TestHttp:
         mock_login_ok()
         servicio = MagicMock()
         with _con_servicio(servicio):
-            assert cliente.delete("/anuncios/123/producto", headers=AUTH_HEADER).status_code == 204
+            r = cliente.delete("/anuncios/123/producto", headers=AUTH_HEADER)
+            assert r.status_code == 200 and r.get_json() == {"ok": True}
             servicio.desvincular.side_effect = AnuncioNoVinculadoError("123")
             assert cliente.delete("/anuncios/123/producto", headers=AUTH_HEADER).status_code == 404

@@ -60,6 +60,34 @@ export type MensajeConversacion = {
   creadoEn: string | null;
 };
 
+/** La ventana gratuita de Meta para clientes que llegan por anuncio. Es informativa: solo la de 24 h permite texto libre. */
+export type VentanaGratuita = {
+  estado: "sin_anuncio" | "pendiente" | "abierta" | "cerrada";
+  expiraEn: string | null;
+  responderAntesDe: string | null;
+};
+
+/** El anuncio más reciente por el que llegó el cliente, con lo que Meta mandó de él. */
+export type AnuncioDeConversacion = {
+  idAnuncio: string | null;
+  titulo: string | null;
+  texto: string | null;
+  urlAnuncio: string | null;
+  tipoOrigen: string | null;
+  tipoMedia: string | null;
+  imagenUrl: string | null;
+  miniaturaUrl: string | null;
+  producto: { sku: string; nombre: string } | null;
+  /** Cuántas veces ha llegado este cliente por un anuncio. */
+  llegadas: number;
+};
+
+export type LlegadaPorAnuncio = {
+  idAnuncio: string | null;
+  titulo: string | null;
+  creadoEn: string | null;
+};
+
 export type ConversacionDetalle = {
   id: number;
   telefono: string;
@@ -67,10 +95,14 @@ export type ConversacionDetalle = {
   estado: string;
   idAnuncio: string | null;
   notasInternas: string | null;
+  /** Ventana de servicio: 24 h desde el último mensaje del cliente. Solo mientras está abierta se puede escribir texto libre. */
   ventanaAbierta: boolean;
   ventanaExpiraEn: string | null;
   creadaEn: string | null;
   actualizadaEn: string | null;
+  ventanaGratuita: VentanaGratuita | null;
+  anuncio: AnuncioDeConversacion | null;
+  llegadasPorAnuncio: LlegadaPorAnuncio[] | null;
 };
 
 export type ConversacionDetalleCompleto = {

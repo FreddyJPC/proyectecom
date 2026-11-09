@@ -6,7 +6,7 @@ const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
 const SOLO = (process.env.ONLY || "").split(",").filter(Boolean);
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/metricas", "/parametros", "/parametros/instrucciones"];
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/anuncios", "/metricas", "/parametros", "/parametros/instrucciones"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 const SIN_INFOS = process.env.SIN_INFOS === "1"; // SIN_INFOS=1 salta los cuadros ⓘ (más rápido)
@@ -204,6 +204,38 @@ for (const theme of ["light", "dark"]) {
         await page.getByRole("alertdialog").waitFor({ state: "detached" });
         await page.getByText("Instrucciones originales").first().waitFor();
         await page.waitForTimeout(300);
+      }
+      // Anuncios: vincular un anuncio nuevo, cambiar el producto de uno vinculado (pide confirmar) y quitar un vínculo.
+      if (r === "/anuncios") {
+        await page.getByText("Audífonos Bluetooth Pro · 30 h de batería").first().waitFor();
+        await page.getByRole("button", { name: "Vincular un anuncio" }).click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [vincular uno nuevo]");
+        await page.keyboard.press("Escape");
+
+        await page.getByRole("button", { name: "Vincular con un producto" }).first().click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [vincular uno de la lista]");
+        await page.keyboard.press("Escape");
+
+        // Cambiar el producto de un anuncio ya vinculado: el servidor pide confirmar. Se audita el aviso y se cancela (no cambia datos).
+        await page.getByRole("button", { name: "Cambiar producto" }).first().click();
+        await page.getByRole("dialog").waitFor();
+        await page.getByRole("combobox", { name: "Producto" }).click();
+        await page.getByRole("option", { name: /Cargador|Lámpara|Reloj|Camiseta/ }).first().click();
+        await page.getByRole("button", { name: "Vincular", exact: true }).click();
+        await page.getByText("Sí, cambiar el producto").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [confirmar cambio de producto]");
+        await page.keyboard.press("Escape");
+
+        await page.getByRole("button", { name: "Quitar vínculo" }).first().click();
+        await page.getByRole("alertdialog").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [quitar vinculo]");
+        await page.keyboard.press("Escape");
       }
       // ADR-012: «Por gestionar», atender una solicitud (cuadro con nota) y la lista de atendidas.
       if (r === "/gestion") {

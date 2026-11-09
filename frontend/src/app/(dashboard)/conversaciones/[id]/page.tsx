@@ -20,6 +20,8 @@ import { etiquetaDia, formatFechaHora, formatHora, formatMoney, formatPhone, tie
 import { cn } from "@/lib/utils";
 import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion } from "@/types/conversacion";
 
+import { OrigenCliente } from "./origen-cliente";
+
 const REFRESCO_MS = 15_000;
 
 function Dato({ label, children }: { label: string; children?: ReactNode }) {
@@ -117,6 +119,8 @@ function PanelDatos({
         </dl>
       </section>
 
+      <OrigenCliente conversacion={conversacion} />
+
       <section aria-labelledby="t-pedido" className="space-y-3 border-t pt-5">
         <h2 id="t-pedido" className="flex items-center gap-2 text-sm font-semibold">
           <Package className="size-4 text-muted-foreground" aria-hidden /> Compra
@@ -127,7 +131,6 @@ function PanelDatos({
           <Dato label="Total">{lead?.total ? <span className="tabular font-semibold">{formatMoney(lead.total)}</span> : undefined}</Dato>
           <Dato label="Método de pago">{lead?.metodoPago}</Dato>
           <Dato label="Estado del lead">{lead?.estado?.replace(/_/g, " ")}</Dato>
-          {conversacion.idAnuncio && <Dato label="Vino de un anuncio">{conversacion.idAnuncio}</Dato>}
         </dl>
 
         {lead?.idPedidoRocketfy && lead?.idPedidoLocal && (

@@ -66,6 +66,8 @@
 
 **Origen:** Cliente llega desde anuncio Meta Ads (FEP 72h) o escribe directamente al número.
 
+> **NOTA 2026-11-09 — regla desactualizada:** lo de «72 h» era el modelo anterior de Meta (precios por conversación). La regla vigente: la ventana gratuita de anuncio se abre cuando **nosotros respondemos** dentro de las 24 h y dura **hasta 7 días**; es un beneficio de costo y **no** permite texto libre fuera de las 24 h. Ver `PROGRESS.md` (ADR-013) y `docs/CONCEPTOS_TECNICOS.md` §43.
+
 **Ventaja FEP:** Todos los mensajes dentro de las 72h son gratuitos. El payload del webhook incluye el objeto `referral` que identifica el origen y el anuncio específico (`source_id`, `ctwa_clid`).
 
 ```

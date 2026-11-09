@@ -147,7 +147,7 @@ El mínimo de 15 minutos evita saturar a Rocketfy por un error de tipeo.
 | `LLM_PROVIDER` | Cambia el cableado completo y exige otra clave; no es un ajuste de negocio. |
 | `ENABLE_SCHEDULER`, `PORT`, `LOG_LEVEL` | Infraestructura que se lee antes de que exista la base. |
 | `ROCKETFY_BASE_URL`, `ROCKETFY_ACCOUNT_EMAIL`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, `TELEGRAM_CHAT_ID` | Identidad de las integraciones: casi nunca cambian y un error corta el canal. Mejor en la plataforma, con verificación posterior. |
-| Ventanas de Meta (24 h de servicio, 72 h de anuncios) | Son políticas de Meta, no decisiones del negocio. |
+| Ventanas de Meta (24 h de servicio; ventana gratuita de anuncio «hasta 7 días», antes 72 h) | Son políticas de Meta, no decisiones del negocio (ver ADR-013). |
 | Mínimo de recaudo contraentrega ($10) | Regla de Rocketfy, ya aprendida de sus rechazos (Fase A). |
 | Tiempos de espera y reintentos de Rocketfy/WhatsApp/Telegram | Técnicos: mal ajustados pueden **duplicar mensajes o pedidos** (ADR-007). |
 | Latido de la base (cada 6 h) y tiempos de los candados de los jobs | Evitan que Supabase pause el proyecto y que dos jobs se pisen. |
