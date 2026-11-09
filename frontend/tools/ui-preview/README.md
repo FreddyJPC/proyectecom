@@ -12,6 +12,7 @@ Rocketfy ni WhatsApp**.
 | `server.mjs` | Servidor falso que simula el login de Supabase y la API del backend con datos realistas (pedidos, conversaciones, alertas, catálogo, métricas). |
 | `shots.mjs` | Inicia sesión y saca capturas de cada pantalla (escritorio 1440 px y móvil 390 px). |
 | `interact.mjs` | Capturas de interacciones: menú "Más", diálogos, panel de datos, estados de error y vacío, tablet. |
+| `interact-leads.mjs` | Capturas de Leads: lista, filtros, detalle de un lead, cambiar la temperatura, «no contactar» y el chat de prueba con «cliente recurrente» (móvil y escritorio; `THEME=dark` para oscuro). |
 | `axe.mjs` | Auditoría de accesibilidad (WCAG 2.1 AA + buenas prácticas) en todas las pantallas y en los cuadros abiertos, claro y oscuro, **y comprobación de desborde horizontal** (nada fuera de pantalla en el móvil). **Abre cada botón ⓘ** (`InfoButton`) de cada pantalla —y los que hay dentro de otros cuadros— y audita su cuadro (`SIN_INFOS=1` los salta para ir más rápido). Debe dar `SIN VIOLACIONES`. |
 
 ## Cómo usarlas
@@ -49,3 +50,4 @@ Notas:
   regénéralo desde `backend/` con el entorno de pruebas activo: `python tools/exportar_para_preview.py`.
 - No uses `pkill -f server.mjs` desde un comando que contenga ese mismo texto: se mata a sí mismo.
 - Multicanal (ADR-014): el servidor falso trae dos conversaciones de otros canales sin teléfono (Instagram y Messenger), el filtro `?canal=` y una solicitud de «Por gestionar» de un cliente de Instagram. En las pantallas se ve el canal y «Aún sin teléfono».
+- Leads (docs/PLAN_LEADS_CRM.md, F3): el servidor falso trae 26 leads de todas las temperaturas (también de Instagram y Messenger, uno «no contactar», uno de un cliente recurrente), `GET /leads`, `/leads/resumen`, `/leads/<id>`, `PATCH /leads/<id>` (cambia la temperatura y anota el historial) y `PUT /contactos/<id>/no-contactar`; los cambios viven en memoria (reinicia el servidor para volver a los datos originales). En el chat de prueba de Victoria, cada turno trae la herramienta `clasificar_lead` con su temperatura.

@@ -189,6 +189,152 @@ const manejarAnuncios = (req, res, p, send) => {
   return send({ error: "mock: ruta de anuncios no implementada " + p }, 404);
 };
 
+// ---------- Leads (CRM) ----------
+const ETIQUETA_TEMP = { caliente: "Caliente", tibio: "Tibio", frio: "Frío", perdido: "Perdido", ganado: "Ganado" };
+const ETIQUETA_PERDIDA = { precio: "El precio", sin_respuesta: "No respondió", compro_en_otro_lado: "Compró en otro lado", sin_cobertura: "No llegamos a su ciudad", sin_stock: "Sin stock", no_le_interesa: "No le interesa", otro: "Otro motivo" };
+const TEMP_ABIERTAS = ["caliente", "tibio", "frio"];
+// [nombre, teléfono|null, canal, idExterno, producto, variante, cantidad, total, etapa, temperatura, quién, motivo, motivoPérdida, origen, idAnuncio, minutos desde la última actividad, noContactar, [rol, último mensaje]]
+const AUD = "Audífonos Bluetooth Pro", LAM = "Lámpara LED recargable", ZAP = "Zapatos de cuero hechos a mano";
+const leadsBase = [
+  ["María Fernanda Loor", "593987654321", "whatsapp", null, AUD, "Negro", 1, "34.90", "esperando_pago", "caliente", "ia", "Pidió cómo pagar por transferencia", null, "anuncio", "120210000123", 12, false, ["cliente", "¿A qué cuenta hago la transferencia?"]],
+  ["Carlos Andrade", "593998877665", "whatsapp", null, LAM, null, 2, "49.98", "recopilando_datos", "caliente", "ia", "Dio su dirección y pidió el total", null, "anuncio", "120210000456", 45, false, ["cliente", "Quito, calle Los Pinos. ¿Cuánto sería con el envío?"]],
+  ["Lucía Mendoza", "593961234567", "whatsapp", null, AUD, "Blanco", 1, "34.90", "recopilando_datos", "tibio", "ia", "Preguntó por colores pero no dijo si compra", null, "directo", null, 180, false, ["bot", "Tenemos negro y blanco. ¿Cuál prefieres?"]],
+  ["José Armijos", "593976543210", "whatsapp", null, ZAP, "41", 1, "59.90", "recopilando_datos", "tibio", "regla", "El cliente no escribe hace 2 días", null, "anuncio", "120210000789", 60 * 50, false, ["bot", "¿Te reservo el par en la talla 41?"]],
+  ["Daniela Vera", "593984455667", "whatsapp", null, AUD, null, 1, "34.90", "recopilando_datos", "frio", "regla", "El cliente no escribe hace 5 días", null, "directo", null, 60 * 24 * 5, false, ["bot", "Quedo atenta por si te animas 😊"]],
+  ["Pedro Villacís", "593991122334", "whatsapp", null, LAM, null, 1, "24.99", "recopilando_datos", "frio", "dueno", "Me dijo que cobra a fin de mes", null, "directo", null, 60 * 24 * 6, false, ["cliente", "Te aviso cuando cobre"]],
+  ["Andrea Salazar", "593958899001", "whatsapp", null, AUD, null, 1, "34.90", "recopilando_datos", "perdido", "ia", "Dijo que lo encontró más barato en otra tienda", "compro_en_otro_lado", "anuncio", "120210000123", 60 * 24 * 3, false, ["cliente", "Ya lo compré en otro lado, gracias"]],
+  ["Santiago Caicedo", "593967788990", "whatsapp", null, ZAP, "42", 1, "59.90", "recopilando_datos", "perdido", "regla", "El cliente no escribe hace 14 días", "sin_respuesta", "directo", null, 60 * 24 * 15, false, ["bot", "¿Sigues interesado en los zapatos?"]],
+  ["Gabriela Núñez", "593972233445", "whatsapp", null, AUD, "Negro", 1, "34.90", "despachado", "ganado", "regla", "Venta cerrada", null, "anuncio", "120210000123", 60 * 24 * 2, false, ["bot", "¡Listo! Tu pedido va en camino 🚚"]],
+  ["Esteban Ruiz", "593983344556", "whatsapp", null, LAM, null, 1, "39.99", "por_gestionar", "ganado", "regla", "Venta cerrada", null, "directo", null, 60 * 8, false, ["bot", "Un asesor coordinará la entrega contigo."]],
+  ["Paola Cedeño", "593954455667", "whatsapp", null, AUD, null, 1, "34.90", "recopilando_datos", "perdido", "ia", "El cliente pidió que no lo contacten", "no_le_interesa", "directo", null, 60 * 24 * 9, true, ["cliente", "Por favor no me escriban más"]],
+  ["Ricardo Palacios", "593965566778", "whatsapp", null, LAM, null, 1, "24.99", "recopilando_datos", "tibio", "ia", "Comparando con otro modelo", null, "directo", null, 60 * 26, false, ["cliente", "Déjame pensarlo y te cuento"]],
+  ["Verónica Tapia", null, "instagram", "17841400123456789", AUD, "Blanco", 1, "34.90", "recopilando_datos", "tibio", "ia", "Preguntó por el envío a Ibarra", null, "anuncio", "120210000123", 60 * 5, false, ["cliente", "¿Llegan a Ibarra?"]],
+  ["Mateo Guerrero", null, "messenger", "7123456789012345", ZAP, "40", 1, "59.90", "recopilando_datos", "caliente", "ia", "Pidió reservar su talla", null, "directo", null, 25, false, ["cliente", "Resérvame la 40 por favor"]],
+  ["Juan Pérez", "593987001122", "whatsapp", null, LAM, null, 1, "24.99", "recopilando_datos", "perdido", "ia", "Vive en una zona sin cobertura de envío", "sin_cobertura", "directo", null, 60 * 24 * 4, false, ["bot", "Lo siento, aún no llegamos a tu zona."]],
+];
+const extraNombres = ["Sofía Burbano", "Diego Zambrano", "Camila Ortiz", "Andrés Moreira", "Valentina Paredes", "Luis Cevallos", "Karla Intriago", "Fabián Naranjo", "Mónica Ponce", "Bryan Lara", "Nataly Quishpe"];
+const extraTemps = ["tibio", "caliente", "frio", "tibio", "perdido", "ganado", "tibio", "frio", "caliente", "tibio", "perdido"];
+extraNombres.forEach((n, i) => {
+  const t = extraTemps[i];
+  const etapa = t === "ganado" ? "despachado" : "recopilando_datos";
+  leadsBase.push([n, `59399000${String(1000 + i)}`, "whatsapp", null, [AUD, LAM, ZAP][i % 3], null, 1, ["34.90", "24.99", "59.90"][i % 3], etapa, t, t === "ganado" ? "regla" : i % 2 ? "ia" : "regla", t === "ganado" ? "Venta cerrada" : "Conversación revisada", t === "perdido" ? "precio" : null, i % 2 ? "anuncio" : "directo", i % 2 ? "120210000456" : null, 60 * (6 + i * 9), false, ["cliente", "Gracias, lo reviso"]]);
+});
+const leadsMock = leadsBase.map((r, i) => {
+  const [nombre, telefono, canal, idExterno, producto, variante, cantidad, total, etapa, temperatura, quien, motivo, perdida, origen, idAnuncio, minutos, noContactar, ultimo] = r;
+  const cerrado = ["perdido", "ganado"].includes(temperatura);
+  return {
+    id: 301 + i, contactoId: 501 + i, conversacionId: 201 + i, canal, idExterno: idExterno || telefono, telefono, nombre,
+    productoSku: null, productoNombre: producto, productoVariante: variante, cantidad, total, etapa,
+    temperatura, temperaturaEtiqueta: ETIQUETA_TEMP[temperatura], temperaturaMotivo: motivo, temperaturaOrigen: quien, temperaturaEn: ago(minutos),
+    temperaturaFijadaHasta: quien === "dueno" ? new Date(now + 5 * 86400000).toISOString() : null,
+    motivoPerdida: perdida, motivoPerdidaEtiqueta: perdida ? ETIQUETA_PERDIDA[perdida] : null,
+    origen, idAnuncio, tituloAnuncio: idAnuncio ? anunciosMeta[idAnuncio].titulo : null,
+    creadoEn: ago(minutos + 60 * 24 * 3), actualizadoEn: ago(minutos), cerradoEn: cerrado ? ago(minutos) : null,
+    noContactar, noContactarMotivo: noContactar ? "El cliente pidió que no lo contacten" : null,
+    estadoConversacion: etapa === "esperando_pago" ? "esperando_pago" : "activa",
+    ultimoMensaje: { rol: ultimo[0], contenido: ultimo[1], creadoEn: ago(minutos) }, ultimoClienteEn: ago(minutos + 30),
+  };
+});
+const historialLeads = {}; // leadId -> cambios (más reciente primero)
+leadsMock.forEach((l) => {
+  const cambios = [];
+  if (l.temperatura !== "tibio") cambios.push({ id: l.id * 10 + 2, de: "tibio", a: l.temperatura, origen: l.temperaturaOrigen, motivo: l.temperaturaMotivo, usuario: l.temperaturaOrigen === "dueno" ? "freddy@azoshop.ec" : null, creadoEn: l.temperaturaEn });
+  cambios.push({ id: l.id * 10 + 1, de: null, a: "tibio", origen: "regla", motivo: "Nuevo lead", usuario: null, creadoEn: l.creadoEn });
+  historialLeads[l.id] = cambios;
+});
+const fichaContacto = (l) => {
+  const mia = leadsMock.filter((x) => x.contactoId === l.contactoId);
+  const recurrente = l.nombre === "Gabriela Núñez";
+  const compras = l.temperatura === "ganado" ? (recurrente ? 2 : 1) : 0;
+  const total = compras ? (recurrente ? "69.80" : l.total) : "0.00";
+  const noContactar = l.noContactar;
+  return {
+    id: l.contactoId, nombre: l.nombre, telefono: l.telefono, tipo: compras === 0 ? "prospecto" : compras === 1 ? "cliente" : "recurrente",
+    noContactar, noContactarMotivo: noContactar ? l.noContactarMotivo : null, noContactarEn: noContactar ? ago(60 * 24 * 9) : null, noContactarPor: noContactar ? "ia" : null,
+    creadoEn: l.creadoEn,
+    conversaciones: [{ id: l.conversacionId, canal: l.canal, idExterno: l.idExterno, estado: l.estadoConversacion, creadaEn: l.creadoEn }],
+    leads: recurrente
+      ? [{ id: l.id, conversacionId: l.conversacionId, productoNombre: l.productoNombre, temperatura: l.temperatura, etapa: l.etapa, total: l.total, origen: l.origen, creadoEn: l.creadoEn, cerradoEn: l.cerradoEn },
+         { id: 9001, conversacionId: l.conversacionId, productoNombre: LAM, temperatura: "ganado", etapa: "despachado", total: "34.90", origen: "directo", creadoEn: ago(60 * 24 * 40), cerradoEn: ago(60 * 24 * 38) }]
+      : mia.map((x) => ({ id: x.id, conversacionId: x.conversacionId, productoNombre: x.productoNombre, temperatura: x.temperatura, etapa: x.etapa, total: x.total, origen: x.origen, creadoEn: x.creadoEn, cerradoEn: x.cerradoEn })),
+    compras: { cantidad: compras, totalGastado: total, ganancia: compras ? "27.40" : "0.00", comprasSinCosto: 0, ultimaCompra: compras ? l.cerradoEn : null },
+    anuncios: { llegadas: l.origen === "anuncio" ? 1 : 0, primera: l.origen === "anuncio" ? l.creadoEn : null, ultima: l.origen === "anuncio" ? l.creadoEn : null, primerAnuncio: l.idAnuncio ? { id_anuncio: l.idAnuncio, titulo: l.tituloAnuncio } : null },
+  };
+};
+const detalleLead = (l) => ({ lead: l, historial: historialLeads[l.id], contacto: fichaContacto(l) });
+const resumenLeads = (dias) => {
+  const abiertos = leadsMock.filter((l) => TEMP_ABIERTAS.includes(l.temperatura));
+  const ganados = leadsMock.filter((l) => l.temperatura === "ganado"), perdidos = leadsMock.filter((l) => l.temperatura === "perdido");
+  const suma = (arr) => arr.reduce((a, l) => a + Number(l.total || 0), 0).toFixed(2);
+  const motivos = {};
+  perdidos.forEach((l) => { const k = l.motivoPerdida || "otro"; motivos[k] = (motivos[k] || 0) + 1; });
+  const cerrados = ganados.length + perdidos.length;
+  return {
+    calientes: abiertos.filter((l) => l.temperatura === "caliente").length, tibios: abiertos.filter((l) => l.temperatura === "tibio").length, frios: abiertos.filter((l) => l.temperatura === "frio").length,
+    valorEnJuego: suma(abiertos), nuevos: leadsMock.length, ganados: ganados.length, perdidos: perdidos.length, ingresosGanados: suma(ganados),
+    tasaDeCierre: cerrados ? ((ganados.length * 100) / cerrados).toFixed(1) : null,
+    noContactar: new Set(leadsMock.filter((l) => l.noContactar).map((l) => l.contactoId)).size,
+    motivosDePerdida: Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([motivo, leads]) => ({ motivo, etiqueta: ETIQUETA_PERDIDA[motivo], leads })),
+  };
+};
+const ORDEN_TEMP = ["caliente", "tibio", "frio", "perdido", "ganado"];
+const manejarLeads = (req, res, p, q, send) => {
+  if (p === "/leads" && req.method === "GET") {
+    let items = leadsMock.slice();
+    if (q.get("temperatura")) { const t = q.get("temperatura").split(","); items = items.filter((l) => t.includes(l.temperatura)); }
+    if (q.get("etapa")) items = items.filter((l) => l.etapa === q.get("etapa"));
+    if (q.get("origen")) items = items.filter((l) => l.origen === q.get("origen"));
+    if (q.get("canal")) items = items.filter((l) => l.canal === q.get("canal"));
+    if (q.get("noContactar")) items = items.filter((l) => String(l.noContactar) === q.get("noContactar"));
+    if (q.get("sinRespuestaDias")) items = items.filter((l) => (now - new Date(l.ultimoClienteEn).getTime()) / 86400000 >= Number(q.get("sinRespuestaDias")));
+    if (q.get("q")) items = items.filter((l) => ((l.nombre || "") + (l.telefono || "") + l.idExterno + (l.productoNombre || "")).toLowerCase().includes(q.get("q").toLowerCase()));
+    const orden = q.get("orden") || "actividad";
+    items.sort((a, b) =>
+      orden === "valor" ? Number(b.total || 0) - Number(a.total || 0)
+      : orden === "temperatura" ? ORDEN_TEMP.indexOf(a.temperatura) - ORDEN_TEMP.indexOf(b.temperatura)
+      : orden === "antiguedad" ? new Date(a.creadoEn) - new Date(b.creadoEn)
+      : new Date(b.actualizadoEn) - new Date(a.actualizadoEn));
+    return send(paginar(items, q));
+  }
+  if (p === "/leads/resumen" && req.method === "GET") return send(resumenLeads(q.get("dias")));
+  let m = p.match(/^\/leads\/(\d+)$/);
+  if (m) {
+    const l = leadsMock.find((x) => x.id === Number(m[1]));
+    if (!l) return send({ error: `No existe el lead ${m[1]}.` }, 404);
+    if (req.method === "GET") return send(detalleLead(l));
+    if (req.method === "PATCH") {
+      let cuerpo = "";
+      req.on("data", (d) => (cuerpo += d));
+      return req.on("end", () => {
+        const dato = JSON.parse(cuerpo || "{}");
+        if (!ORDEN_TEMP.includes(dato.temperatura)) return send({ error: "Datos inválidos." }, 422);
+        if (["despachado", "por_gestionar"].includes(l.etapa) && dato.temperatura !== "ganado") return send({ error: "Este lead ya tiene una venta cerrada: es «ganado»." }, 409);
+        const de = l.temperatura;
+        l.temperatura = dato.temperatura; l.temperaturaEtiqueta = ETIQUETA_TEMP[dato.temperatura]; l.temperaturaOrigen = "dueno";
+        l.temperaturaMotivo = dato.motivo || null; l.temperaturaEn = new Date().toISOString(); l.actualizadoEn = l.temperaturaEn;
+        l.motivoPerdida = dato.temperatura === "perdido" ? dato.motivoPerdida || "otro" : null; l.motivoPerdidaEtiqueta = l.motivoPerdida ? ETIQUETA_PERDIDA[l.motivoPerdida] : null;
+        l.temperaturaFijadaHasta = TEMP_ABIERTAS.includes(dato.temperatura) ? new Date(Date.now() + 7 * 86400000).toISOString() : null;
+        historialLeads[l.id].unshift({ id: Date.now(), de, a: dato.temperatura, origen: "dueno", motivo: dato.motivo || null, usuario: USER.email, creadoEn: l.temperaturaEn });
+        return send(detalleLead(l));
+      });
+    }
+  }
+  m = p.match(/^\/contactos\/(\d+)\/no-contactar$/);
+  if (m && req.method === "PUT") {
+    let cuerpo = "";
+    req.on("data", (d) => (cuerpo += d));
+    return req.on("end", () => {
+      const dato = JSON.parse(cuerpo || "{}");
+      leadsMock.filter((l) => l.contactoId === Number(m[1])).forEach((l) => {
+        l.noContactar = !!dato.noContactar; l.noContactarMotivo = dato.noContactar ? dato.motivo || null : null;
+        if (dato.noContactar && TEMP_ABIERTAS.includes(l.temperatura)) { l.temperatura = "perdido"; l.temperaturaEtiqueta = "Perdido"; l.motivoPerdida = "no_le_interesa"; l.motivoPerdidaEtiqueta = ETIQUETA_PERDIDA.no_le_interesa; l.temperaturaMotivo = "Marcado como «no contactar»"; }
+      });
+      return send({ ok: true });
+    });
+  }
+  return send({ error: "mock: ruta de leads no implementada " + p }, 404);
+};
+
 // ---------- Incidencias ----------
 const eventos = [
   [7, "Novedad", "Cliente no contesta llamadas. Se reprograma la entrega.", 1036, 884014], [6, "En ruta", null, 1038, 884028], [8, "Entregado", "Entregado a cliente. Cobro realizado.", 1039, 884035],
@@ -701,6 +847,11 @@ function turnoVictoria(f, b) {
       respuesta = `¡Pedido confirmado, ${e.nombreCliente}! Llega en ${f.tiempoEntrega}. Total a pagar al recibir: $${e.total}. ¡Gracias por tu compra!`;
     }
   } else { respuesta = `¡Hola! Soy Victoria de AzoShop 😊 Te cuento sobre ${f.nombre}: ${f.descripcion} ¿Te gustaría pedirlo?`; }
+  // Victoria clasifica la temperatura del lead en cada turno (herramienta clasificar_lead); con una venta cerrada la fija el sistema.
+  if (!pedido && !ventaManual) {
+    const temperatura = /pagar|total|direcci|comprar|quiero/.test(bajo) ? "caliente" : /caro|no gracias|despu[eé]s/.test(bajo) ? "frio" : "tibio";
+    usar("clasificar_lead", { temperatura, motivo: temperatura === "caliente" ? "Pide pagar o dar sus datos de envío" : "Sigue preguntando por el producto" }, "Temperatura registrada. Sigue atendiendo con normalidad.");
+  }
   return { respuesta, herramientas, estado: e, escalada, pedido, avisos, fotos, ventaManual, solicitudes };
 }
 
@@ -1037,6 +1188,7 @@ const server = http.createServer((req, res) => {
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     if (p === "/gestion" || p.startsWith("/gestion/")) return manejarGestion(req, res, p, q, send);
     if (p === "/anuncios" || p.startsWith("/anuncios/")) return manejarAnuncios(req, res, p, send);
+    if (p === "/leads" || p.startsWith("/leads/") || p.startsWith("/contactos/")) return manejarLeads(req, res, p, q, send);
     if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.

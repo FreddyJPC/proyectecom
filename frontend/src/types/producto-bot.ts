@@ -408,6 +408,8 @@ export type ProbarInput = {
   estado: EstadoPrueba | null;
   desdeAnuncio: boolean;
   escalada: boolean;
+  /** El cliente ya compró antes: Victoria lo recibe con su historial (conocido, con una compra y un lead anterior). */
+  clienteRecurrente?: boolean;
   /** Probar con el borrador de las instrucciones de Victoria en vez de con las que rigen hoy. */
   usarBorrador?: boolean;
 };

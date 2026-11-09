@@ -11,6 +11,7 @@ const rutas = [
   ["resumen", "/", true],
   ["conversaciones", "/conversaciones", true],
   ["conversacion-detalle", "/conversaciones/301", true],
+  ["leads", "/leads", true],
   ["pedidos", "/pedidos", true],
   ["pedido-detalle", "/pedidos/1040", true],
   ["pedido-nuevo", "/pedidos/nuevo", true],

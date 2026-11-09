@@ -6,7 +6,7 @@ const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
 const SOLO = (process.env.ONLY || "").split(",").filter(Boolean);
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/conversaciones/291", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/anuncios", "/metricas", "/parametros", "/parametros/instrucciones"];
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/conversaciones/291", "/leads", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/anuncios", "/metricas", "/parametros", "/parametros/instrucciones"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 const SIN_INFOS = process.env.SIN_INFOS === "1"; // SIN_INFOS=1 salta los cuadros ⓘ (más rápido)
@@ -87,6 +87,32 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Se pausó: sin stock").first().waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [alertas stock y precio]");
+      }
+      // Leads: filtros, el panel de detalle de un lead (con sus ⓘ), cambiar la temperatura y «no contactar».
+      if (r === "/leads") {
+        await page.getByRole("button", { name: "Filtros" }).click();
+        await page.getByLabel("Etapa").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [filtros]");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Carlos Andrade" }).first().click();
+        await page.getByText("Cómo ha cambiado").waitFor();
+        await page.waitForTimeout(400);
+        await auditar(r + " [detalle]");
+        if (!SIN_INFOS) infosAuditados += await auditarInfos(r + " [detalle]", true);
+        await page.getByRole("button", { name: "Cambiar temperatura" }).click();
+        await page.getByText("¿Qué tan probable es que compre?").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [cambiar temperatura]");
+        await page.getByRole("radio", { name: /Perdido/ }).check();
+        await page.waitForTimeout(200);
+        await auditar(r + " [cambiar temperatura: perdido]");
+        await page.keyboard.press("Escape");
+        await page.getByRole("switch", { name: /No contactar/ }).click();
+        await page.getByText("¿Marcar como «no contactar»?").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [no contactar]");
+        await page.keyboard.press("Escape");
       }
       if (r === "/catalogo?tab=mis-productos") {
         await page.getByRole("button", { name: "Ajustes de precios" }).click();
