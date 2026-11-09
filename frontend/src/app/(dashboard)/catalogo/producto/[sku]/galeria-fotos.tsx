@@ -112,7 +112,6 @@ export function GaleriaFotos({ detalle, onCambio }: { detalle: ProductoBotDetall
   const entrada = useRef<HTMLInputElement>(null);
   const [trabajando, setTrabajando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [imagenFalla, setImagenFalla] = useState(false);
   const soloLectura = detalle.estado === "archivado";
   const fotos = [...detalle.imagenes].sort((a, b) => a.orden - b.orden);
   const lleno = fotos.length >= MAXIMO_FOTOS;
@@ -205,15 +204,7 @@ export function GaleriaFotos({ detalle, onCambio }: { detalle: ProductoBotDetall
       <div className="space-y-4 p-4 sm:p-5">
         {fotos.length === 0 ? (
           <div className="space-y-3 rounded-lg bg-muted/50 p-3">
-            <p className="text-sm text-muted-foreground">
-              {detalle.imagenUrl && detalle.proveedor === "rocketfy"
-                ? "Todavía no subiste fotos. Mientras tanto Victoria usa la foto de Rocketfy:"
-                : "Este producto todavía no tiene fotos."}
-            </p>
-            {detalle.imagenUrl && detalle.proveedor === "rocketfy" && !imagenFalla && (
-              // eslint-disable-next-line @next/next/no-img-element -- la imagen viene de un CDN externo de Rocketfy
-              <img src={detalle.imagenUrl} alt={`Foto de Rocketfy de ${detalle.nombre}`} width={96} height={96} referrerPolicy="no-referrer" onError={() => setImagenFalla(true)} className="size-24 rounded-lg border bg-muted object-cover" />
-            )}
+            <p className="text-sm text-muted-foreground">Este producto todavía no tiene fotos. Victoria solo envía las que subas aquí.</p>
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

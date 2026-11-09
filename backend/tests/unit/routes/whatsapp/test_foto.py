@@ -18,7 +18,8 @@ from tests.unit.routes.whatsapp.test_tools import (
     FakeStockChecker,
 )
 
-URL = "https://cdn.rocketfy.example/reloj.png"
+URL_ROCKETFY = "https://cdn.rocketfy.example/reloj.png"
+URL = "https://xyz.supabase.co/storage/v1/object/public/productos/p1/reloj.jpg"
 TELEFONO = "593987654321"
 
 
@@ -26,7 +27,7 @@ def producto(**cambios):
     datos = {
         "sku": "DEMO-1", "nombre": "Reloj deportivo", "descripcion": "Un reloj.", "precio": "24.99",
         "tiempo_entrega": "2 a 4 dias", "metodos_pago_aceptados": "contraentrega", "max_unidades_por_pedido": 1,
-        "activo": True, "imagen_url": URL,
+        "activo": True, "imagen_url": URL_ROCKETFY,
     }
     datos.update(cambios)
     return datos
@@ -45,10 +46,10 @@ class MensajesFalsos:
 
 
 class ImagenesFalsas:
-    """La galería subida por el dueño: {sku: [urls]} (por defecto, ninguna: se usa la de Rocketfy)."""
+    """La galería subida por el dueño: {sku: [urls]} (por defecto, una foto del bucket; la foto de Rocketfy nunca se envía)."""
 
     def __init__(self, por_sku=None):
-        self.por_sku = por_sku or {}
+        self.por_sku = por_sku if por_sku is not None else {"DEMO-1": [URL]}
 
     def listar(self, sku):
         return [{"id": i, "url": url, "orden": i} for i, url in enumerate(self.por_sku.get(sku, []))]
@@ -102,18 +103,6 @@ class TestEnviarFoto:
         ]
         assert "Ya le enviaste la foto" in respuesta and "Quedan" not in respuesta
 
-    def test_una_ruta_relativa_de_rocketfy_se_completa_con_el_sitio_de_la_api(self, monkeypatch):
-        monkeypatch.setenv("ROCKETFY_BASE_URL", "https://rocket-e.com/api")
-        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url="/storage/products/4193/foto.jpg")})
-        enviar(h)
-        assert whatsapp.enviadas[0]["url"] == "https://rocket-e.com/storage/products/4193/foto.jpg"
-
-    def test_si_el_sitio_de_la_api_no_es_https_la_ruta_relativa_no_se_envia(self, monkeypatch):
-        # Meta solo descarga enlaces https: mejor no enviar que enviar algo que no llegará.
-        monkeypatch.setenv("ROCKETFY_BASE_URL", "http://rocket-e.com/api")
-        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url="/storage/products/4193/foto.jpg")})
-        assert "todavía no tiene fotos" in enviar(h) and whatsapp.enviadas == []
-
     def test_la_url_sale_de_la_base_no_de_lo_que_diga_el_modelo(self):
         h, _, whatsapp, _ = armar()
         h.ejecutar("enviar_foto_producto", 1, 7, {"producto_sku": "DEMO-1", "url": "https://malo.example/x.png"}, "t1")
@@ -147,9 +136,8 @@ class TestEnviarFoto:
         assert "No encontré ese producto" in respuesta and "DEMO-1" in respuesta
         assert whatsapp.enviadas == []
 
-    @pytest.mark.parametrize("imagen", [None, "", "   ", "http://inseguro.example/x.png", "ftp://x/y.png", "/ruta/local.png"])
-    def test_sin_foto_valida_no_envia_y_no_promete(self, imagen):
-        h, mensajes, whatsapp, _ = armar({"DEMO-1": producto(imagen_url=imagen)})
+    def test_sin_fotos_subidas_no_envia_y_no_promete_aunque_el_producto_tenga_foto_de_rocketfy(self):
+        h, mensajes, whatsapp, _ = armar(galeria={})
         respuesta = enviar(h)
         assert "todavía no tiene fotos" in respuesta and "por el momento no hay imágenes" in respuesta
         assert "no le prometas" in respuesta
@@ -183,9 +171,9 @@ URL_D = "https://xyz.supabase.co/storage/v1/object/public/productos/DEMO-1/d.jpg
 
 
 class TestGaleria:
-    """ADR-012: las fotos que el dueño sube a la ficha (bucket de Supabase) mandan sobre la de Rocketfy."""
+    """ADR-012: solo se envían las fotos que el dueño sube a la ficha (bucket de Supabase)."""
 
-    def test_manda_las_fotos_subidas_y_no_la_de_rocketfy(self):
+    def test_manda_las_fotos_subidas_en_su_orden(self):
         h, _, whatsapp, _ = armar(galeria={"DEMO-1": [URL_A, URL_B]})
         enviar(h)
         assert [e["url"] for e in whatsapp.enviadas] == [URL_A, URL_B]
@@ -239,19 +227,16 @@ class TestGaleria:
         assert [e["url"] for e in whatsapp.enviadas] == [URL_A]
         assert enviar(h) and whatsapp.enviadas[-1]["url"] == URL_B  # el reintento sigue en la que faltaba
 
-    def test_una_foto_subida_que_no_es_https_se_ignora_y_usa_la_de_rocketfy(self):
+    def test_una_foto_subida_que_no_es_https_se_ignora_y_no_cae_en_la_de_rocketfy(self):
         h, _, whatsapp, _ = armar(galeria={"DEMO-1": ["http://inseguro.example/a.jpg"]})
+        assert "todavía no tiene fotos" in enviar(h)
+        assert whatsapp.enviadas == []
+
+    def test_la_foto_de_rocketfy_nunca_se_envia(self):
+        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url=URL_ROCKETFY)}, galeria={})
         enviar(h)
-        assert [e["url"] for e in whatsapp.enviadas] == [URL]
-
-    def test_sin_fotos_en_ninguna_parte_dice_que_por_ahora_no_hay_imagenes(self):
-        h, mensajes, whatsapp, _ = armar({"DEMO-1": producto(imagen_url=None)})
-        respuesta = enviar(h)
-        assert "por el momento no hay imágenes" in respuesta
-        assert whatsapp.enviadas == [] and mensajes.creados == []
-
-    def test_con_fotos_subidas_no_hace_falta_la_de_rocketfy(self):
-        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url=None)}, galeria={"DEMO-1": [URL_A]})
+        assert whatsapp.enviadas == []
+        h, _, whatsapp, _ = armar({"DEMO-1": producto(imagen_url=URL_ROCKETFY)}, galeria={"DEMO-1": [URL_A]})
         enviar(h)
         assert [e["url"] for e in whatsapp.enviadas] == [URL_A]
 

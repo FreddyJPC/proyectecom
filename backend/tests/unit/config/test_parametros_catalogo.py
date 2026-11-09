@@ -25,7 +25,7 @@ class TestInvariantesDelCatalogo:
     def test_estan_todos_los_parametros(self):
         # 15 del plan de parametrización + «Fotos por envío» (ADR-012) + 8 de leads (enfriamiento, atribución y cliente
         # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea).
-        assert len(CATALOGO) == 34
+        assert len(CATALOGO) == 35
 
     def test_el_seguimiento_automatico_viene_apagado_de_fabrica(self):
         """Escribirle a un cliente por iniciativa propia nunca debe empezar solo: hay que encenderlo a propósito."""

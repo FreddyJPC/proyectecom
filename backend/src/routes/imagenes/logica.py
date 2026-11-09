@@ -9,7 +9,7 @@ Cada producto tiene su carpeta en el bucket: `p<id>` (el id numérico, no el SKU
 símbolos que Storage no admite en una ruta).
 """
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.parse import quote
 
 BUCKET = "productos"
@@ -44,12 +44,8 @@ def validar_ruta(carpeta_esperada: str, ruta: str) -> str:
     return ruta
 
 
-def galeria_para_enviar(subidas: List[Dict[str, Any]], imagen_de_rocketfy: Optional[str]) -> List[str]:
-    """Las URLs que Victoria puede mandar: las fotos subidas (en su orden) o, si no hay ninguna, la de
-    Rocketfy. Solo enlaces https: Meta no descarga otra cosa."""
-    urls = [i["url"] for i in subidas if str(i.get("url", "")).lower().startswith("https://")]
-    if urls:
-        return urls
-    if imagen_de_rocketfy and imagen_de_rocketfy.lower().startswith("https://"):
-        return [imagen_de_rocketfy]
-    return []
+def galeria_para_enviar(subidas: List[Dict[str, Any]]) -> List[str]:
+    """Las URLs que Victoria puede mandar: SOLO las fotos que el dueño subió a la ficha (bucket de Supabase), en
+    su orden. La foto de Rocketfy nunca se envía a un cliente (pedido de Freddy 2026-11-09). Solo enlaces https:
+    Meta no descarga otra cosa."""
+    return [i["url"] for i in subidas if str(i.get("url", "")).lower().startswith("https://")]

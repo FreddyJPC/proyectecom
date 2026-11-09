@@ -1500,3 +1500,20 @@ Ecuador); nunca a «no contactar», perdidos, ganados, fríos ni a conversacione
 frena un tiempo (si falla la plantilla, te avisa por Telegram). Lo que se envió queda en la conversación, así Victoria sabe qué se
 le dijo si el cliente contesta. En el detalle del lead se ve cuándo se le escribió.
 
+## 46. Mensajes en pedacitos y respuestas que no se pierden
+
+**El problema.** Mucha gente escribe así: «Hola» … «buenas tardes» … «quiero» … «unos audífonos». Antes, cada pedacito hacía que
+Victoria respondiera por separado (hasta cuatro respuestas) y, además, a veces leía el historial mal.
+
+**La espera para juntar mensajes.** Ahora, cuando llega un mensaje, Victoria espera unos segundos (Parámetros → «Espera para
+juntar mensajes seguidos», 5 por defecto). Si el cliente sigue escribiendo, la espera empieza de nuevo (pero nunca pasa de 3 veces ese
+tiempo). Cuando el cliente se detiene, Victoria lee todo junto y responde una sola vez. Ejemplo: «Hola», «buenas tardes», «unos
+audífonos» → una sola respuesta a «Hola, buenas tardes, unos audífonos». Con 0 se apaga y vuelve a responder cada mensaje.
+
+**Qué es «sin responder».** Es la racha de mensajes del cliente al final de la conversación, después de la última respuesta. Si el
+cliente escribe mientras Victoria redacta, su respuesta queda antes de ese mensaje nuevo, que sigue pendiente y se contesta enseguida.
+
+**Si algo falla.** Si la IA no logra redactar (sobrecarga, corte de internet) el sistema lo intenta de nuevo hasta 2 veces. Si aun
+así no se puede responder, o WhatsApp no deja enviar, te llega un aviso por Telegram con la conversación para que le respondas a mano.
+Si el servidor se reinicia a mitad de una respuesta, al volver retoma lo que quedó pendiente.
+

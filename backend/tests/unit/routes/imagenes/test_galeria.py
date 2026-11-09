@@ -50,16 +50,15 @@ class TestReglas:
         with pytest.raises(RutaDeImagenInvalida):
             validar_ruta("p7", ruta)
 
-    def test_la_galeria_a_enviar_prefiere_las_subidas(self):
+    def test_la_galeria_a_enviar_son_las_subidas_en_su_orden(self):
         subidas = [{"url": "https://a/1.jpg"}, {"url": "https://a/2.jpg"}]
-        assert galeria_para_enviar(subidas, "https://rocketfy/x.png") == ["https://a/1.jpg", "https://a/2.jpg"]
+        assert galeria_para_enviar(subidas) == ["https://a/1.jpg", "https://a/2.jpg"]
 
-    def test_sin_subidas_cae_en_la_de_rocketfy_y_sin_ninguna_queda_vacia(self):
-        assert galeria_para_enviar([], "https://rocketfy/x.png") == ["https://rocketfy/x.png"]
-        assert galeria_para_enviar([], None) == [] and galeria_para_enviar([], "http://inseguro/x.png") == []
+    def test_sin_subidas_queda_vacia_y_nunca_cae_en_la_de_rocketfy(self):
+        assert galeria_para_enviar([]) == []
 
     def test_solo_https(self):
-        assert galeria_para_enviar([{"url": "http://a/1.jpg"}], None) == []
+        assert galeria_para_enviar([{"url": "http://a/1.jpg"}]) == []
 
 
 PREFIJO = "TEST-GALERIA "

@@ -249,13 +249,33 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="bot.segundos_espera_mensajes",
+        grupo="victoria",
+        nombre="Espera para juntar mensajes seguidos",
+        para_que_sirve=(
+            "Mucha gente escribe en pedacitos: «Hola», «buenas tardes», «quiero unos audífonos». "
+            "Con esta espera, cuando llega un mensaje Victoria aguarda unos segundos por si el cliente sigue escribiendo, "
+            "lee todo junto y responde UNA sola vez, en vez de contestar cada pedacito por separado. "
+            "Si el cliente escribe otro mensaje durante la espera, esta se reinicia (pero nunca se espera más de "
+            "3 veces este número). Con 0 se apaga: Victoria responde apenas llega cada mensaje. "
+            "Muy alto, el cliente siente que lo ignoran; muy bajo, no alcanza a juntar los pedacitos."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=5,
+        minimo=0,
+        maximo=30,
+        unidad="segundos",
+        variable_servidor="BOT_SEGUNDOS_ESPERA_MENSAJES",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
         clave="bot.enviar_fotos",
         grupo="victoria",
         nombre="Enviar fotos del producto",
         para_que_sirve=(
             "Si está encendido, Victoria puede mandar por WhatsApp las fotos del producto cuando el cliente las pide. "
-            "Salen de la galería del producto (las que subes en su ficha) o, si no subiste ninguna, de la foto de "
-            "Rocketfy; Meta tiene que poder descargarlas. Si el producto no tiene fotos, Victoria le dice al cliente "
+            "Salen únicamente de la galería del producto (las que subes en su ficha); la foto de Rocketfy nunca se "
+            "envía. Si el producto no tiene fotos subidas, Victoria le dice al cliente "
             "que por ahora no hay imágenes. «Probar con Victoria» siempre simula las fotos, esté o no encendido."
         ),
         tipo=TIPO_BOOLEANO,
