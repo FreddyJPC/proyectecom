@@ -1,0 +1,391 @@
+
+==============================================================================
+S1 — Compra completa con faltas de ortografía y ciudad mal escrita
+Esperado: Corrige «guayakil» a Guayaquil sin preguntar, muestra el resumen con «Guayaquil, Guayas» y cierra tras el «sip».
+------------------------------------------------------------------------------
+CLIENTE : 'ola kiero unos audifonos blutu'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] clasificar_lead {'temperatura': 'tibio', 'motivo': 'Mostró interés directo preguntando por el producto'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Hola! 😊 Claro que sí, tenemos los Audífonos Bluetooth a $24.99.
+
+Vienen con estuche de carga, 20 horas de batería y micrófono integrado. ¿Los quiere en negro o blanco?
+
+¿Me confirma también su nombre completo y la dirección a donde se los enviamos? 📦
+CLIENTE : 'cuanto cuestan? y q colores ay'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: Cuestan $24.99 cada uno, y el envío ya está incluido 🙌
+
+Vienen en color negro o blanco, ¿cuál prefiere?
+CLIENTE : 'el negro xfa, 2'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'negro', 'cantidad': 2}
+                -> Producto registrado: 2 x Audífonos Bluetooth. Total a cobrar: $49.98. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, color y cantidad, listo para comprar'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Listo! 2 audífonos Bluetooth color negro 🎧
+
+El total es **$49.98** (envío incluido).
+
+Ahora, para el envío, ¿me confirma:
+- Su nombre completo
+- Dirección exacta
+- Cantón y provincia?
+CLIENTE : 'mi nombre es maria jose pacheco, vivo en guayakil, provincia guayas, en la cdla kennedy mz 5 villa 3'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'cantidad': 2, 'variante': 'Negro'}
+                -> Producto registrado: 2 x Audífonos Bluetooth. Total a cobrar: $49.98. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] guardar_datos_cliente {'nombre_cliente': 'Maria Jose Pacheco', 'direccion': 'Cdla Kennedy Mz 5 Villa 3', 'canton': 'Guayaquil', 'provincia': 'Guayas'}
+                -> Datos guardados correctamente.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, cantidad, variante y dio sus datos de envío'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Perfecto, María José! Ya quedó registrado todo 📝
+
+Confirmado: 2 audífonos Bluetooth negros, total **$49.98** (envío incluido).
+
+Ahora, ¿cómo prefiere pagar: contraentrega o por transferencia?
+CLIENTE : 'cuando llege pago'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'cantidad': 2, 'variante': 'Negro'}
+                -> Producto registrado: 2 x Audífonos Bluetooth. Total a cobrar: $49.98. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] registrar_metodo_pago {'metodo_pago': 'contraentrega'}
+                -> Método de pago registrado.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, cantidad, datos de envío y forma de pago'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+  [herramienta] mostrar_resumen_para_confirmar 
+                -> Envíale al cliente este resumen tal cual (puedes agregar un saludo breve) y espera su respuesta. No cierres la venta todavía. Si responde que sí, usa confirmar_datos_envio; si quiere corregir algo, guarda el cambio y vuelve a usar
+VICTORIA: Perfecto, María José 😊 Para dejar listo su pedido, ¿me confirma que estos datos están correctos?
+
+• Nombre: Maria Jose Pacheco
+• Dirección: Cdla Kennedy Mz 5 Villa 3 — Guayaquil, Guayas
+• Producto: 2 × Audífonos Bluetooth (Negro)
+• Total a pagar: $49.98
+• Forma de pago: Contra entrega (paga al recibir)
+
+Si todo está bien, respóndame «sí» ✅
+CLIENTE : 'sip todo bien'
+  [herramienta] confirmar_datos_envio 
+                -> Datos confirmados por el cliente. Ya puedes cerrar la venta con cerrar_venta.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó todos los datos y el pedido para pago contraentrega'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+  [herramienta] cerrar_venta 
+                -> ¡Pedido confirmado! Llega en 2 a 4 días hábiles. Comunícaselo al cliente y agradécele.
+VICTORIA: ¡Listo, María José! 🎉 Su pedido quedó confirmado y le llega en 2 a 4 días hábiles a la Cdla Kennedy.
+
+Muchas gracias por su compra, cualquier cosa me escribe 💛
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre='Maria Jose Pacheco' direccion='Cdla Kennedy Mz 5 Villa 3' canton='Guayaquil' provincia='Guayas' producto='AUD-BT-001' cant=2 variante='Negro' pago='contraentrega' pedido=SI confirmado=SI
+
+==============================================================================
+S2 — No sabe el nombre del producto
+Esperado: Identifica el producto por la descripción («los que no tienen cable») y no inventa datos.
+------------------------------------------------------------------------------
+CLIENTE : 'buenas tardes tienen esos audifonos q no tienen cable?'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: ¡Buenas tardes! 😊 Sí, claro, tenemos los Audífonos Bluetooth, sin cable, inalámbricos.
+
+Cuentan con:
+- 20 horas de batería
+- Micrófono integrado
+- Estuche de carga incluido
+
+Precio: $24.99 c/u
+Entrega: 2 a 4 días hábiles, envío incluido 🚚
+
+¿Le interesa llevarlos? Vienen en negro o blanco, ¿cuál prefiere?
+CLIENTE : 'los negros cuanto salen'
+VICTORIA: ¡Los negros salen en $24.99! 🖤
+
+¿Le gustaría que proceda con el pedido?
+CLIENTE : 'y viene con estuche?'
+VICTORIA: ¡Sí! Viene con su estuche de carga incluido 📦✨
+
+¿Le gustaría que proceda con el pedido de los negros?
+CLIENTE : 'y la garantia cuanto es?'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] escalar_a_humano {'motivo': 'Cliente pregunta por garantía del producto, tema que no debo responder'}
+                -> Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.
+  [herramienta] clasificar_lead {'temperatura': 'tibio', 'motivo': 'Interesado en el producto pero pregunta por garantía antes de decidir'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Mire, el tema de garantía lo maneja directamente un asesor para darle la información correcta 🙏 Le voy a comunicar con alguien que le ayude con eso.
+
+Ya le paso su consulta a un asesor para que le confirme el tema de la garantía 👍 En un momento se comunica con usted. ¡Que tenga buena tarde! 😊
+  (conversación escalada a una persona)
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto=None cant=1 variante=None pago=None pedido=no confirmado=no
+
+==============================================================================
+S3 — Palabras pegadas y letras comidas
+Esperado: Entiende «quierocomprarlo», «mellamo juan», «vivoen cuenca».
+------------------------------------------------------------------------------
+CLIENTE : 'holaquiero comprarlos audifonos'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: ¡Hola! Qué bien 😊 Los Audífonos Bluetooth están en $24.99, traen estuche de carga y 20 horas de batería.
+
+¿Los quiere en negro o blanco?
+CLIENTE : 'mellamo juan perez vivoen cuenca azuay'
+  [herramienta] guardar_datos_cliente {'nombre_cliente': 'Juan Perez', 'canton': 'Cuenca', 'provincia': 'Azuay'}
+                -> Datos guardados correctamente.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Ya dio su nombre y ubicación para el envío'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Gracias, Juan 🙌
+
+Me falta la dirección exacta donde le entregamos (calle, número, referencia).
+
+Y una cosita más: ¿los audífonos los quiere en negro o blanco?
+CLIENTE : 'xq tan caro mm'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] clasificar_lead {'temperatura': 'tibio', 'motivo': 'Mostró duda por el precio, aún no confirma compra'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Entiendo, Juan. Pero mire, por ese precio lleva unos audífonos inalámbricos con 20 horas de batería, micrófono y su estuche de carga incluido — y el envío ya viene incluido en el precio, no paga nada extra 😊
+
+¿Le gustaría llevarlos?
+
+¿Le parece bien el precio o tiene alguna otra duda?
+CLIENTE : 'kiero 1 nomas blanco'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, variante y cantidad, quiere comprar'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Listo! 1 audífono Bluetooth blanco, total $24.99 😊
+
+Ahora me falta su dirección exacta para el envío (calle, número, referencia).
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre='Juan Perez' direccion=None canton='Cuenca' provincia='Azuay' producto='AUD-BT-001' cant=1 variante='blanco' pago=None pedido=no confirmado=no
+
+==============================================================================
+S4 — Mensajes en pedacitos (llegan juntos tras la espera)
+Esperado: Responde UNA vez a todo junto, sin repetir el saludo ni perderse.
+------------------------------------------------------------------------------
+CLIENTE : 'Hola\nbuenas tardes\nquiero\nunos audifonos\nlos blancos'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco'}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto y variante, quiere comprar ya'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Hola, buenas tardes! 😊 Sí, tenemos los Audífonos Bluetooth en blanco, a $24.99.
+
+Le anoto 1 unidad de los Audífonos Bluetooth blancos, total **$24.99**, y el envío ya viene incluido 🙌
+
+Para coordinar el envío, ¿me regala su nombre completo, dirección, cantón y provincia?
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto='AUD-BT-001' cant=1 variante='blanco' pago=None pedido=no confirmado=no
+
+==============================================================================
+S5 — Respuestas de confirmación informales
+Esperado: Entiende «dale», «👍», «ta bien» como sí; un «no, la direccion es otra» como corrección y vuelve a confirmar.
+------------------------------------------------------------------------------
+CLIENTE : 'quiero 1 audifono negro'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Negro', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, variante y cantidad directamente'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Perfecto! Le registro 1 audífono Bluetooth negro 🎧
+
+Total: $24.99 (envío incluido)
+
+Para el envío, ¿me regala su nombre completo, dirección, cantón y provincia? 😊
+CLIENTE : 'ana lopez, quito pichincha, av amazonas n34-12 y atahualpa'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'cantidad': 1, 'variante': 'Negro'}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] guardar_datos_cliente {'nombre_cliente': 'Ana López', 'direccion': 'Av. Amazonas N34-12 y Atahualpa', 'canton': 'Quito', 'provincia': 'Pichincha'}
+                -> Datos guardados correctamente.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto y dio todos sus datos de envío'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Listo, Ana! Ya tengo sus datos 📝
+
+Ahora, ¿cómo prefiere pagar: contraentrega o transferencia?
+CLIENTE : 'contraentrega'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Negro', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] registrar_metodo_pago {'metodo_pago': 'contraentrega'}
+                -> Método de pago registrado.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, datos de envío y método de pago'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+  [herramienta] mostrar_resumen_para_confirmar 
+                -> Envíale al cliente este resumen tal cual (puedes agregar un saludo breve) y espera su respuesta. No cierres la venta todavía. Si responde que sí, usa confirmar_datos_envio; si quiere corregir algo, guarda el cambio y vuelve a usar
+VICTORIA: Para dejar listo su pedido, ¿me confirma por favor que estos datos están correctos?
+
+• Nombre: Ana López
+• Dirección: Av. Amazonas N34-12 y Atahualpa — Quito, Pichincha
+• Producto: 1 × Audífonos Bluetooth (Negro)
+• Total a pagar: $24.99
+• Forma de pago: Contra entrega (paga al recibir)
+
+¿Está todo correcto? 😊
+CLIENTE : 'no, la direccion es av. 10 de agosto y colon'
+  [herramienta] guardar_datos_cliente {'direccion': 'Av. 10 de Agosto y Colón'}
+                -> Datos guardados correctamente.
+  [herramienta] mostrar_resumen_para_confirmar 
+                -> Envíale al cliente este resumen tal cual (puedes agregar un saludo breve) y espera su respuesta. No cierres la venta todavía. Si responde que sí, usa confirmar_datos_envio; si quiere corregir algo, guarda el cambio y vuelve a usar
+VICTORIA: Ya corregí la dirección 👍
+
+Entonces le confirmo:
+
+• Nombre: Ana López
+• Dirección: Av. 10 de Agosto y Colón — Quito, Pichincha
+• Producto: 1 × Audífonos Bluetooth (Negro)
+• Total a pagar: $24.99
+• Forma de pago: Contra entrega (paga al recibir)
+
+¿Está todo correcto? 😊
+CLIENTE : 'dale'
+  [herramienta] guardar_datos_cliente {'nombre_cliente': 'Ana López', 'direccion': 'Av. 10 de Agosto y Colón', 'canton': 'Quito', 'provincia': 'Pichincha'}
+                -> Datos guardados correctamente.
+  [herramienta] confirmar_datos_envio 
+                -> Datos confirmados por el cliente. Ya puedes cerrar la venta con cerrar_venta.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó el resumen y método de pago, listo para cerrar'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+  [herramienta] cerrar_venta 
+                -> ¡Pedido confirmado! Llega en 2 a 4 días hábiles. Comunícaselo al cliente y agradécele.
+VICTORIA: ¡Listo, Ana! Su pedido quedó confirmado 🎉
+
+Le llega en 2 a 4 días hábiles a su dirección en Quito. Paga contraentrega cuando lo reciba.
+
+¡Muchas gracias por su compra! Cualquier cosa, aquí estoy 😊
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre='Ana López' direccion='Av. 10 de Agosto y Colón' canton='Quito' provincia='Pichincha' producto='AUD-BT-001' cant=1 variante='Negro' pago='contraentrega' pedido=SI confirmado=SI
+
+==============================================================================
+S6 — Ciudad y provincia que no cuadran
+Esperado: No guarda «Quito, Guayas» (no cuadra); pregunta cuál es la correcta sin inventar.
+------------------------------------------------------------------------------
+CLIENTE : 'quiero 1 audifono blanco'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, variante y cantidad directamente'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Listo! 🎧 Le registro 1 Audífono Bluetooth en blanco, con estuche de carga incluido. El total es **$24.99** y el envío ya está incluido 😊
+
+Para coordinar el envío, ¿me regala su nombre completo, dirección exacta, cantón y provincia?
+CLIENTE : 'soy pedro ruiz, vivo en quito provincia guayas, calle 9 de octubre 123'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto y dio sus datos de envío'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Pedro, una consulta: usted puso Quito, pero Quito pertenece a la provincia de **Pichincha**, no Guayas. ¿Me confirma cuál es correcto? 🙂
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto='AUD-BT-001' cant=1 variante='blanco' pago=None pedido=no confirmado=no
+
+==============================================================================
+S7 — Pide hablar con una persona, con errores
+Esperado: Usa escalar_a_humano.
+------------------------------------------------------------------------------
+CLIENTE : 'kiero ablar con una persona porfa'
+  [herramienta] escalar_a_humano {'motivo': 'Cliente pidió explícitamente hablar con una persona.'}
+                -> Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.
+VICTORIA: Listo, ya le aviso a un asesor para que la contacte en breve. ¡Que tenga un buen día! 🙌
+  (conversación escalada a una persona)
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto=None cant=1 variante=None pago=None pedido=no confirmado=no
+
+==============================================================================
+S8 — No quiere más mensajes
+Esperado: Usa no_contactar y se despide con amabilidad.
+------------------------------------------------------------------------------
+CLIENTE : 'no gracias, ya no me escriban mas porfa'
+  [herramienta] no_contactar {'motivo': 'Cliente pidió explícitamente que no le vuelvan a escribir'}
+                -> Listo: no se le escribirá por iniciativa nuestra. Despídete con amabilidad y brevedad, sin insistir ni ofrecer nada más. Este es tu último mensaje.
+  [herramienta] clasificar_lead {'temperatura': 'perdido', 'motivo': 'Cliente pidió que no le contacten más', 'motivo_perdida': 'no_le_interesa'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Entendido, no le molesto más. ¡Que tenga un buen día! 🙌
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto=None cant=1 variante=None pago=None pedido=no confirmado=no
+
+==============================================================================
+S11 — Errores evidentes que no se preguntan
+Esperado: «blanko» = Blanco y «quto» = Quito sin preguntar; el resumen los muestra bien escritos.
+------------------------------------------------------------------------------
+CLIENTE : 'quiero 1 audifono blanko'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Cliente confirmó producto, variante y cantidad directamente'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Perfecto! 🎧 Le registré 1 Audífono Bluetooth color blanco, total $24.99 (envío incluido).
+
+Ahora para el envío, ¿me da su nombre completo, dirección exacta, cantón y provincia?
+CLIENTE : 'soy ana, vivo en quto, calle 10 y 12'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] guardar_datos_cliente {'nombre_cliente': 'Ana', 'direccion': 'Calle 10 y 12', 'canton': 'Quito', 'provincia': 'Pichincha'}
+                -> Datos guardados correctamente.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Dio producto, variante y datos de envío sin dudar'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: Gracias, Ana 😊 Ya tengo todo eso.
+
+Ahora, ¿cómo prefiere pagar: contraentrega o por transferencia?
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre='Ana' direccion='Calle 10 y 12' canton='Quito' provincia='Pichincha' producto='AUD-BT-001' cant=1 variante='blanco' pago=None pedido=no confirmado=no
+
+==============================================================================
+S9 — Abreviaturas y jerga
+Esperado: Entiende «cnto sale», «tmb», «x favor», «dnd» y no se pierde.
+------------------------------------------------------------------------------
+CLIENTE : 'wenas cnto sale el aud blutu'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: ¡Hola! 👋 Los Audífonos Bluetooth están a $24.99 la unidad, con estuche de carga incluido y envío gratis 🚚
+
+¿Le interesa llevar uno? Vienen en negro o blanco, ¿cuál prefiere?
+CLIENTE : 'tmb ay en blanco? dnd lo envian? soy de ambato'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: ¡Claro que sí! Vienen en negro y blanco 😊
+
+Hacemos envíos a todo el país, así que a Ambato llega sin problema — entrega en 2 a 4 días hábiles y el envío va incluido en el precio, no le cobramos nada aparte.
+
+¿Le confirmo en blanco entonces? Y para ir armando su pedido, ¿me regala su nombre completo y la dirección exacta en Ambato? 📦
+CLIENTE : 'ok x favor 1 blanco'
+  [herramienta] registrar_producto {'producto_sku': 'AUD-BT-001', 'producto_nombre': 'Audífonos Bluetooth', 'variante': 'Blanco', 'cantidad': 1}
+                -> Producto registrado: 1 x Audífonos Bluetooth. Total a cobrar: $24.99. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.
+  [herramienta] guardar_datos_cliente {'canton': 'Ambato', 'provincia': 'Tungurahua'}
+                -> Datos guardados correctamente.
+  [herramienta] clasificar_lead {'temperatura': 'caliente', 'motivo': 'Confirmó producto, variante y cantidad'}
+                -> Clasificación registrada. No se lo menciones al cliente y sigue con la conversación.
+VICTORIA: ¡Perfecto! Anotado: 1 audífono Bluetooth blanco 🎧 Total: $24.99 (envío incluido).
+
+Ya tengo que es en Ambato, Tungurahua. Ahora me falta:
+- Su nombre completo
+- La dirección exacta (calle, número, referencia)
+
+¿Me los regala? 🙂
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton='Ambato' provincia='Tungurahua' producto='AUD-BT-001' cant=1 variante='blanco' pago=None pedido=no confirmado=no
+
+==============================================================================
+S10 — Respuesta ambigua / emoji solo
+Esperado: Ante un 👍 o «ok» sin contexto claro, no confirma datos ni cierra por su cuenta.
+------------------------------------------------------------------------------
+CLIENTE : 'hola'
+VICTORIA: ¡Hola! 😊 Bienvenido a AzoShop, soy Victoria. ¿En qué le puedo ayudar hoy?
+CLIENTE : '👍'
+VICTORIA: ¿Le interesan nuestros audífonos Bluetooth? Son los que tenemos disponibles ahora mismo 🎧 ¿Le cuento más sobre ellos?
+CLIENTE : 'ok'
+  [herramienta] ver_ficha_producto {'producto_sku': 'AUD-BT-001'}
+                -> SKU: AUD-BT-001 / Nombre: Audífonos Bluetooth / Descripción: Audífonos inalámbricos con 20 horas de batería, micrófono integrado y estuche de carga. No tienen cable. / Precio por unidad: $24.99 / Tiempo de entrega: 2 a 4 días hábiles / Méto
+VICTORIA: Mire, le cuento 🙌
+
+🎧 **Audífonos Bluetooth** – $24.99
+- 20 horas de batería
+- Micrófono integrado
+- Vienen con estuche de carga
+- Sin cables
+- Entrega: 2 a 4 días hábiles
+- Envío incluido, sin costo extra
+- Disponibles en negro y blanco
+
+¿Le gustaría llevarlos?
+CLIENTE : 'ni idea q hago aqui'
+VICTORIA: Jaja no se preocupe 😊 Por aquí le puedo ayudar a comprar los audífonos Bluetooth que le comenté, o si tiene alguna duda, con gusto se la resuelvo. ¿Le interesaría saber algo más?
+------------------------------------------------------------------------------
+ESTADO FINAL: nombre=None direccion=None canton=None provincia=None producto=None cant=1 variante=None pago=None pedido=no confirmado=no

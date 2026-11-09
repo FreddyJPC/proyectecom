@@ -29,3 +29,7 @@ cuesta unos centavos). El producto del guion es «Audífonos Bluetooth», colore
 
 Si algo falla, anota el número de caso y lo que escribió Victoria; eso se arregla en las instrucciones de Victoria (Control →
 Instrucciones) o en el código, según el caso.
+
+## Último resultado
+La lista completa se corrió con la IA real el **2026-11-09**: 11 de 11 casos sin fallos observados. El detalle de cada caso, con la salida
+textual completa y las observaciones, está en [`RESULTADOS_PRUEBAS_ERRORES_HUMANOS_2026-11-09.md`](RESULTADOS_PRUEBAS_ERRORES_HUMANOS_2026-11-09.md).
