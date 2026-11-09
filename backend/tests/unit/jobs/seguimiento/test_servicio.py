@@ -23,7 +23,7 @@ TELEFONOS = [f"59390000{n:04d}" for n in range(6001, 6009)]
 T1, T2, T3 = TELEFONOS[:3]
 DUENO = "test@ejemplo.com"
 TEXTO_EMPUJON = "Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊"
-TEXTO_PLANTILLA = "Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido. ¿Sigue interesado(a)?"
+TEXTO_PLANTILLA = "Hola 👋 Soy Victoria, de AzoShop. ¿Sigue interesado(a)? Si necesita ayuda, escríbame y con gusto le atiendo."
 
 
 class CanalFalso:
