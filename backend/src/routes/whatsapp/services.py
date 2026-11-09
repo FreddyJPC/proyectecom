@@ -6,13 +6,13 @@ src/routes/webhooks/services.py): un fallo interno NUNCA debe traducirse
 en una respuesta no-200 a Meta -- procesar_mensaje_entrante() nunca lanza.
 """
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from src.config.parametros import parametros
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.whatsapp import WhatsAppClient, WhatsAppError, get_whatsapp_client
 
+from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
 
 from .dto import MensajeEntranteDTO
@@ -21,8 +21,6 @@ from .repository import ConversacionRepository, LeadRepository, MensajeRepositor
 from .worker import BotWorker
 
 logger = logging.getLogger(__name__)
-
-FEP_VENTANA_HORAS = 72
 
 
 class WebhookService:
@@ -34,6 +32,7 @@ class WebhookService:
         lead_repo: Optional[LeadRepository] = None,
         telegram_notifier: Optional[TelegramNotifier] = None,
         bot_worker: Optional[BotWorker] = None,
+        anuncio_servicio: Optional[AnuncioServicio] = None,
     ):
         self._client = whatsapp_client or get_whatsapp_client()
         self._conversaciones = conversacion_repo or ConversacionRepository()
@@ -41,6 +40,7 @@ class WebhookService:
         self._leads = lead_repo or LeadRepository()
         self._telegram = telegram_notifier or get_telegram_notifier()
         self._bot_worker = bot_worker or get_bot_worker()
+        self._anuncios = anuncio_servicio or AnuncioServicio()
 
     def procesar_mensaje_entrante(self, dto: MensajeEntranteDTO) -> None:
         """Se llama desde un hilo que el controller dispara DESPUÉS de
@@ -74,6 +74,12 @@ class WebhookService:
             tipo=dto.tipo,
             wamid=dto.wamid,
         )
+
+        # 4 bis. Si el mensaje llegó desde un anuncio (Click-to-WhatsApp), se guarda TODO lo que Meta manda del anuncio
+        # y se actualiza el origen de la conversación -- también si el cliente ya existía y vuelve por otro anuncio.
+        # Va ANTES de encolar la respuesta para que Victoria ya vea el anuncio vigente.
+        if dto.referral:
+            self._registrar_llegada_por_anuncio(conversacion, mensaje, dto)
 
         # 5. Marcar como leído -- buena práctica (dos ticks azules), pero
         # best-effort: un fallo acá no debe impedir que se encole la
@@ -136,6 +142,22 @@ class WebhookService:
             texto_mensaje_cliente=dto.contenido,
         )
 
+    def _registrar_llegada_por_anuncio(self, conversacion: Dict[str, Any], mensaje: Dict[str, Any], dto: MensajeEntranteDTO) -> None:
+        """Best-effort: guardar los datos del anuncio nunca puede impedir que el cliente reciba respuesta."""
+        try:
+            resultado = self._anuncios.registrar_llegada(conversacion["id"], mensaje["id"], dto.wamid, dto.referral)
+        except Exception:
+            logger.exception("No se pudo registrar la llegada por anuncio", extra={"wamid": dto.wamid})
+            return
+        if resultado["anuncio_nuevo"]:
+            datos = resultado["datos"]
+            nombre = f"«{datos['titulo']}» " if datos.get("titulo") else ""
+            self._telegram.notificar_aviso(
+                "📣 Llegó un anuncio nuevo sin vincular",
+                f"Anuncio: {nombre}(ID {datos.get('id_anuncio')})\n"
+                "Vincúlalo a un producto en la app (Anuncios) para que Victoria sepa de qué hablar sin preguntar.",
+            )
+
     def _escalar(self, conversacion_id: int, telefono: str, motivo: str) -> None:
         # marcar_escalada() (no actualizar_estado() genérico) para que
         # también limpie vista_en -- el módulo de Conversaciones del
@@ -143,17 +165,19 @@ class WebhookService:
         # determinista, o el de Victoria vía escalar_a_humano) deje la
         # conversación como "sin revisar" otra vez.
         self._conversaciones.marcar_escalada(conversacion_id)
-        self._telegram.notificar_escalado(conversacion_id, telefono, motivo)
+        self._telegram.notificar_escalado(
+            conversacion_id, telefono, motivo, origen=self._anuncios.describir_origen(conversacion_id)
+        )
 
     def _crear_conversacion(self, dto: MensajeEntranteDTO) -> dict:
-        # La presencia de "referral" es la señal de que el cliente llegó
-        # desde un anuncio Click-to-WhatsApp -- aplica la ventana gratuita
-        # de 72h (docs/BotPlanifiacion.md, sección 4, Flujo 1).
+        # La presencia de "referral" es la señal de que el cliente llegó desde un anuncio Click-to-WhatsApp. La
+        # ventana gratuita de Meta ya NO se calcula aquí (era «72 h desde el primer mensaje», la regla anterior): se
+        # deduce de los mensajes, ver routes/anuncios/ventana.py. Los datos completos del anuncio los guarda
+        # `_registrar_llegada_por_anuncio`.
         if dto.referral:
             return self._conversaciones.crear(
                 telefono=dto.telefono,
                 origen="fep",
-                fep_expira_en=datetime.now(timezone.utc) + timedelta(hours=FEP_VENTANA_HORAS),
                 id_anuncio=dto.referral.get("source_id"),
                 ctwa_clid=dto.referral.get("ctwa_clid"),
             )

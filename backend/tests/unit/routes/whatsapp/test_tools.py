@@ -1008,7 +1008,9 @@ class TestEscalarAHumano:
         )
 
         assert conversaciones.estados[3] == "escalada"
-        telegram.notificar_escalado.assert_called_once_with(3, "593987654321", "Cliente pidió hablar con una persona")
+        telegram.notificar_escalado.assert_called_once()
+        assert telegram.notificar_escalado.call_args.args == (3, "593987654321", "Cliente pidió hablar con una persona")
+        assert "origen" in telegram.notificar_escalado.call_args.kwargs  # de dónde viene el cliente, para el aviso
         assert "asesor" in resultado.contenido.lower()
 
     def test_reescalar_limpia_vista_en_de_una_escalada_anterior(self):

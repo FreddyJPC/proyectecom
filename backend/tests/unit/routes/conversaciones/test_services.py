@@ -14,6 +14,7 @@ from src.routes.conversaciones.exceptions import (
     EnvioWhatsAppFallidoError,
     VentanaMensajeriaCerradaError,
 )
+from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.conversaciones.services import ConversacionesService
 
 AHORA = datetime.now(timezone.utc)
@@ -110,12 +111,27 @@ def _conversacion(
     }
 
 
-def _servicio(conversaciones=None, leads=None, mensajes=None, whatsapp=None):
+class FakeAnuncioRepository:
+    """Lo que el servicio de anuncios lee de la base, en memoria."""
+
+    def __init__(self, llegadas_por_conversacion=None, vinculos=None):
+        self._llegadas = llegadas_por_conversacion or {}
+        self._vinculos = vinculos or {}
+
+    def llegadas_de(self, conversacion_id):
+        return sorted(self._llegadas.get(conversacion_id, []), key=lambda l: l["creado_en"], reverse=True)
+
+    def vinculo_de(self, id_anuncio):
+        return self._vinculos.get(id_anuncio)
+
+
+def _servicio(conversaciones=None, leads=None, mensajes=None, whatsapp=None, llegadas=None, vinculos=None):
     return ConversacionesService(
         whatsapp_client=whatsapp or MagicMock(),
         conversacion_repo=FakeConversacionRepository(conversaciones=conversaciones or []),
         lead_repo=FakeLeadRepository(leads_por_conversacion=leads or {}),
         mensaje_repo=FakeMensajeRepository(mensajes_por_conversacion=mensajes or {}),
+        anuncio_servicio=AnuncioServicio(repo=FakeAnuncioRepository(llegadas, vinculos), productos=MagicMock()),
     )
 
 
@@ -142,15 +158,25 @@ class TestVentanaDeMensajeria:
         with pytest.raises(VentanaMensajeriaCerradaError):
             servicio.enviar_mensaje_manual(1, "hola")
 
-    def test_ventana_abierta_solo_por_fep_fuera_de_24h_de_servicio(self):
-        mensajes = {1: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=30)}]}
-        conv = _conversacion(origen="fep", fep_expira_en=AHORA + timedelta(hours=10))
+    def test_la_ventana_gratuita_de_anuncio_no_permite_texto_libre_fuera_de_las_24h(self):
+        """Regla vigente de Meta: la ventana de anuncio (FEP) es un beneficio de COSTO, no un permiso para escribir
+        texto libre después de las 24 horas. Antes el panel lo permitía (regla anterior) y Meta lo rechazaba."""
+        mensajes = {
+            1: [
+                {"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=30)},
+                {"id": 2, "rol": "bot", "contenido": "¡Hola!", "creado_en": AHORA - timedelta(hours=30)},
+            ]
+        }
+        llegadas = {1: [{"id_anuncio": "123", "creado_en": AHORA - timedelta(hours=30)}]}
         whatsapp = MagicMock()
-        servicio = _servicio(conversaciones=[conv], mensajes=mensajes, whatsapp=whatsapp)
+        servicio = _servicio(
+            conversaciones=[_conversacion(origen="fep", id_anuncio="123")], mensajes=mensajes, whatsapp=whatsapp, llegadas=llegadas
+        )
 
-        servicio.enviar_mensaje_manual(1, "hola de nuevo")
+        with pytest.raises(VentanaMensajeriaCerradaError):
+            servicio.enviar_mensaje_manual(1, "hola de nuevo")
 
-        whatsapp.enviar_texto.assert_called_once()
+        whatsapp.enviar_texto.assert_not_called()
 
     def test_ventana_cerrada_no_llama_whatsapp_ni_inserta_mensaje(self):
         whatsapp = MagicMock()
@@ -160,6 +186,7 @@ class TestVentanaDeMensajeria:
             conversacion_repo=FakeConversacionRepository(conversaciones=[_conversacion(origen="directo")]),
             lead_repo=FakeLeadRepository(),
             mensaje_repo=mensaje_repo,
+            anuncio_servicio=AnuncioServicio(repo=FakeAnuncioRepository(), productos=MagicMock()),
         )
 
         with pytest.raises(VentanaMensajeriaCerradaError):
@@ -178,6 +205,7 @@ class TestVentanaDeMensajeria:
             conversacion_repo=FakeConversacionRepository(conversaciones=[_conversacion()]),
             lead_repo=FakeLeadRepository(),
             mensaje_repo=mensaje_repo,
+            anuncio_servicio=AnuncioServicio(repo=FakeAnuncioRepository(), productos=MagicMock()),
         )
 
         with pytest.raises(EnvioWhatsAppFallidoError):
@@ -220,6 +248,66 @@ class TestObtenerDetalle:
         servicio = _servicio(conversaciones=[_conversacion()], leads={1: lead})
         detalle = servicio.obtener_detalle(1)
         assert detalle.lead.producto_variante == "negro"
+
+
+class TestOrigenYAnuncioEnElDetalle:
+    LLEGADA = {
+        "id_anuncio": "123", "titulo": "Audífonos Pro", "texto": "Cancelación de ruido", "url_anuncio": "https://fb.me/x",
+        "tipo_origen": "ad", "tipo_media": "image", "imagen_url": "https://cdn.fb/x.jpg", "miniatura_url": None,
+    }
+
+    def test_cliente_directo_no_tiene_anuncio_ni_ventana_gratuita(self):
+        detalle = _servicio(conversaciones=[_conversacion()]).obtener_detalle(1)
+
+        assert detalle.conversacion.anuncio is None
+        assert detalle.conversacion.llegadas_por_anuncio == []
+        assert detalle.conversacion.ventana_gratuita.estado == "sin_anuncio"
+
+    def test_cliente_de_anuncio_muestra_el_anuncio_su_producto_y_la_ventana_gratuita(self):
+        ahora = datetime.now(timezone.utc)
+        mensajes = {
+            1: [
+                {"id": 1, "rol": "cliente", "contenido": "hola", "tipo": "texto", "creado_en": ahora - timedelta(hours=1)},
+                {"id": 2, "rol": "bot", "contenido": "¡Hola!", "tipo": "texto", "creado_en": ahora - timedelta(minutes=59)},
+            ]
+        }
+        llegadas = {1: [{**self.LLEGADA, "creado_en": ahora - timedelta(hours=1)}]}
+        vinculos = {"123": {"producto_sku": "AUD-1", "producto_nombre": "Audífonos Pro"}}
+        servicio = _servicio(
+            conversaciones=[_conversacion(origen="fep", id_anuncio="123")], mensajes=mensajes, llegadas=llegadas, vinculos=vinculos
+        )
+
+        c = servicio.obtener_detalle(1).conversacion
+
+        assert c.anuncio.titulo == "Audífonos Pro"
+        assert c.anuncio.url_anuncio == "https://fb.me/x"
+        assert (c.anuncio.producto.sku, c.anuncio.producto.nombre) == ("AUD-1", "Audífonos Pro")
+        assert c.anuncio.llegadas == 1
+        assert c.ventana_gratuita.estado == "abierta"
+        assert c.ventana_gratuita.expira_en is not None
+        assert c.ventana_abierta is True  # el cliente escribió hace 1 h: la de servicio también está abierta
+
+    def test_anuncio_sin_producto_vinculado_deja_el_producto_en_none(self):
+        llegadas = {1: [{**self.LLEGADA, "creado_en": datetime.now(timezone.utc)}]}
+        servicio = _servicio(conversaciones=[_conversacion(origen="fep", id_anuncio="123")], llegadas=llegadas)
+
+        assert servicio.obtener_detalle(1).conversacion.anuncio.producto is None
+
+    def test_el_historial_de_llegadas_va_de_la_mas_reciente_a_la_mas_antigua(self):
+        ahora = datetime.now(timezone.utc)
+        llegadas = {
+            1: [
+                {**self.LLEGADA, "id_anuncio": "viejo", "creado_en": ahora - timedelta(days=30)},
+                {**self.LLEGADA, "id_anuncio": "nuevo", "creado_en": ahora},
+            ]
+        }
+        servicio = _servicio(conversaciones=[_conversacion(origen="fep", id_anuncio="nuevo")], llegadas=llegadas)
+
+        c = servicio.obtener_detalle(1).conversacion
+
+        assert [l.id_anuncio for l in c.llegadas_por_anuncio] == ["nuevo", "viejo"]
+        assert c.anuncio.id_anuncio == "nuevo"
+        assert c.anuncio.llegadas == 2
 
 
 class TestListarConversaciones:

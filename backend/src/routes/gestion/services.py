@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.integrations.telegram import get_telegram_notifier
+from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.ventas.reglas import acciones_disponibles
 
 from .repository import ResultadoUpsert, SolicitudGestionRepository
@@ -45,9 +46,18 @@ class ResultadoSolicitud:
 
 
 class GestionService:
-    def __init__(self, repo=None, telegram=None):
+    def __init__(self, repo=None, telegram=None, anuncios=None):
         self._repo = repo or SolicitudGestionRepository()
         self._telegram_fijo = telegram
+        self._anuncios_fijo = anuncios
+
+    def describir_origen(self, conversacion_id: int) -> str:
+        """De dónde viene este cliente, en una línea, para los avisos de Telegram (best-effort: nunca lanza)."""
+        try:
+            return (self._anuncios_fijo or AnuncioServicio()).describir_origen(conversacion_id)
+        except Exception:
+            logger.exception("No se pudo describir el origen de la conversación %s", conversacion_id)
+            return ""
 
     @property
     def _telegram(self):
@@ -70,10 +80,13 @@ class GestionService:
         resultado = self._repo.solicitar(conversacion_id, lead_id, tipo.clave, detalle)
         if resultado.creada or resultado.cambio_de_tipo:
             etiqueta = tipo_de(resultado.tipo).etiqueta
-            self._avisar(lambda t: t.notificar_gestion(etiqueta, conversacion_id, telefono, detalle or ""))
+            origen = self.describir_origen(conversacion_id)
+            self._avisar(lambda t: t.notificar_gestion(etiqueta, conversacion_id, telefono, detalle or "", origen=origen))
         return ResultadoSolicitud(solicitud=resultado, traspasa=tipo.traspasa, etiqueta=tipo.etiqueta)
 
     def avisar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
+        if "origen" not in datos and datos.get("conversacion_id") is not None:
+            datos = {**datos, "origen": self.describir_origen(datos["conversacion_id"])}
         self._avisar(lambda t: t.notificar_pedido_cerrado(datos))
 
     def _avisar(self, enviar) -> None:

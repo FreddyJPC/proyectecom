@@ -319,6 +319,10 @@ class GestionEnEnsayo:
     def avisar_pedido_cerrado(self, datos: Dict[str, Any]) -> None:
         self._telegram.notificar_pedido_cerrado(datos)
 
+    def describir_origen(self, conversacion_id) -> str:
+        """En el ensayo no hay conversación real que consultar: no se lee la base (cero efectos reales)."""
+        return ""
+
 
 class VentasEnEnsayo:
     """El cierre manual de mentira: arma la venta que SE HABRÍA guardado (con precio y costo congelados) y
@@ -370,13 +374,13 @@ class TelegramGrabador:
     def __init__(self):
         self.avisos: List[Dict[str, str]] = []
 
-    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str) -> None:
+    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str, origen: str = "") -> None:
         self.avisos.append({"canal": "telegram", "texto": f"Victoria escaló la conversación. Motivo: {motivo}"})
 
     def notificar_aviso(self, titulo: str, detalle: str) -> None:
         self.avisos.append({"canal": "telegram", "texto": f"{titulo}. {detalle}"})
 
-    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "") -> None:
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "", origen: str = "") -> None:
         texto = f"Cierre previo: {etiqueta}" + (f". {detalle}" if detalle else "")
         self.avisos.append({"canal": "telegram", "texto": texto})
 

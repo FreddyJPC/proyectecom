@@ -3,9 +3,10 @@ class ConversacionNoEncontradaError(Exception):
 
 
 class VentanaMensajeriaCerradaError(Exception):
-    """La ventana de mensajería (24h de servicio, o 72h si es FEP) está
-    cerrada -- Meta rechaza cualquier texto libre en ese caso, solo
-    acepta plantillas aprobadas (fuera de alcance de esta entrega)."""
+    """La ventana de servicio (24 h desde el último mensaje del cliente) está
+    cerrada -- Meta rechaza cualquier texto libre en ese caso, solo acepta
+    plantillas aprobadas (fuera de alcance por ahora). La ventana gratuita
+    de los anuncios no cambia esto: es un beneficio de costo, no un permiso."""
 
 
 class EnvioWhatsAppFallidoError(Exception):

@@ -1065,7 +1065,12 @@ class HerramientasVictoria:
         self._conversaciones.marcar_escalada(conversacion_id)
         lead = self._leads.obtener_por_id(lead_id)
         telefono = lead["telefono"] if lead else ""
-        self._telegram.notificar_escalado(conversacion_id, telefono, entrada.get("motivo", "sin especificar"))
+        self._telegram.notificar_escalado(
+            conversacion_id,
+            telefono,
+            entrada.get("motivo", "sin especificar"),
+            origen=self._gestion.describir_origen(conversacion_id),
+        )
         return (
             "Escalado correctamente. Este es tu último mensaje — despídete cordialmente "
             "informando que un asesor la va a contactar en breve."
