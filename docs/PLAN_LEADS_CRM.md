@@ -53,10 +53,52 @@ responder si el cliente vuelve a escribir él.
 anterior (envío, reclamos); si quiere comprar de nuevo, se abre un lead nuevo. Hoy todo eso va al dueño. *Es la parte
 de más riesgo del plan: se prueba con un escenario nuevo en «Probar con Victoria» antes de desplegar.*
 
+**2.6 Contraste con los CRM grandes (Salesforce, HubSpot, Zoho, Dynamics), pedido de Freddy 2026-11-09.** Su modelo
+estándar separa **Contacto** (registro maestro y único de la persona), **Oportunidad / Deal** (cada intención de compra,
+con su propio embudo, valor y estado; relación 1 a N) y **Lead** (prospecto aún sin calificar, un estado temporal).
+Lo que justifica separar contacto y oportunidad: **visión 360** del cliente, **valor de vida (LTV)** y **atribución de
+marketing** por compra. Cómo encaja aquí (comprobado en el esquema el 2026-11-09):
+
+| En un CRM grande | Aquí | Observación |
+|---|---|---|
+| **Contacto** (único, deduplicado por teléfono) | `conversaciones` | `telefono` ya es `unique`: no hay duplicados posibles. No se crea tabla nueva; hoy es 1 a 1 |
+| **Oportunidad / Deal** | `leads` | Una fila por intención de compra. Se conserva el nombre `leads` en código y base (renombrar tocaría todo sin ganar nada) |
+| **Lead** (sin calificar) | la *temperatura* (frío/tibio) | No es una tabla aparte: calificar = subir la temperatura |
+| **Actividades / línea de tiempo** | `mensajes` + `conversacion_anuncios` + `lead_historial` | Se muestran juntas en la ficha |
+
+Lo que esta referencia **agrega al plan** (no estaba):
+1. **Atribución por oportunidad (corrige un defecto de lo desplegado el 2026-11-09).** Hoy `conversaciones.origen` pasa a
+   «fep» con el primer anuncio y **no vuelve nunca a «directo»**, y `ventas.canal`/`ventas.id_anuncio` copian ese valor al
+   cerrar la venta. Con el ejemplo de José (anuncio en enero, laptop en mayo sin anuncio) la venta de mayo se contaría
+   como venta del anuncio de enero. Corrección: **cada lead guarda su propio origen y anuncio** (`leads.origen`,
+   `leads.id_anuncio`, `leads.ctwa_clid`), fijados al abrirse y actualizados si llega otro anuncio mientras sigue
+   abierto. Un lead nuevo hereda el anuncio **solo si la llegada por anuncio es reciente** (parámetro
+   `leads.dias_atribucion`, propuesta: 30 días); si no, es «directo (cliente que ya había venido por anuncio)». La venta
+   copia el origen **del lead**, no el de la conversación. El primer anuncio del contacto (*first touch*) se calcula del
+   historial `conversacion_anuncios`, sin columna nueva.
+2. **Ficha del contacto (visión 360):** todos sus leads, llegadas por anuncio, ventas y conversación en un solo lugar.
+3. **Valor del cliente (LTV):** compras, total gastado y ganancia por contacto, sumando sus ventas no canceladas
+   (`ventas.conversacion_id`).
+4. **Tipo de contacto derivado**, sin columna: *prospecto* (nunca compró), *cliente* (1 compra), *recurrente* (2 o más).
+5. **Victoria recibe el historial del contacto** («en octubre preguntó por audífonos», «ya compró zapatos»): es el
+   equivalente a lo que ve el vendedor en pantalla.
+6. **Motivo de pérdida estructurado** (catálogo: precio, no respondió, compró en otro lado, sin cobertura, sin stock, no le
+   interesó, otro) además del texto libre, para poder reportar **por qué se pierde**.
+7. **Nombre del contacto:** hoy el nombre solo vive en el lead (`nombre_cliente`, lo que dio para el envío) y el sistema
+   **no guarda el nombre del perfil de WhatsApp**. Se agrega `conversaciones.nombre` (perfil de WhatsApp, o el último
+   nombre dado a un lead).
+
+**Diferencias a propósito con los CRM grandes:** (a) **un solo lead abierto a la vez** por contacto (ellos permiten
+varias oportunidades abiertas): así Victoria atiende un producto cada vez y el panel no se llena de duplicados; si el
+cliente quiere dos productos, van como líneas de la misma venta; (b) **sin «Cuenta/Empresa»** (vendemos a personas);
+(c) **sin etapas configurables ni probabilidad por etapa** (la temperatura cubre eso; puede venir en F5).
+
 ## 3. Cambios de datos
 - **Migración 024:** `leads.temperatura` (+ `temperatura_motivo`, `temperatura_origen` = ia/regla/dueño,
-  `temperatura_en`, `temperatura_fijada_hasta`); `conversaciones.no_contactar` (+ motivo, fecha, quién); tabla
-  `lead_historial`. **Relleno** de los leads existentes por reglas (ganado/perdido; el resto tibio).
+  `temperatura_en`, `temperatura_fijada_hasta`); `leads.origen`, `leads.id_anuncio`, `leads.ctwa_clid` (atribución por
+  oportunidad) y `leads.motivo_perdida`; `conversaciones.nombre`; `conversaciones.no_contactar` (+ motivo, fecha,
+  quién); tabla `lead_historial`. **Relleno** de los leads existentes por reglas (ganado/perdido; el resto tibio; el
+  origen del lead se toma de la conversación).
 - **Migración 025 (con el seguimiento):** tabla `seguimientos` (qué se envió a quién y cuándo; impide repetir).
 - Solo se agregan objetos; no se edita nada ya aplicado.
 
@@ -65,6 +107,8 @@ de más riesgo del plan: se prueba con un escenario nuevo en «Probar con Victor
 - Una sección nueva en sus **instrucciones editables** («Cómo clasificar leads»), con las definiciones de la tabla 2.2,
   para que las ajustes desde la app sin tocar código (ADR-011). Ahí también se fija el **trato de usted** (hoy el texto
   dice «cercana y profesional» pero no fija tú/usted).
+- Recibe en su contexto un **resumen del historial del contacto** (leads anteriores con producto y resultado, compras, si
+  vino por anuncio), para no tratar al cliente como un desconocido.
 - «Probar con Victoria» muestra la temperatura que habría puesto.
 - Costo: unas pocas llamadas de herramienta por conversación; no hay un job de IA aparte.
 
@@ -75,7 +119,10 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
   hace…», «no contactar» y búsqueda por nombre o teléfono; orden por actividad, valor o temperatura.
 - **Columnas:** cliente, producto, temperatura, etapa, origen, valor, último mensaje, seguimiento.
 - **Detalle** (panel lateral): datos, motivo de la IA, **línea de tiempo** (cambios de temperatura y seguimientos),
-  enlace a la conversación, y acciones: cambiar temperatura, marcar perdido con motivo, «no contactar».
+  enlace a la conversación, y acciones: cambiar temperatura, marcar perdido con motivo (de un catálogo), «no contactar».
+- **Ficha del contacto** (visión 360): tipo (prospecto/cliente/recurrente), cuánto ha comprado y ganado (LTV), todos sus
+  leads, sus llegadas por anuncio (primera y última) y la conversación.
+- **Reporte «por qué perdemos»** (motivos de pérdida) y conversión por anuncio con la atribución por oportunidad.
 - Colores con los tokens de estado: caliente = `warning`, tibio = `info`, frío = `neutral`, perdido = `danger`,
   ganado = `success`. API: `GET /leads`, `GET /leads/resumen`, `PATCH /leads/<id>`, `GET /leads/<id>/historial`.
 
@@ -93,9 +140,9 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
 ## 7. Fases (en este orden)
 | Fase | Qué se entrega | Tamaño relativo |
 |---|---|---|
-| **F1** | Migración 024, **varios leads por contacto**, «no contactar» en la conversación, historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
-| **F2** | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente**, simulación. Tests | Mediano, el de más riesgo |
-| **F3** | Panel de Leads: pantalla, filtros, detalle, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
+| **F1** | Migración 024, **varios leads por contacto**, **atribución por oportunidad** (la venta copia el origen del lead), «no contactar», historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
+| **F2** | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente con el historial del contacto en su contexto**, simulación. Tests | Mediano, el de más riesgo |
+| **F3** | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
 | **F4** | Seguimiento: migración 025, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
 | **F5** (opcional) | Tablero Kanban, exportar a CSV, recordatorios al dueño, conversión por temperatura y por anuncio | A pedido |
 
@@ -111,7 +158,12 @@ confirmación de Freddy.
 - **Calidad del número en Meta:** si muchos clientes bloquean los mensajes proactivos, Meta puede bajarla; por eso el
   tope, el horario, «no contactar» y los interruptores apagados.
 - **Datos personales:** el panel solo lo ve quien tiene sesión (modelo de un solo administrador, pendiente #65).
-- No verificado: tiempo de revisión de Meta para la plantilla; límites de envío del negocio sin verificación de empresa.
+- **Regla de atribución (30 días propuestos) es una decisión de negocio**, no un hecho de Meta: se ajusta como parámetro.
+  Las ventas ya cerradas conservan el origen que tenían (hoy no hay ventas reales, así que no hay nada que corregir).
+- No verificado: tiempo de revisión de Meta para la plantilla; límites de envío del negocio sin verificación de empresa;
+  que el webhook de WhatsApp traiga el nombre del perfil (`contacts[].profile.name`, por confirmar con un mensaje real);
+  el resumen de los CRM grandes viene de una consulta de Freddy y de conocimiento general, **no se contrastó con la
+  documentación actual de cada producto**.
 
 ## 9. Fuera de este plan
 Varios usuarios o asignar leads a vendedores, tareas y calendario, importar contactos, integraciones con otros CRM.
