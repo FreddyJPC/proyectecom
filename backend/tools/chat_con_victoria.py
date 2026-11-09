@@ -50,6 +50,9 @@ def _borrar_conversacion(telefono: str) -> None:
             conversacion_id, contacto_id = fila
             cur.execute("delete from solicitudes_gestion where conversacion_id = %s", (conversacion_id,))
             cur.execute("delete from conversacion_anuncios where conversacion_id = %s", (conversacion_id,))
+            cur.execute(
+                "delete from lead_historial where lead_id in (select id from leads where conversacion_id = %s)", (conversacion_id,)
+            )
             cur.execute("delete from leads where conversacion_id = %s", (conversacion_id,))
             cur.execute("delete from conversaciones where id = %s", (conversacion_id,))  # cascada: mensajes y cola
             cur.execute(

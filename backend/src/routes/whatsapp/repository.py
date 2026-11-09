@@ -1,6 +1,8 @@
 from typing import List, Optional
 
 from src.config.database import get_connection
+from src.routes.leads.sql import fijar_temperatura
+from src.routes.leads.temperaturas import ABIERTAS, GANADO, ORIGEN_REGLA
 
 # La conversación ya trae a su CONTACTO (ADR-014): `telefono` y `contacto_nombre` son los de la persona (el teléfono puede
 # faltar en canales que no lo dan, como Instagram); `canal` + `id_externo` son cómo se la encuentra en ese canal.
@@ -30,7 +32,17 @@ _COLUMNAS_LEAD = (
     "id, conversacion_id, contacto_id, nombre_cliente, telefono, direccion, canton, provincia, "
     "producto_sku, producto_nombre, producto_variante, cantidad, subtotal, total, metodo_pago, estado_pago, "
     "entrega_opcion_id, entrega_nombre, entrega_tipo, costo_envio, "
-    "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en"
+    "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en, "
+    "temperatura, temperatura_motivo, temperatura_origen, temperatura_en, temperatura_fijada_hasta, motivo_perdida, "
+    "cerrado_en, origen, id_anuncio, ctwa_clid"
+)
+
+
+# Una conversación acumula varios leads con el tiempo (uno por intención de compra): en la lista se muestra el ABIERTO o, si
+# ninguno lo está, el más reciente. Sin esto, cada lead repetiría la fila de su conversación.
+_LEAD_ACTUAL = (
+    "left join lateral (select nombre_cliente, producto_nombre from leads where conversacion_id = c.id "
+    "order by (temperatura in ('caliente', 'tibio', 'frio')) desc, creado_en desc, id desc limit 1) l on true"
 )
 
 
@@ -228,8 +240,7 @@ class ConversacionRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "select count(*) from conversaciones c join contactos ct on ct.id = c.contacto_id "
-                    f"left join leads l on l.conversacion_id = c.id {where}",
+                    f"select count(*) from conversaciones c join contactos ct on ct.id = c.contacto_id {_LEAD_ACTUAL} {where}",
                     params,
                 )
                 total = cur.fetchone()[0]
@@ -244,7 +255,7 @@ class ConversacionRepository:
                         m.rol as ultimo_mensaje_rol, m.contenido as ultimo_mensaje_contenido, m.creado_en as ultimo_mensaje_creado_en
                     from conversaciones c
                     join contactos ct on ct.id = c.contacto_id
-                    left join leads l on l.conversacion_id = c.id
+                    {_LEAD_ACTUAL}
                     left join lateral (
                         select rol, contenido, creado_en from mensajes
                         where conversacion_id = c.id order by creado_en desc limit 1
@@ -545,11 +556,29 @@ class LeadRepository:
 
     @staticmethod
     def obtener_por_conversacion(conversacion_id: int) -> Optional[dict]:
+        """El lead de esta conversación: el que está ABIERTO o, si ninguno lo está, el más reciente (una conversación
+        acumula varios leads con el tiempo, uno por cada intención de compra)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"select {_COLUMNAS_LEAD} from leads where conversacion_id = %s",
-                    (conversacion_id,),
+                    f"select {_COLUMNAS_LEAD} from leads where conversacion_id = %s "
+                    "order by (temperatura = any(%s)) desc, creado_en desc, id desc limit 1",
+                    (conversacion_id, list(ABIERTAS)),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                cols = [d[0] for d in cur.description]
+                return dict(zip(cols, row))
+
+    @staticmethod
+    def obtener_abierto(contacto_id: int) -> Optional[dict]:
+        """El lead abierto (caliente, tibio o frío) de un contacto, por el canal que sea. Hay a lo sumo uno."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"select {_COLUMNAS_LEAD} from leads where contacto_id = %s and temperatura = any(%s) limit 1",
+                    (contacto_id, list(ABIERTAS)),
                 )
                 row = cur.fetchone()
                 if row is None:
@@ -569,28 +598,58 @@ class LeadRepository:
                 return dict(zip(cols, row))
 
     @staticmethod
-    def crear(conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> dict:
-        """`telefono` es el de contacto/entrega del lead; puede faltar si el canal no lo da (Instagram, Messenger)."""
+    def crear(conversacion_id: int, contacto_id: int, telefono: Optional[str], dias_atribucion: int = 30) -> Optional[dict]:
+        """Abre un lead NUEVO para el contacto. `telefono` es el de contacto/entrega y puede faltar si el canal no lo da.
+
+        La atribución (de qué anuncio nace) es POR LEAD: hereda el último anuncio del contacto solo si llegó en los últimos
+        `dias_atribucion` días; si no, el lead es «directo» (un cliente que compró por un anuncio hace meses y vuelve solo no
+        es una venta de ese anuncio). Si el contacto ya tiene otro lead abierto (dos mensajes a la vez), no crea otro y
+        devuelve None: quien llama trae el que ya existe."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
+                    """
+                    select a.id_anuncio, a.ctwa_clid
+                    from conversacion_anuncios a join conversaciones c on c.id = a.conversacion_id
+                    where c.contacto_id = %s and a.creado_en >= now() - make_interval(days => %s)
+                    order by a.creado_en desc, a.id desc limit 1
+                    """,
+                    (contacto_id, dias_atribucion),
+                )
+                llegada = cur.fetchone()
+                origen, id_anuncio, ctwa_clid = ("anuncio", llegada[0], llegada[1]) if llegada else ("directo", None, None)
+                cur.execute(
                     f"""
-                    insert into leads (conversacion_id, contacto_id, telefono)
-                    values (%s, %s, %s)
+                    insert into leads (conversacion_id, contacto_id, telefono, origen, id_anuncio, ctwa_clid,
+                                       temperatura_motivo, temperatura_origen)
+                    values (%s, %s, %s, %s, %s, %s, 'Lead nuevo', 'regla')
+                    on conflict (contacto_id) where temperatura in ('caliente', 'tibio', 'frio') do nothing
                     returning {_COLUMNAS_LEAD}
                     """,
-                    (conversacion_id, contacto_id, telefono),
+                    (conversacion_id, contacto_id, telefono, origen, id_anuncio, ctwa_clid),
                 )
                 row = cur.fetchone()
+                if row is None:
+                    return None
                 cols = [d[0] for d in cur.description]
-                return dict(zip(cols, row))
+                lead = dict(zip(cols, row))
+                cur.execute(
+                    "insert into lead_historial (lead_id, de, a, origen, motivo) values (%s, null, %s, 'regla', 'Lead nuevo')",
+                    (lead["id"], lead["temperatura"]),
+                )
+                return lead
 
     @staticmethod
-    def obtener_o_crear(conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> dict:
-        existente = LeadRepository.obtener_por_conversacion(conversacion_id)
+    def obtener_o_crear(conversacion_id: int, contacto_id: int, telefono: Optional[str], dias_atribucion: int = 30) -> dict:
+        """El lead abierto del contacto o, si no tiene ninguno, uno nuevo (un cliente que vuelve por otro producto, o que ya
+        compró, abre otro lead; el anterior queda en su historial)."""
+        existente = LeadRepository.obtener_abierto(contacto_id)
         if existente is not None:
             return existente
-        return LeadRepository.crear(conversacion_id, contacto_id, telefono)
+        nuevo = LeadRepository.crear(conversacion_id, contacto_id, telefono, dias_atribucion)
+        if nuevo is not None:
+            return nuevo
+        return LeadRepository.obtener_abierto(contacto_id)  # otro hilo lo creó justo antes
 
     @staticmethod
     def actualizar_datos_cliente(
@@ -685,6 +744,7 @@ class LeadRepository:
 
     @staticmethod
     def actualizar_despacho(lead_id: int, id_pedido_local: int, id_pedido_rocketfy: Optional[int]) -> None:
+        """El pedido se creó en Rocketfy: el lead pasa a «despachado» y, por reglas, a «ganado» (misma transacción)."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -695,6 +755,7 @@ class LeadRepository:
                     """,
                     (id_pedido_local, id_pedido_rocketfy, lead_id),
                 )
+                fijar_temperatura(cur, lead_id, GANADO, ORIGEN_REGLA, "Pedido despachado por Rocketfy")
 
     @staticmethod
     def existe_pedido_previo(contacto_id: int) -> bool:

@@ -175,10 +175,10 @@ class TestDePuntaAPunta:
         assert parametros.valor(CLAVE) == 40
 
     @responses.activate
-    def test_la_lista_trae_los_dieciseis_con_sus_explicaciones(self, base_limpia):
+    def test_la_lista_trae_los_veintitres_con_sus_explicaciones(self, base_limpia):
         mock_login_ok()
         grupos = _client().get("/parametros", headers=AUTH_HEADER).get_json()["grupos"]
         todos = [p for g in grupos for p in g["parametros"]]
-        assert len(todos) == 16 and all(p["paraQueSirve"] and p["aplica"] for p in todos)
+        assert len(todos) == 23 and all(p["paraQueSirve"] and p["aplica"] for p in todos)
         modelo = next(p for p in todos if p["clave"] == "llm.modelo")
         assert modelo["sensible"] and {o["valor"] for o in modelo["opciones"]} >= {"claude-sonnet-5"}

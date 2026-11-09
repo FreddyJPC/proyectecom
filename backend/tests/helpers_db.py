@@ -28,6 +28,10 @@ def borrar_conversaciones_de_prueba(*ids_externos: str, canal: str = "whatsapp")
                     "delete from ventas where conversacion_id = any(%s) or contacto_id = any(%s)", (conversaciones, contactos)
                 )
                 cur.execute("delete from conversacion_anuncios where conversacion_id = any(%s)", (conversaciones,))
+                cur.execute(
+                    "delete from lead_historial where lead_id in (select id from leads where conversacion_id = any(%s))",
+                    (conversaciones,),
+                )
                 cur.execute("delete from leads where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute("delete from conversaciones where id = any(%s)", (conversaciones,))
             if contactos:

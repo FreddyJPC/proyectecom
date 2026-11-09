@@ -22,9 +22,9 @@ class TestInvariantesDelCatalogo:
         claves = [p.clave for p in CATALOGO]
         assert len(claves) == len(set(claves))
 
-    def test_los_dieciseis_parametros_estan(self):
+    def test_los_veintitres_parametros_estan(self):
         # 15 del plan de parametrización + «Fotos por envío» (ADR-012, galería de fotos).
-        assert len(CATALOGO) == 16
+        assert len(CATALOGO) == 23
 
     @pytest.mark.parametrize("p", CATALOGO, ids=lambda p: p.clave)
     def test_cada_parametro_esta_explicado_y_pertenece_a_un_grupo_real(self, p):

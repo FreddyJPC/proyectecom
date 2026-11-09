@@ -165,7 +165,8 @@ GRUPOS: Tuple[Grupo, ...] = (
     Grupo("victoria", "Victoria (el bot de WhatsApp)", "Cómo trabaja Victoria con cada cliente."),
     Grupo("textos", "Mensajes fijos al cliente", "Frases que el sistema envía sin pasar por la IA, en situaciones puntuales."),
     Grupo("stock", "Stock y productos", "Cuánto stock se considera poco, qué hace el sistema solo cuando un producto cambia y cómo funcionan las pruebas."),
-    Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy por su cuenta."),
+    Grupo("leads", "Leads (temperatura de los clientes)", "Cómo se enfría un lead cuando el cliente deja de contestar y de qué anuncio se considera que viene."),
+    Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy y enfría los leads por su cuenta."),
 )
 
 # ----------------------------------------------------------------------------
@@ -397,6 +398,90 @@ CATALOGO: Tuple[Parametro, ...] = (
         unidad="mensajes",
         aplica=APLICA_SIGUIENTE_USO,
     ),
+    # ------------------------------------------------------------------ Leads
+    Parametro(
+        clave="leads.enfriar_activo",
+        grupo="leads",
+        nombre="Enfriar leads cuando el cliente deja de contestar",
+        para_que_sirve=(
+            "Si está activo, un lead que no recibe respuesta del cliente va bajando solo de temperatura (caliente → tibio → frío → "
+            "perdido) según los días de silencio de abajo. Solo cambia la clasificación: no le escribe a nadie. Nunca toca un lead "
+            "cuya temperatura fijaste tú ni una conversación que está en tus manos (escalada o en gestión)."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="leads.dias_a_tibio",
+        grupo="leads",
+        nombre="Días para pasar de caliente a tibio",
+        para_que_sirve="Días sin que el cliente escriba para que un lead «caliente» pase a «tibio».",
+        tipo=TIPO_ENTERO,
+        defecto=2,
+        minimo=1,
+        maximo=30,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="leads.dias_a_frio",
+        grupo="leads",
+        nombre="Días para pasar a frío",
+        para_que_sirve="Días sin que el cliente escriba para que un lead «caliente» o «tibio» pase a «frío».",
+        tipo=TIPO_ENTERO,
+        defecto=5,
+        minimo=2,
+        maximo=60,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="leads.dias_a_perdido",
+        grupo="leads",
+        nombre="Días para dar el lead por perdido",
+        para_que_sirve=(
+            "Días sin que el cliente escriba para que un lead abierto pase a «perdido» (motivo: no respondió). Un lead perdido deja "
+            "de ser el lead abierto del cliente: si vuelve a escribir, se abre uno nuevo."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=14,
+        minimo=3,
+        maximo=180,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="leads.dias_fijar",
+        grupo="leads",
+        nombre="Cuánto dura la temperatura que fijas tú",
+        para_que_sirve=(
+            "Cuando cambias a mano la temperatura de un lead, el enfriamiento automático la respeta estos días. Pasado ese tiempo "
+            "vuelve a aplicarse el silencio del cliente."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=7,
+        minimo=1,
+        maximo=90,
+        unidad="días",
+        aplica=APLICA_SIGUIENTE_USO,
+    ),
+    Parametro(
+        clave="leads.dias_atribucion",
+        grupo="leads",
+        nombre="Días en que un anuncio cuenta como el origen de un lead nuevo",
+        para_que_sirve=(
+            "Cuando un cliente abre un lead nuevo, se considera que viene de un anuncio solo si tocó ese anuncio en los últimos días "
+            "indicados; si no, el lead es «directo». Así, un cliente que llegó por un anuncio hace meses y vuelve a escribir por su "
+            "cuenta no cuenta como venta de ese anuncio."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=30,
+        minimo=1,
+        maximo=365,
+        unidad="días",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
     # ----------------------------------------------------------------- Tareas
     Parametro(
         clave="jobs.minutos_sync_productos",
@@ -431,6 +516,18 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_AL_GUARDAR,
         sensible=True,
         aviso="Menos de 15 minutos no se permite para no saturar a Rocketfy.",
+    ),
+    Parametro(
+        clave="jobs.minutos_enfriar_leads",
+        grupo="tareas",
+        nombre="Enfriamiento de leads",
+        para_que_sirve="Cada cuántos minutos se revisan los leads abiertos para bajarles la temperatura si el cliente dejó de contestar.",
+        tipo=TIPO_ENTERO,
+        defecto=60,
+        minimo=15,
+        maximo=1440,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
     ),
     Parametro(
         clave="jobs.minutos_reconciliacion",

@@ -20,6 +20,8 @@ from src.routes.conversaciones import conversaciones_bp
 from src.routes.gestion import gestion_bp
 from src.routes.incidencias import incidencias_bp
 from src.routes.instrucciones import instrucciones_bp
+from src.routes.leads import contactos_bp, leads_bp
+from src.routes.leads.servicio import LeadsServicio
 from src.routes.metricas import metricas_bp
 from src.routes.parametros import parametros_bp
 from src.routes.pedidos import pedidos_bp
@@ -77,6 +79,8 @@ def create_app() -> Flask:
     app.register_blueprint(ventas_bp)
     app.register_blueprint(incidencias_bp)
     app.register_blueprint(instrucciones_bp)
+    app.register_blueprint(leads_bp)
+    app.register_blueprint(contactos_bp)
     app.register_blueprint(parametros_bp)
     app.register_blueprint(pedidos_bp)
     app.register_blueprint(productos_bp)
@@ -140,6 +144,13 @@ def _job_sync_productos() -> None:
         logging.getLogger(__name__).exception("Fallo no controlado en job de sincronización de productos")
 
 
+def _job_enfriar_leads() -> None:
+    try:
+        LeadsServicio().enfriar_por_silencio()
+    except Exception:
+        logging.getLogger(__name__).exception("Fallo no controlado en job de enfriamiento de leads")
+
+
 def _job_latido() -> None:
     try:
         LatidoService().ejecutar()
@@ -154,6 +165,7 @@ _INTERVALOS_DE_JOBS = {
     "reconciliacion_pedidos": "jobs.minutos_reconciliacion",
     "stock_watcher": "jobs.minutos_stock_watcher",
     "sync_productos": "jobs.minutos_sync_productos",
+    "enfriar_leads": "jobs.minutos_enfriar_leads",
 }
 
 
@@ -210,6 +222,7 @@ def start_scheduler():
         id="sync_productos",
         next_run_time=datetime.now().astimezone() + timedelta(minutes=MINUTOS_HASTA_PRIMERA_SINCRONIZACION),
     )
+    scheduler.add_job(_job_enfriar_leads, "interval", minutes=minutos["enfriar_leads"], id="enfriar_leads")
     scheduler.add_job(
         _job_latido,
         "interval",
@@ -224,8 +237,9 @@ def start_scheduler():
     # Logger propio: el de Flask se llama igual que este módulo ("src.app")
     # y tiene su propio handler, así que un mensaje de __name__ salía doble.
     logging.getLogger("src.scheduler").info(
-        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, latido DB %d h)",
-        minutos["reconciliacion_pedidos"], minutos["stock_watcher"], minutos["sync_productos"], HORAS_ENTRE_LATIDOS,
+        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, enfriamiento de leads %d min, latido DB %d h)",
+        minutos["reconciliacion_pedidos"], minutos["stock_watcher"], minutos["sync_productos"], minutos["enfriar_leads"],
+        HORAS_ENTRE_LATIDOS,
     )
     return scheduler
 

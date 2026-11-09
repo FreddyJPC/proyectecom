@@ -123,6 +123,10 @@ class TestCancelar:
         assert resultado["cancelada_en"] is not None
         assert resultado["stock_devuelto"] == 2 and _stock(producto["sku"]) == 5
         assert LeadRepository.obtener_por_id(lead["id"])["estado"] == "cancelado"
+        # Cancelar la venta pasa el lead de «ganado» a «perdido» (motivo: el que escribió el dueño), con su historial.
+        perdido = LeadRepository.obtener_por_id(lead["id"])
+        assert (perdido["temperatura"], perdido["motivo_perdida"], perdido["temperatura_motivo"]) == (
+            "perdido", "otro", "El cliente se arrepintió")
         # La solicitud pendiente de esa venta ya no tiene nada que gestionar y el chat queda libre.
         assert _solicitud(conversacion["id"])[0][1:] == ("atendida", "freddy@azoshop.ec", "Venta cancelada: El cliente se arrepintió")
         assert _estado_conversacion(conversacion["id"]) == "activa"

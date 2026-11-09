@@ -53,9 +53,12 @@ def armar_venta(
         "contacto_id": lead.get("contacto_id") or (conversacion or {}).get("contacto_id"),
         "proveedor_id": producto.get("proveedor_id") or 1,
         # ORIGEN = cómo llegó el cliente (anuncio | directo); CANAL = por dónde conversa (whatsapp | instagram | messenger).
-        "origen": (conversacion or {}).get("origen") or "directo",
+        # El origen y el anuncio son los DEL LEAD (atribución por intención de compra): un cliente que compró por un anuncio
+        # y meses después vuelve solo no convierte la venta nueva en venta del anuncio. Sin esos datos en el lead (leads
+        # anteriores a la migración 025), se usa lo que tenía la conversación.
+        "origen": (lead.get("origen") if "origen" in lead else (conversacion or {}).get("origen")) or "directo",
         "canal": (conversacion or {}).get("canal") or "whatsapp",
-        "id_anuncio": (conversacion or {}).get("id_anuncio"),
+        "id_anuncio": lead.get("id_anuncio") if "origen" in lead else (conversacion or {}).get("id_anuncio"),
         "estado": estado,
         "metodo_pago": lead.get("metodo_pago"),
         "cliente_nombre": lead.get("nombre_cliente"),
