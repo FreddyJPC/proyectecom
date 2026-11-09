@@ -268,6 +268,10 @@ posible y rotarlos.
   cliente recurrente, pantalla **Leads** y seguimiento automático (`seguimientos`) con **dos interruptores apagados** y la
   plantilla `retomar_conversacion` **creada en Meta y en revisión** (2026-11-09; pendiente #67). Aún no se ha visto la pantalla Leads con el login real ni a
   Victoria clasificando con conversaciones reales (pendiente #69). **Al desplegar una migración: primero la migración, después el código.** Plan: `docs/PLAN_LEADS_CRM.md`.
+- **Ráfagas, cola, fotos del bucket, ciudades con sentido común y confirmación de datos — desplegado 2026-11-09 (PR #31 y #32, migración 027,
+  27 migraciones):** Victoria junta los mensajes seguidos (`bot.segundos_espera_mensajes`), la cola reintenta y avisa por Telegram, solo envía fotos del
+  bucket de Supabase, corrige sin preguntar lo evidente (ciudades y variantes) y pide al cliente confirmar un resumen de sus datos antes de cerrar
+  (`bot.confirmar_datos_antes_de_cerrar`). **Aún no se ha visto con la IA real ni con clientes reales** (pendiente #74: lista en `docs/PRUEBAS_CON_ERRORES_HUMANOS.md`).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
