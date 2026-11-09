@@ -40,6 +40,9 @@ create table if not exists contactos (
 
 create unique index if not exists uq_contactos_telefono on contactos (telefono) where telefono is not null;
 
+-- Como el resto de las tablas: seguridad por filas activada y sin políticas (solo el servidor accede, con su propio rol).
+alter table contactos enable row level security;
+
 -- ---------------------------------------------------------------------------
 -- 2. Columnas nuevas (todavía sin obligar; se obliga tras migrar los datos)
 -- ---------------------------------------------------------------------------
