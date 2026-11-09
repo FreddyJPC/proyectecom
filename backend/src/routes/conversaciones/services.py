@@ -7,26 +7,32 @@ de este módulo (solo se le agregaron ahí los métodos nuevos que este
 módulo necesita: listar/contar para el dashboard, marcar_vista,
 actualizar_notas, marcar_esperando_pago).
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from src.integrations.whatsapp import WhatsAppBusinessError, WhatsAppClient, WhatsAppRequestError, get_whatsapp_client
+from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO as ESTADOS_QUE_ESPERAN_AL_DUENO
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository, MensajeRepository
 
 from .dto import (
+    AnuncioDTO,
     ConversacionDetalleDTO,
     ConversacionResumenDTO,
     DetalleCompletoDTO,
     LeadDTO,
+    LlegadaPorAnuncioDTO,
     ListaConversacionesDTO,
     MensajeDTO,
+    ProductoDeAnuncioDTO,
     TotalesPorFiltroRapidoDTO,
     UltimoMensajeDTO,
+    VentanaGratuitaDTO,
 )
 from .exceptions import ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
 
-VENTANA_SERVICIO_HORAS = 24
+# Cuántas llegadas por anuncio se listan en la pantalla de una conversación (la más reciente primero).
+MAXIMO_LLEGADAS_LISTADAS = 20
 
 
 def _iso(valor) -> Optional[str]:
@@ -40,39 +46,25 @@ class ConversacionesService:
         conversacion_repo: Optional[ConversacionRepository] = None,
         lead_repo: Optional[LeadRepository] = None,
         mensaje_repo: Optional[MensajeRepository] = None,
+        anuncio_servicio: Optional[AnuncioServicio] = None,
     ):
+        self._anuncios = anuncio_servicio or AnuncioServicio()
         self._whatsapp = whatsapp_client or get_whatsapp_client()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._leads = lead_repo or LeadRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
 
     def _ventana_abierta(self, conversacion: dict) -> Tuple[bool, Optional[datetime]]:
-        """
-        ventana_servicio_abierta = existe algún mensaje con rol='cliente' y
-            (now() - ese último mensaje.creado_en) < 24 horas
-        ventana_fep_abierta = origen == 'fep' AND fep_expira_en is not None
-            AND now() < fep_expira_en
-        ventana_abierta = servicio OR fep
+        """Ventana de SERVICIO de WhatsApp: abierta mientras no hayan pasado 24 horas desde el último mensaje del
+        cliente. Es la ÚNICA que permite mandar texto libre (fuera de ella, Meta solo acepta plantillas aprobadas).
 
-        Devuelve también CUÁNDO se cierra: la más próxima entre las que
-        siguen abiertas (no las que ya cerraron), para que el frontend
-        pueda mostrar "se cierra en X horas".
-        """
-        ahora = datetime.now(timezone.utc)
+        La ventana gratuita de los anuncios NO cuenta aquí: según la regla vigente de Meta es un beneficio de costo
+        (los mensajes no se cobran), no un permiso para escribir texto libre después de las 24 horas. Antes se trataba
+        como permiso («72 h de FEP»): esa era la regla anterior. Ver routes/anuncios/ventana.py.
 
-        cierre_servicio = None
-        mensajes_cliente = [m for m in self._mensajes.obtener_por_conversacion(conversacion["id"]) if m["rol"] == "cliente"]
-        if mensajes_cliente:
-            cierre_servicio = mensajes_cliente[-1]["creado_en"] + timedelta(hours=VENTANA_SERVICIO_HORAS)
-
-        cierre_fep = None
-        if conversacion.get("origen") == "fep" and conversacion.get("fep_expira_en") is not None:
-            cierre_fep = conversacion["fep_expira_en"]
-
-        vigentes = [c for c in (cierre_servicio, cierre_fep) if c is not None and c > ahora]
-        if not vigentes:
-            return False, None
-        return True, min(vigentes)
+        Devuelve también CUÁNDO se cierra, para que el frontend pueda mostrar «se cierra en X horas»."""
+        mensajes = self._mensajes.obtener_por_conversacion(conversacion["id"])
+        return self._anuncios.ventana_de_servicio(mensajes, datetime.now(timezone.utc))
 
     def listar_conversaciones(
         self,
@@ -131,7 +123,9 @@ class ConversacionesService:
             self._conversaciones.marcar_vista(conversacion_id)
             conversacion["vista_en"] = datetime.now(timezone.utc)
 
-        abierta, expira_en = self._ventana_abierta(conversacion)
+        mensajes_crudos = self._mensajes.obtener_por_conversacion(conversacion_id)
+        abierta, expira_en = self._anuncios.ventana_de_servicio(mensajes_crudos, datetime.now(timezone.utc))
+        origen = self._anuncios.origen_de_conversacion(conversacion, mensajes_crudos)
 
         lead_row = self._leads.obtener_por_conversacion(conversacion_id)
         lead_dto = None
@@ -154,7 +148,7 @@ class ConversacionesService:
 
         mensajes = [
             MensajeDTO(id=m["id"], rol=m["rol"], contenido=m["contenido"], tipo=m["tipo"], creado_en=_iso(m["creado_en"]))
-            for m in self._mensajes.obtener_por_conversacion(conversacion_id)
+            for m in mensajes_crudos
         ]
 
         conversacion_dto = ConversacionDetalleDTO(
@@ -168,9 +162,38 @@ class ConversacionesService:
             ventana_expira_en=_iso(expira_en),
             creada_en=_iso(conversacion["creada_en"]),
             actualizada_en=_iso(conversacion["actualizada_en"]),
+            ventana_gratuita=VentanaGratuitaDTO(
+                estado=origen["ventana_gratuita"]["estado"],
+                expira_en=_iso(origen["ventana_gratuita"]["expira_en"]),
+                responder_antes_de=_iso(origen["ventana_gratuita"]["responder_antes_de"]),
+            ),
+            anuncio=self._anuncio_dto(origen),
+            llegadas_por_anuncio=[
+                LlegadaPorAnuncioDTO(id_anuncio=l.get("id_anuncio"), titulo=l.get("titulo"), creado_en=_iso(l["creado_en"]))
+                for l in origen["llegadas"][:MAXIMO_LLEGADAS_LISTADAS]
+            ],
         )
 
         return DetalleCompletoDTO(conversacion=conversacion_dto, lead=lead_dto, mensajes=mensajes)
+
+    @staticmethod
+    def _anuncio_dto(origen: dict) -> Optional[AnuncioDTO]:
+        ultima = origen["ultima"]
+        if ultima is None:
+            return None
+        producto = origen["producto"]
+        return AnuncioDTO(
+            id_anuncio=ultima.get("id_anuncio"),
+            titulo=ultima.get("titulo"),
+            texto=ultima.get("texto"),
+            url_anuncio=ultima.get("url_anuncio"),
+            tipo_origen=ultima.get("tipo_origen"),
+            tipo_media=ultima.get("tipo_media"),
+            imagen_url=ultima.get("imagen_url"),
+            miniatura_url=ultima.get("miniatura_url"),
+            producto=ProductoDeAnuncioDTO(sku=producto["producto_sku"], nombre=producto["producto_nombre"]) if producto else None,
+            llegadas=len(origen["llegadas"]),
+        )
 
     def enviar_mensaje_manual(self, conversacion_id: int, contenido: str) -> MensajeDTO:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
@@ -180,9 +203,9 @@ class ConversacionesService:
         abierta, _ = self._ventana_abierta(conversacion)
         if not abierta:
             raise VentanaMensajeriaCerradaError(
-                "La ventana de mensajería de 24 horas está cerrada y esta conversación no tiene una ventana "
-                "FEP activa. No se puede enviar texto libre — solo una plantilla aprobada, que todavía no "
-                "está disponible desde este panel."
+                "La ventana de mensajería de 24 horas está cerrada: solo se puede escribir texto libre dentro de las "
+                "24 horas siguientes al último mensaje del cliente. Fuera de ella, Meta solo acepta plantillas "
+                "aprobadas, que todavía no están disponibles desde este panel."
             )
 
         mensaje = self._mensajes.crear(

@@ -63,6 +63,45 @@ class LeadDTO:
 
 
 @dataclass
+class VentanaGratuitaDTO:
+    """La ventana gratuita de Meta para clientes que llegan por anuncio (informativa: no decide si se puede escribir).
+    estado: sin_anuncio | pendiente | abierta | cerrada."""
+
+    estado: str
+    expira_en: Optional[str]
+    responder_antes_de: Optional[str]
+
+
+@dataclass
+class ProductoDeAnuncioDTO:
+    sku: str
+    nombre: str
+
+
+@dataclass
+class AnuncioDTO:
+    """El anuncio más reciente por el que llegó este cliente, con lo que Meta mandó de él."""
+
+    id_anuncio: Optional[str]
+    titulo: Optional[str]
+    texto: Optional[str]
+    url_anuncio: Optional[str]
+    tipo_origen: Optional[str]
+    tipo_media: Optional[str]
+    imagen_url: Optional[str]
+    miniatura_url: Optional[str]
+    producto: Optional[ProductoDeAnuncioDTO]
+    llegadas: int
+
+
+@dataclass
+class LlegadaPorAnuncioDTO:
+    id_anuncio: Optional[str]
+    titulo: Optional[str]
+    creado_en: Optional[str]
+
+
+@dataclass
 class ConversacionDetalleDTO:
     id: int
     telefono: str
@@ -74,6 +113,9 @@ class ConversacionDetalleDTO:
     ventana_expira_en: Optional[str]
     creada_en: Optional[str]
     actualizada_en: Optional[str]
+    ventana_gratuita: Optional[VentanaGratuitaDTO] = None
+    anuncio: Optional[AnuncioDTO] = None
+    llegadas_por_anuncio: Optional[List[LlegadaPorAnuncioDTO]] = None
 
 
 @dataclass

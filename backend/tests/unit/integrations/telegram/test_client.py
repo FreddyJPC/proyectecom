@@ -123,3 +123,35 @@ class TestAvisosDeGestion:
         TelegramNotifier(bot_token=None, chat_id=None).notificar_pedido_cerrado({})
         responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", body=RequestsConnectionError("sin red"))
         TelegramNotifier(bot_token="123:ABC", chat_id="999").notificar_pedido_cerrado({"cliente": "Ana"})  # no debe lanzar
+
+
+class TestOrigenDelClienteEnLosAvisos:
+    @responses.activate
+    def test_el_escalado_incluye_la_linea_de_origen_si_se_conoce(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
+
+        notifier.notificar_escalado(1, "593987654321", "pidió humano", origen="Viene de un anuncio «Audífonos» (ID 123)")
+
+        assert "Origen: Viene de un anuncio «Audífonos» (ID 123)" in json.loads(responses.calls[0].request.body)["text"]
+
+    @responses.activate
+    def test_sin_origen_el_mensaje_queda_igual_que_antes(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
+
+        notifier.notificar_escalado(1, "593987654321", "pidió humano")
+
+        assert "Origen" not in json.loads(responses.calls[0].request.body)["text"]
+
+    @responses.activate
+    def test_gestion_y_pedido_cerrado_tambien_lo_incluyen(self):
+        responses.add(responses.POST, "https://api.telegram.org/bot123:ABC/sendMessage", json={"ok": True}, status=200)
+        notifier = TelegramNotifier(bot_token="123:ABC", chat_id="999")
+
+        notifier.notificar_gestion("Quiere comprar", 1, "593987654321", "detalle", origen="Escribió directo (sin anuncio)")
+        notifier.notificar_pedido_cerrado({"cliente": "Ana", "conversacion_id": 1, "origen": "Viene de un anuncio (ID 9)"})
+
+        textos = [json.loads(c.request.body)["text"] for c in responses.calls]
+        assert "Origen: Escribió directo (sin anuncio)" in textos[0]
+        assert "Origen: Viene de un anuncio (ID 9)" in textos[1]

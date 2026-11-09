@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from src.integrations.whatsapp import WhatsAppAuthError
+from src.routes.anuncios.referral import normalizar_referral
 from src.routes.whatsapp.dto import MensajeEntranteDTO
 from src.routes.whatsapp.services import WebhookService
 
@@ -81,11 +81,29 @@ class FakeLeadRepository:
         return self._leads_por_conversacion.get(conversacion_id)
 
 
+class FakeAnuncioServicio:
+    """Sustituye al servicio de anuncios (que usa la base): registra lo que se le pide."""
+
+    def __init__(self, anuncio_nuevo=False, falla=False):
+        self.llegadas = []
+        self._anuncio_nuevo = anuncio_nuevo
+        self._falla = falla
+
+    def registrar_llegada(self, conversacion_id, mensaje_id, wamid, referral):
+        if self._falla:
+            raise RuntimeError("la base no responde")
+        self.llegadas.append({"conversacion_id": conversacion_id, "mensaje_id": mensaje_id, "wamid": wamid, "referral": referral})
+        return {"registrada": True, "anuncio_nuevo": self._anuncio_nuevo, "datos": normalizar_referral(referral)}
+
+    def describir_origen(self, conversacion_id):
+        return "Escribió directo (sin anuncio)"
+
+
 def _dto(wamid="wamid.1", telefono="593987654321", contenido="Hola", referral=None, tipo="texto"):
     return MensajeEntranteDTO(wamid=wamid, telefono=telefono, contenido=contenido, tipo=tipo, referral=referral)
 
 
-def _service(conv_repo=None, msg_repo=None, lead_repo=None, telegram=None, client=None, bot_worker=None):
+def _service(conv_repo=None, msg_repo=None, lead_repo=None, telegram=None, client=None, bot_worker=None, anuncios=None):
     return WebhookService(
         whatsapp_client=client or MagicMock(),
         conversacion_repo=conv_repo or FakeConversacionRepository(),
@@ -93,6 +111,7 @@ def _service(conv_repo=None, msg_repo=None, lead_repo=None, telegram=None, clien
         lead_repo=lead_repo or FakeLeadRepository(),
         telegram_notifier=telegram or MagicMock(),
         bot_worker=bot_worker or MagicMock(),
+        anuncio_servicio=anuncios or FakeAnuncioServicio(),
     )
 
 
@@ -118,9 +137,8 @@ class TestIdempotencia:
 
 
 class TestDeteccionDeOrigen:
-    def test_referral_presente_marca_origen_fep_con_ventana_72h(self):
+    def test_referral_presente_marca_origen_fep(self):
         conv_repo = FakeConversacionRepository()
-        antes = datetime.now(timezone.utc)
 
         _service(conv_repo=conv_repo).procesar_mensaje_entrante(
             _dto(referral={"source_id": "23847382910", "ctwa_clid": "abc123"})
@@ -130,7 +148,8 @@ class TestDeteccionDeOrigen:
         assert conversacion["origen"] == "fep"
         assert conversacion["id_anuncio"] == "23847382910"
         assert conversacion["ctwa_clid"] == "abc123"
-        assert conversacion["fep_expira_en"] > antes + timedelta(hours=71)
+        # La ventana gratuita ya no se calcula como «72 h desde el primer mensaje»: se deduce de los mensajes.
+        assert conversacion["fep_expira_en"] is None
 
     def test_sin_referral_marca_origen_directo(self):
         conv_repo = FakeConversacionRepository()
@@ -155,6 +174,98 @@ class TestDeteccionDeOrigen:
             mensaje_id=msg_repo.mensajes[0]["id"],
             texto_mensaje_cliente="Hola",
         )
+
+
+class TestLlegadaPorAnuncio:
+    """Cada mensaje que llega desde un anuncio se guarda COMPLETO, también si el cliente ya existía."""
+
+    REFERRAL = {
+        "source_id": "23847382910",
+        "source_type": "ad",
+        "headline": "Audífonos Pro",
+        "body": "Cancelación de ruido",
+        "source_url": "https://fb.me/abc",
+        "ctwa_clid": "clic-1",
+    }
+
+    def test_cliente_nuevo_por_anuncio_guarda_la_llegada_con_el_mensaje(self):
+        anuncios = FakeAnuncioServicio()
+        msg_repo = FakeMensajeRepository()
+
+        _service(msg_repo=msg_repo, anuncios=anuncios).procesar_mensaje_entrante(_dto(wamid="wamid.9", referral=self.REFERRAL))
+
+        assert len(anuncios.llegadas) == 1
+        llegada = anuncios.llegadas[0]
+        assert llegada["wamid"] == "wamid.9"
+        assert llegada["mensaje_id"] == msg_repo.mensajes[0]["id"]
+        assert llegada["referral"] == self.REFERRAL
+
+    def test_cliente_que_ya_existia_y_vuelve_por_otro_anuncio_tambien_se_registra(self):
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 99, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
+        )
+        anuncios = FakeAnuncioServicio()
+
+        _service(conv_repo=conv_repo, anuncios=anuncios).procesar_mensaje_entrante(_dto(referral=self.REFERRAL))
+
+        assert [l["conversacion_id"] for l in anuncios.llegadas] == [99]
+
+    def test_sin_referral_no_se_registra_ninguna_llegada(self):
+        anuncios = FakeAnuncioServicio()
+        _service(anuncios=anuncios).procesar_mensaje_entrante(_dto())
+        assert anuncios.llegadas == []
+
+    def test_la_llegada_se_registra_antes_de_encolar_la_respuesta(self):
+        """Para que Victoria ya vea el anuncio vigente al contestar."""
+        orden = []
+        anuncios = FakeAnuncioServicio()
+        original = anuncios.registrar_llegada
+        anuncios.registrar_llegada = lambda *a, **k: (orden.append("llegada"), original(*a, **k))[1]
+        bot_worker = MagicMock()
+        bot_worker.encolar.side_effect = lambda **k: orden.append("encolar")
+
+        _service(anuncios=anuncios, bot_worker=bot_worker).procesar_mensaje_entrante(_dto(referral=self.REFERRAL))
+
+        assert orden == ["llegada", "encolar"]
+
+    def test_si_falla_guardar_el_anuncio_el_cliente_igual_recibe_respuesta(self):
+        bot_worker = MagicMock()
+
+        _service(anuncios=FakeAnuncioServicio(falla=True), bot_worker=bot_worker).procesar_mensaje_entrante(
+            _dto(referral=self.REFERRAL)
+        )
+
+        bot_worker.encolar.assert_called_once()
+
+    def test_anuncio_nuevo_sin_vincular_avisa_por_telegram(self):
+        telegram = MagicMock()
+
+        _service(telegram=telegram, anuncios=FakeAnuncioServicio(anuncio_nuevo=True)).procesar_mensaje_entrante(
+            _dto(referral=self.REFERRAL)
+        )
+
+        telegram.notificar_aviso.assert_called_once()
+        titulo, detalle = telegram.notificar_aviso.call_args.args
+        assert "anuncio nuevo" in titulo
+        assert "23847382910" in detalle and "Audífonos Pro" in detalle
+
+    def test_anuncio_ya_conocido_no_vuelve_a_avisar(self):
+        telegram = MagicMock()
+        _service(telegram=telegram, anuncios=FakeAnuncioServicio(anuncio_nuevo=False)).procesar_mensaje_entrante(
+            _dto(referral=self.REFERRAL)
+        )
+        telegram.notificar_aviso.assert_not_called()
+
+    def test_el_aviso_de_escalado_incluye_de_donde_viene_el_cliente(self):
+        telegram = MagicMock()
+        lead_repo = FakeLeadRepository(despachados_por_telefono=["593987654321"])
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 5, "telefono": "593987654321", "origen": "fep", "estado": "activa"}}
+        )
+
+        _service(conv_repo=conv_repo, lead_repo=lead_repo, telegram=telegram).procesar_mensaje_entrante(_dto())
+
+        assert telegram.notificar_escalado.call_args.kwargs["origen"] == "Escribió directo (sin anuncio)"
 
 
 class TestReglasDeterministasDeEscalado:

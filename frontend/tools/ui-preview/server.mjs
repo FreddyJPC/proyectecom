@@ -88,14 +88,38 @@ const mensajesDe = (c) => {
   ];
   return base.map((m, i) => ({ id: c.id * 100 + i, rol: m[0], contenido: m[1], tipo: "texto", creadoEn: ago(180 - i * 22) }));
 };
+// Anuncios (Click-to-WhatsApp): lo que Meta manda de cada uno y a qué producto está vinculado (null = sin vincular).
+const anunciosMeta = {
+  "120210000123": { titulo: "Audífonos Bluetooth Pro · 30 h de batería", texto: "Cancelación de ruido, estuche de carga y envío a todo el Ecuador. Escríbenos y pregunta por tu color.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000123", tipoOrigen: "ad", tipoMedia: "image", imagenUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-1.svg`, miniaturaUrl: null },
+  "120210000456": { titulo: "Lámpara LED recargable", texto: "Luz cálida, 3 intensidades y hasta 20 horas de uso.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000456", tipoOrigen: "ad", tipoMedia: "video", imagenUrl: null, miniaturaUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-2.svg` },
+  "120210000789": { titulo: "Zapatos de cuero hechos a mano · 2x1", texto: null, urlAnuncio: null, tipoOrigen: "ad", tipoMedia: "image", imagenUrl: null, miniaturaUrl: null },
+};
+const vinculosAnuncio = { "120210000123": { sku: "AUD-BT-001", nombre: "Video principal" }, "120210000456": { sku: "LMP-LED-220", nombre: null } };
+const nombreProductoBot = (sku) => (productosBot.find((f) => f.sku === sku) || {}).nombre || sku;
+const anuncioDeConv = (c) => {
+  if (c.origen !== "fep") return { id: null, llegadas: [] };
+  const id = c.telefono === "593976543210" ? "120210000789" : c.telefono === "593998877665" ? "120210000456" : "120210000123";
+  const extra = c.telefono === "593987654321" ? [{ idAnuncio: "120210000456", titulo: anunciosMeta["120210000456"].titulo, creadoEn: ago(60 * 24 * 12) }] : [];
+  return { id, llegadas: [{ idAnuncio: id, titulo: anunciosMeta[id].titulo, creadoEn: c.creadaEn }, ...extra] };
+};
 const convDetalle = (id) => {
   const c = conversaciones.find((x) => String(x.id) === String(id)) || conversaciones[0];
   const cerrada = ["fria", "cerrada"].includes(c.estado);
+  const ad = anuncioDeConv(c);
+  const meta = ad.id ? anunciosMeta[ad.id] : null;
+  const vinculo = ad.id ? vinculosAnuncio[ad.id] : null;
+  const gratuita = !ad.id ? { estado: "sin_anuncio", expiraEn: null, responderAntesDe: null }
+    : c.estado === "fria" ? { estado: "cerrada", expiraEn: null, responderAntesDe: null }
+    : c.telefono === "593976543210" ? { estado: "pendiente", expiraEn: null, responderAntesDe: new Date(now + 20 * 3600000).toISOString() }
+    : { estado: "abierta", expiraEn: new Date(now + 5 * 86400000).toISOString(), responderAntesDe: null };
   return {
     conversacion: {
-      id: c.id, telefono: c.telefono, origen: c.origen, estado: c.estado, idAnuncio: c.origen === "fep" ? "120210000123" : null,
+      id: c.id, telefono: c.telefono, origen: c.origen, estado: c.estado, idAnuncio: ad.id,
       notasInternas: c.estado === "escalada" ? "Cliente pidió llamada. Escribirle primero por aquí." : "",
       ventanaAbierta: !cerrada, ventanaExpiraEn: cerrada ? null : new Date(now + 17 * 3600000).toISOString(), creadaEn: c.creadaEn, actualizadaEn: c.actualizadaEn,
+      ventanaGratuita: gratuita,
+      anuncio: meta ? { idAnuncio: ad.id, ...meta, producto: vinculo ? { sku: vinculo.sku, nombre: nombreProductoBot(vinculo.sku) } : null, llegadas: ad.llegadas.length } : null,
+      llegadasPorAnuncio: ad.llegadas,
     },
     lead: c.nombreCliente ? {
       nombreCliente: c.nombreCliente, direccion: "Av. 9 de Octubre 1234 y Boyacá", canton: "Guayaquil", provincia: "Guayas",
@@ -104,6 +128,61 @@ const convDetalle = (id) => {
     } : null,
     mensajes: mensajesDe(c),
   };
+};
+
+// ---------- Anuncios ----------
+const dosDecimales = (n) => Number(n).toFixed(2);
+const estadoAnuncios = [
+  { id: "120210000789", llegadas: 5, conversaciones: 5, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: ago(60 * 3), primera: ago(60 * 24 * 2) },
+  { id: "120210000123", llegadas: 14, conversaciones: 12, ventas: 3, ingresos: 104.7, ganancia: 38.4, sinCosto: 0, ultima: ago(25), primera: ago(60 * 24 * 20) },
+  { id: "120210000456", llegadas: 6, conversaciones: 5, ventas: 1, ingresos: 29.9, ganancia: 12.8, sinCosto: 1, ultima: ago(60 * 30), primera: ago(60 * 24 * 9) },
+  { id: "120210000999", llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true },
+];
+const nombresVinculo = { "120210000999": "Anuncio de prueba (zapatos)" };
+vinculosAnuncio["120210000999"] = { sku: "PROP-0001", nombre: "Anuncio de prueba (zapatos)" };
+const anuncioFila = (e) => {
+  const meta = anunciosMeta[e.id] || {};
+  const v = vinculosAnuncio[e.id];
+  return {
+    idAnuncio: e.id, productoSku: v ? v.sku : null, productoNombre: v ? nombreProductoBot(v.sku) : null, nombreVinculo: v ? v.nombre : null,
+    titulo: meta.titulo || null, texto: meta.texto || null, urlAnuncio: meta.urlAnuncio || null, tipoOrigen: meta.tipoOrigen || null, tipoMedia: meta.tipoMedia || null,
+    imagenUrl: meta.imagenUrl || null, miniaturaUrl: meta.miniaturaUrl || null, primeraLlegada: e.primera, ultimaLlegada: e.ultima,
+    llegadas: e.llegadas, conversaciones: e.conversaciones, ventas: e.ventas, ingresos: dosDecimales(e.ingresos), ganancia: dosDecimales(e.ganancia), ventasSinCosto: e.sinCosto,
+  };
+};
+const listaAnuncios = () => estadoAnuncios.map(anuncioFila).sort((a, b) => Number(a.productoSku !== null) - Number(b.productoSku !== null));
+const resumenAnuncios = () => ({
+  anuncio: { conversaciones: 17, ventas: 4, ingresos: "134.60", ganancia: "51.20" },
+  directo: { conversaciones: 9, ventas: 2, ingresos: "69.80", ganancia: "24.00" },
+  llegadas: 25, anunciosActivos: 3, anunciosSinVincular: estadoAnuncios.filter((e) => !e.soloVinculo && !vinculosAnuncio[e.id]).length,
+});
+const manejarAnuncios = (req, res, p, send) => {
+  if (p === "/anuncios" && req.method === "GET") return send(listaAnuncios());
+  if (p === "/anuncios/resumen" && req.method === "GET") return send(resumenAnuncios());
+  const m = p.match(/^\/anuncios\/([^/]+)\/producto$/);
+  if (m) {
+    const id = decodeURIComponent(m[1]);
+    if (req.method === "DELETE") {
+      if (!vinculosAnuncio[id]) return send({ error: `El anuncio ${id} no está vinculado a ningún producto.` }, 404);
+      delete vinculosAnuncio[id];
+      return send({ ok: true });
+    }
+    if (req.method === "PUT") {
+      let cuerpo = "";
+      req.on("data", (d) => (cuerpo += d));
+      return req.on("end", () => {
+        const dato = JSON.parse(cuerpo || "{}");
+        const producto = productosBot.find((f) => f.sku === dato.sku);
+        if (!producto) return send({ error: `No existe el producto ${dato.sku}.` }, 404);
+        const actual = vinculosAnuncio[id];
+        if (actual && actual.sku !== dato.sku && !dato.reasignar) return send({ error: `El anuncio ${id} ya está vinculado a ${nombreProductoBot(actual.sku)}.`, vinculadoA: { sku: actual.sku, nombre: nombreProductoBot(actual.sku) } }, 409);
+        vinculosAnuncio[id] = { sku: dato.sku, nombre: dato.nombre || (actual && actual.nombre) || null };
+        if (!estadoAnuncios.find((e) => e.id === id)) estadoAnuncios.push({ id, llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true });
+        return send({ idAnuncio: id, productoSku: dato.sku, productoNombre: producto.nombre });
+      });
+    }
+  }
+  return send({ error: "mock: ruta de anuncios no implementada " + p }, 404);
 };
 
 // ---------- Incidencias ----------
@@ -951,6 +1030,7 @@ const server = http.createServer((req, res) => {
     if (p === "/instrucciones-victoria" || p.startsWith("/instrucciones-victoria/")) return manejarInstrucciones(req, res, p, send);
     if (p.startsWith("/productos-bot")) return manejarProductosBot(req, res, p, q, send);
     if (p === "/gestion" || p.startsWith("/gestion/")) return manejarGestion(req, res, p, q, send);
+    if (p === "/anuncios" || p.startsWith("/anuncios/")) return manejarAnuncios(req, res, p, send);
     if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.

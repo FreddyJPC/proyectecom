@@ -105,7 +105,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **1487 tests pasando**.
+   desde `backend/`. Estado actual: **1580 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -246,6 +246,10 @@ posible y rotarlos.
   tarjeta de «Por gestionar». **Aún no se ha cancelado ni cobrado una venta real** (no hay
   ventas de productos propios todavía; pendiente #61). Al desplegar una migración: primero la
   migración, después el código.
+- **Anuncios (ADR-013, 2026-11-09): implementado y probado, SIN desplegar** (migración 023 pendiente de aplicar en
+  Supabase; después backend y frontend). Cada llegada por anuncio se guarda completa; pantalla «Anuncios»; panel «Origen»
+  en cada conversación; el texto libre del panel depende solo de las 24 h (la ventana gratuita de anuncio, «hasta 7 días
+  desde que respondemos», es informativa). **Aún no ha llegado un anuncio real** (pendiente #66).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

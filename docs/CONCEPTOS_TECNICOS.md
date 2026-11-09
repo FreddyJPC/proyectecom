@@ -1389,3 +1389,38 @@ esencial y la explicación completa queda a un toque.
   arma ese valor.
 - El texto de un campo que se repite en dos pantallas (la ficha y el formulario de producto propio) vive en un solo
   archivo, `producto/[sku]/info-campos.tsx`, para que no se desfase.
+
+
+## 43. Anuncios y ventanas de WhatsApp: de dónde viene cada cliente y qué te permite Meta
+
+**Qué es un anuncio «Click-to-WhatsApp».** Un anuncio de Facebook o Instagram con un botón que abre un chat de WhatsApp
+con tu número. Cuando el cliente escribe desde ahí, Meta manda junto al mensaje un paquete llamado **`referral`** con los
+datos del anuncio: su **ID**, el **título**, el **texto**, el **enlace**, la **imagen o el video** y un **ID de clic**
+(`ctwa_clid`). Si el cliente abrió el chat de otra forma (o desde WhatsApp Web o de escritorio), ese paquete no llega y
+cuenta como **directo**.
+
+**Qué guarda el sistema (todo, cada vez).** Cada mensaje que llega desde un anuncio queda en la tabla
+`conversacion_anuncios`, aunque ese cliente ya hubiera escrito antes: así se ve de qué anuncio vino la primera vez y de
+cuáles volvió. Además se guarda el paquete completo tal cual lo mandó Meta, por si agrega campos nuevos. En la
+conversación, el anuncio «vigente» es siempre el **último** por el que llegó (la venta se atribuye a ese).
+
+**Para qué sirve vincular un anuncio con un producto.** Si el anuncio está vinculado, Victoria sabe de qué producto habla
+desde el primer mensaje y no tiene que preguntarlo. Se puede vincular **antes** de que llegue el primer cliente con el ID
+del anuncio (lo ves en el Administrador de anuncios de Meta). Si llega un anuncio sin vincular, te llega un aviso por
+Telegram.
+
+**Las dos «ventanas» de WhatsApp (regla actual de Meta).**
+| Ventana | Cuándo se abre | Qué permite |
+|---|---|---|
+| **De servicio (24 h)** | Cada vez que el cliente te escribe; dura 24 h desde su último mensaje | Escribirle **texto libre**. Fuera de ella, solo plantillas aprobadas |
+| **Gratuita de anuncio (hasta 7 días)** | Cuando el cliente llegó por un anuncio **y tú le respondes dentro de las 24 h**; cuenta desde tu respuesta | Que Meta **no cobre** los mensajes (plantillas incluidas). **No** permite texto libre fuera de las 24 h |
+
+**Lo que cambió.** Antes el sistema creía que la ventana de anuncio era «72 horas desde el primer mensaje» y que
+permitía escribir texto libre: esa era la regla anterior de Meta. Con la actual, el panel solo deja escribir texto libre
+dentro de las 24 h, y la ventana gratuita se muestra como información (se calcula de los mensajes, no se guarda). «Hasta 7
+días» es el máximo que indica Meta; el momento exacto lo decide Meta.
+
+**Lo que todavía no se sabe.** Meta no documenta qué pasa si el cliente toca un **segundo** anuncio con la ventana
+abierta, ni si los mensajes siguientes al primero también traen el paquete `referral`; por eso se guarda todo en cuanto
+llega. Y **todavía no ha llegado ningún anuncio real** al sistema: la primera vez hay que revisar que lo guardado coincida
+con lo esperado (pendiente #66).

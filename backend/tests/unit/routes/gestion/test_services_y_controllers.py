@@ -60,19 +60,53 @@ class RepoFalso:
         return fila
 
 
+class AnunciosFalso:
+    """Sustituye al servicio de anuncios (que lee la base): responde siempre lo mismo."""
+
+    def describir_origen(self, conversacion_id):
+        return f"Viene de un anuncio «Audífonos» (conversación {conversacion_id})"
+
+
 class TelegramFalso:
     def __init__(self, falla=False):
-        self.gestiones, self.cerrados, self.falla = [], [], falla
+        self.gestiones, self.cerrados, self.falla, self.origenes = [], [], falla, []
 
-    def notificar_gestion(self, etiqueta, conversacion_id, telefono, detalle=""):
+    def notificar_gestion(self, etiqueta, conversacion_id, telefono, detalle="", origen=""):
         if self.falla:
             raise RuntimeError("telegram caído")
         self.gestiones.append((etiqueta, conversacion_id, telefono, detalle))
+        self.origenes.append(origen)
 
     def notificar_pedido_cerrado(self, datos):
         if self.falla:
             raise RuntimeError("telegram caído")
         self.cerrados.append(datos)
+
+
+class TestOrigenEnLosAvisos:
+    def test_el_aviso_de_gestion_dice_de_donde_viene_el_cliente(self):
+        telegram = TelegramFalso()
+        GestionService(RepoFalso(), telegram, anuncios=AnunciosFalso()).solicitar(7, 3, "quiere_comprar", None, "593")
+        assert telegram.origenes == ["Viene de un anuncio «Audífonos» (conversación 7)"]
+
+    def test_el_aviso_de_pedido_cerrado_incluye_el_origen(self):
+        telegram = TelegramFalso()
+        GestionService(RepoFalso(), telegram, anuncios=AnunciosFalso()).avisar_pedido_cerrado({"cliente": "Ana", "conversacion_id": 9})
+        assert telegram.cerrados[0]["origen"] == "Viene de un anuncio «Audífonos» (conversación 9)"
+
+    def test_si_el_origen_ya_viene_en_los_datos_no_se_pisa(self):
+        telegram = TelegramFalso()
+        GestionService(RepoFalso(), telegram, anuncios=AnunciosFalso()).avisar_pedido_cerrado({"conversacion_id": 9, "origen": "otro"})
+        assert telegram.cerrados[0]["origen"] == "otro"
+
+    def test_si_describir_el_origen_falla_el_aviso_sale_igual(self):
+        class Roto:
+            def describir_origen(self, conversacion_id):
+                raise RuntimeError("sin base")
+
+        telegram = TelegramFalso()
+        GestionService(RepoFalso(), telegram, anuncios=Roto()).solicitar(7, 3, "quiere_comprar", None, "593")
+        assert len(telegram.gestiones) == 1 and telegram.origenes == [""]
 
 
 class TestSolicitar:

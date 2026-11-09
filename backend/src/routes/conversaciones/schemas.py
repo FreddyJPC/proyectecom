@@ -55,6 +55,36 @@ class LeadSchema(Schema):
     id_pedido_rocketfy = fields.Int(data_key="idPedidoRocketfy", allow_none=True)
 
 
+class VentanaGratuitaSchema(Schema):
+    estado = fields.Str()
+    expira_en = fields.Str(data_key="expiraEn", allow_none=True)
+    responder_antes_de = fields.Str(data_key="responderAntesDe", allow_none=True)
+
+
+class ProductoDeAnuncioSchema(Schema):
+    sku = fields.Str()
+    nombre = fields.Str()
+
+
+class AnuncioSchema(Schema):
+    id_anuncio = fields.Str(data_key="idAnuncio", allow_none=True)
+    titulo = fields.Str(allow_none=True)
+    texto = fields.Str(allow_none=True)
+    url_anuncio = fields.Str(data_key="urlAnuncio", allow_none=True)
+    tipo_origen = fields.Str(data_key="tipoOrigen", allow_none=True)
+    tipo_media = fields.Str(data_key="tipoMedia", allow_none=True)
+    imagen_url = fields.Str(data_key="imagenUrl", allow_none=True)
+    miniatura_url = fields.Str(data_key="miniaturaUrl", allow_none=True)
+    producto = fields.Nested(ProductoDeAnuncioSchema, allow_none=True)
+    llegadas = fields.Int()
+
+
+class LlegadaPorAnuncioSchema(Schema):
+    id_anuncio = fields.Str(data_key="idAnuncio", allow_none=True)
+    titulo = fields.Str(allow_none=True)
+    creado_en = fields.Str(data_key="creadoEn", allow_none=True)
+
+
 class ConversacionDetalleSchema(Schema):
     id = fields.Int()
     telefono = fields.Str()
@@ -66,6 +96,9 @@ class ConversacionDetalleSchema(Schema):
     ventana_expira_en = fields.Str(data_key="ventanaExpiraEn", allow_none=True)
     creada_en = fields.Str(data_key="creadaEn", allow_none=True)
     actualizada_en = fields.Str(data_key="actualizadaEn", allow_none=True)
+    ventana_gratuita = fields.Nested(VentanaGratuitaSchema, data_key="ventanaGratuita", allow_none=True)
+    anuncio = fields.Nested(AnuncioSchema, allow_none=True)
+    llegadas_por_anuncio = fields.List(fields.Nested(LlegadaPorAnuncioSchema), data_key="llegadasPorAnuncio", allow_none=True)
 
 
 class MensajeSchema(Schema):

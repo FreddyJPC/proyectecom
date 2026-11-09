@@ -23,12 +23,13 @@ class TelegramNotifier:
         self._chat_id = chat_id
         self._advertido = False
 
-    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str) -> None:
+    def notificar_escalado(self, conversacion_id: int, telefono: str, motivo: str, origen: str = "") -> None:
         texto = (
             "🔴 Victoria escaló una conversación\n\n"
             f"Teléfono: {telefono}\n"
             f"Motivo: {motivo}\n"
-            f"Conversación ID: {conversacion_id}"
+            + (f"Origen: {origen}\n" if origen else "")
+            + f"Conversación ID: {conversacion_id}"
         )
         self._enviar(texto, {"conversacion_id": conversacion_id}, "el escalado")
 
@@ -37,13 +38,15 @@ class TelegramNotifier:
         por falta de stock). Igual que el escalado: best-effort, nunca lanza."""
         self._enviar(f"{titulo}\n\n{detalle}", {}, "un aviso")
 
-    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "") -> None:
+    def notificar_gestion(self, etiqueta: str, conversacion_id: int, telefono: str, detalle: str = "", origen: str = "") -> None:
         """«Cierre previo»: el cliente mostró una intención de compra y el dueño tiene que intervenir
         (ADR-012). El registro que no se pierde es la solicitud en la base («Por gestionar»); este aviso
         es solo el timbre, por eso es best-effort como todos."""
         partes = [f"🟡 Cierre previo: {etiqueta}", "", f"Teléfono: {telefono}"]
         if detalle:
             partes.append(f"Detalle: {detalle}")
+        if origen:
+            partes.append(f"Origen: {origen}")
         partes += [f"Conversación ID: {conversacion_id}", "", "Míralo en la app: Por gestionar."]
         self._enviar("\n".join(partes), {"conversacion_id": conversacion_id}, "una gestión pendiente")
 
@@ -61,6 +64,8 @@ class TelegramNotifier:
             f"Total a cobrar: ${datos.get('total', '—')}",
             f"Pago: {datos.get('pago', '—')}",
         ]
+        if datos.get("origen"):
+            lineas.append(f"Origen: {datos['origen']}")
         if datos.get("aviso"):
             lineas.append(f"⚠️ {datos['aviso']}")
         lineas += ["", f"Conversación ID: {datos.get('conversacion_id', '—')}", "Míralo en la app: Por gestionar."]
