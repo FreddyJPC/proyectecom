@@ -149,10 +149,10 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
 | Fase | Qué se entrega | Tamaño relativo |
 |---|---|---|
 | **F0** (hecha y desplegada) | **Cimientos multicanal (ADR-014, migración 024):** `contactos`, una conversación por canal, canal separado de origen, registro de canales de envío, claves protegidas contra el borrado. 1608 pruebas; **sin desplegar** | Hecho |
-| **F1** (hecha) | Migración 025, **varios leads por contacto** (ojo: `ConversacionRepository.listar` une `leads` por conversación y con varios leads repetiría filas: usar el lead más reciente), **atribución por oportunidad** (la venta copia el origen del lead), «no contactar» en el contacto, historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
-| **F2** (hecha) | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente con el historial del contacto en su contexto**, simulación. Tests | Mediano, el de más riesgo |
-| **F3** (hecha) | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
-| **F4** (hecha, apagada de fábrica; la plantilla de Meta no está creada) | Seguimiento: migración 026, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
+| **F1** (hecha y desplegada) | Migración 025, **varios leads por contacto** (ojo: `ConversacionRepository.listar` une `leads` por conversación y con varios leads repetiría filas: usar el lead más reciente), **atribución por oportunidad** (la venta copia el origen del lead), «no contactar» en el contacto, historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
+| **F2** (hecha y desplegada) | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente con el historial del contacto en su contexto**, simulación. Tests | Mediano, el de más riesgo |
+| **F3** (hecha y desplegada) | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
+| **F4** (hecha y desplegada, apagada de fábrica; la plantilla de Meta no está creada) | Seguimiento: migración 026, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
 | **F5** (opcional) | Tablero Kanban, exportar a CSV, recordatorios al dueño, conversión por temperatura y por anuncio | A pedido |
 | **R** (retención, cuando haga falta) | Depurar solo lo pesado y sin valor comercial (mensajes viejos de conversaciones cerradas, cola ya procesada, webhooks crudos), con interruptor apagado; ver §10 | Mediano; no urgente |
 
