@@ -53,6 +53,13 @@ class CanalWhatsApp:
     def enviar_imagen(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
         return self._cliente.enviar_imagen(telefono=id_externo, url=url, descripcion=descripcion)
 
+    def enviar_plantilla(self, id_externo: str, nombre_plantilla: str, variables: Optional[list] = None, idioma: str = "es") -> dict:
+        """Mensaje de plantilla aprobada por Meta: lo único que se puede enviar fuera de las 24 h. Solo WhatsApp lo tiene:
+        un canal sin este método no puede recibir seguimientos automáticos."""
+        return self._cliente.enviar_plantilla(
+            telefono=id_externo, nombre_plantilla=nombre_plantilla, variables=variables, idioma=idioma
+        )
+
 
 class RegistroCanales:
     """Los canales conectados, por nombre. `para(canal)` devuelve el adaptador o lanza `CanalNoDisponibleError`."""
@@ -71,6 +78,11 @@ class RegistroCanales:
 
     def conectados(self):
         return tuple(self._canales)
+
+    def con_plantillas(self):
+        """Los canales conectados que saben enviar plantillas (hoy, WhatsApp): los únicos a los que el seguimiento automático
+        puede escribirle fuera de las 24 h."""
+        return tuple(nombre for nombre, adaptador in self._canales.items() if hasattr(adaptador, "enviar_plantilla"))
 
 
 @lru_cache(maxsize=1)

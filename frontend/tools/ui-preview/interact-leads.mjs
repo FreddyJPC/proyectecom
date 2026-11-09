@@ -41,6 +41,14 @@ async function sesion(vp, mobile) {
   await page.waitForTimeout(500);
   await shot(page, "l-d-perdidos");
 
+  // Un lead al que el sistema ya le escribió (empujón y plantilla): se ve en su línea de tiempo.
+  await page.getByRole("button", { name: "Todos", exact: true }).click();
+  await page.getByPlaceholder("Buscar cliente o producto").fill("Daniela");
+  await page.getByRole("button", { name: "Daniela Vera" }).first().click();
+  await page.getByText("Se le envió la plantilla").waitFor();
+  await shot(page, "l-d-seguimientos");
+  await page.keyboard.press("Escape");
+  await page.getByPlaceholder("Buscar cliente o producto").fill("");
   await page.getByRole("button", { name: "Abiertos" }).click();
   await page.getByRole("button", { name: "María Fernanda Loor" }).click();
   await page.getByText("Cómo ha cambiado").waitFor();

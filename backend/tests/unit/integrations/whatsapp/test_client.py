@@ -119,6 +119,24 @@ class TestEnviarPlantilla:
         ]
 
 
+    @responses.activate
+    def test_una_plantilla_sin_variables_se_envia_sin_componentes(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.abc"}]}, status=200)
+
+        client.enviar_plantilla(telefono="593987654321", nombre_plantilla="retomar_conversacion")
+
+        body = json.loads(responses.calls[0].request.body)
+        assert body["template"] == {"name": "retomar_conversacion", "language": {"code": "es"}}
+
+    @responses.activate
+    def test_el_idioma_se_puede_elegir(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.abc"}]}, status=200)
+
+        client.enviar_plantilla(telefono="593987654321", nombre_plantilla="retomar_conversacion", idioma="es_MX")
+
+        assert json.loads(responses.calls[0].request.body)["template"]["language"] == {"code": "es_MX"}
+
+
 class TestMarcarComoLeido:
     @responses.activate
     def test_request_generado_correctamente(self, client):

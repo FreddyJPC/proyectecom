@@ -335,3 +335,38 @@ class TestListaDeConversacionesConVariosLeads:
         lista = ConversacionRepository.listar(q=T1)
         assert lista["total"] == 1 and len(lista["items"]) == 1
         assert lista["items"][0]["producto_nombre"] == "Zapatos"  # el lead abierto, no el que se perdió antes
+
+
+class TestSeguimientosEnLaPantalla:
+    """El seguimiento automático (migración 026) se ve en la lista (el último enviado) y en el detalle (todos, también los fallidos)."""
+
+    def test_la_lista_trae_el_ultimo_seguimiento_enviado_y_el_detalle_todos(self):
+        from src.jobs.seguimiento.repository import SeguimientoRepository
+
+        conv = _cliente()
+        lead = _lead(conv)
+        MensajeRepository.crear(conv["id"], "bot", "Hola, ¿en qué te ayudo?")  # la última palabra es de Victoria
+        sin_nada = next(f for f in LeadsRepository.listar(q=T1)["items"] if f["id"] == lead["id"])
+        assert sin_nada["seguimiento_tipo"] is None
+
+        fallido = SeguimientoRepository.reservar(lead["id"], "whatsapp", "plantilla", "Hola", "retomar_conversacion")
+        SeguimientoRepository.marcar_fallido(fallido, "Plantilla no aprobada")
+        enviado = SeguimientoRepository.reservar(lead["id"], "whatsapp", "empujon", "¿Sigue interesado(a)?")
+        SeguimientoRepository.marcar_enviado(enviado, conv["id"], "¿Sigue interesado(a)?", "wamid.t1")
+
+        fila = next(f for f in LeadsRepository.listar(q=T1)["items"] if f["id"] == lead["id"])
+        assert fila["seguimiento_tipo"] == "empujon" and fila["seguimiento_en"] is not None  # el fallido no cuenta como «enviado»
+        todos = LeadsRepository.seguimientos(lead["id"])
+        assert [(s["tipo"], s["estado"]) for s in todos] == [("empujon", "enviado"), ("plantilla", "fallido")]  # el más reciente primero
+        assert todos[1]["error"] == "Plantilla no aprobada" and todos[0]["enviado_en"] is not None
+
+    def test_la_lista_sigue_con_una_fila_por_lead_aunque_tenga_varios_seguimientos(self):
+        from src.jobs.seguimiento.repository import SeguimientoRepository
+
+        conv = _cliente()
+        lead = _lead(conv)
+        MensajeRepository.crear(conv["id"], "bot", "Hola, ¿en qué te ayudo?")
+        for tipo in ("empujon", "plantilla"):
+            sid = SeguimientoRepository.reservar(lead["id"], "whatsapp", tipo, "x", "p" if tipo == "plantilla" else None)
+            SeguimientoRepository.marcar_enviado(sid, conv["id"], "x", f"wamid.{tipo}")
+        assert len([f for f in LeadsRepository.listar(q=T1)["items"] if f["id"] == lead["id"]]) == 1

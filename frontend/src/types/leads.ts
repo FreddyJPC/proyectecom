@@ -42,6 +42,8 @@ export type Lead = {
   estadoConversacion: string | null;
   ultimoMensaje: { rol: string; contenido: string; creadoEn: string } | null;
   ultimoClienteEn: string | null;
+  /** El último mensaje de seguimiento automático que se le envió (empujón o plantilla), si hubo. */
+  ultimoSeguimiento: { tipo: TipoSeguimiento; enviadoEn: string | null } | null;
 };
 
 export type LeadsListado = {
@@ -66,6 +68,22 @@ export type ResumenLeads = {
   tasaDeCierre: string | null;
   noContactar: number;
   motivosDePerdida: { motivo: string; etiqueta: string; leads: number }[];
+};
+
+/** Empujón: texto libre dentro de las 24 h. Plantilla: mensaje aprobado por Meta, pasadas las 24 h. */
+export type TipoSeguimiento = "empujon" | "plantilla";
+
+/** Un mensaje que el sistema le escribió por su cuenta al cliente que dejó de contestar. */
+export type Seguimiento = {
+  id: number;
+  tipo: TipoSeguimiento;
+  /** Los `reservado` (envío a medias) llegan igual: se muestran como pendientes. */
+  estado: "reservado" | "enviado" | "fallido";
+  contenido: string | null;
+  plantilla: string | null;
+  error: string | null;
+  creadoEn: string;
+  enviadoEn: string | null;
 };
 
 export type CambioDeTemperatura = {
@@ -113,7 +131,7 @@ export type ContactoFicha = {
     llegadas: number;
     primera: string | null;
     ultima: string | null;
-    primerAnuncio: { id_anuncio: string; titulo: string | null } | null;
+    primerAnuncio: { idAnuncio: string; titulo: string | null } | null;
   };
 };
 
@@ -121,4 +139,5 @@ export type LeadDetalle = {
   lead: Lead;
   historial: CambioDeTemperatura[];
   contacto: ContactoFicha | null;
+  seguimientos: Seguimiento[];
 };

@@ -36,6 +36,9 @@ _DESDE = """
     left join lateral (
         select titulo from conversacion_anuncios where id_anuncio = l.id_anuncio order by creado_en desc, id desc limit 1
     ) a on true
+    left join lateral (
+        select tipo, enviado_en from seguimientos where lead_id = l.id and estado = 'enviado' order by id desc limit 1
+    ) sg on true
 """
 
 _COLUMNAS = """
@@ -46,7 +49,8 @@ _COLUMNAS = """
     l.temperatura_fijada_hasta, l.motivo_perdida, l.origen, l.id_anuncio, a.titulo as titulo_anuncio,
     l.creado_en, l.actualizado_en, l.cerrado_en,
     ct.no_contactar, ct.no_contactar_motivo,
-    m.rol as ultimo_rol, m.contenido as ultimo_contenido, m.creado_en as ultimo_en, mc.ultimo as ultimo_cliente_en
+    m.rol as ultimo_rol, m.contenido as ultimo_contenido, m.creado_en as ultimo_en, mc.ultimo as ultimo_cliente_en,
+    sg.tipo as seguimiento_tipo, sg.enviado_en as seguimiento_en
 """
 
 
@@ -132,6 +136,18 @@ class LeadsRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     "select id, de, a, origen, motivo, usuario, creado_en from lead_historial "
+                    "where lead_id = %s order by creado_en desc, id desc",
+                    (lead_id,),
+                )
+                return _filas(cur)
+
+    @staticmethod
+    def seguimientos(lead_id: int) -> List[Dict[str, Any]]:
+        """Los mensajes de seguimiento automático de este lead (los fallidos también: el dueño debe saber que se intentó)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select id, tipo, estado, contenido, plantilla, error, creado_en, enviado_en from seguimientos "
                     "where lead_id = %s order by creado_en desc, id desc",
                     (lead_id,),
                 )

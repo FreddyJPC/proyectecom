@@ -109,7 +109,10 @@ class LeadsServicio:
         ficha = self._repo.ficha_de_contacto(lead["contacto_id"])
         if ficha is not None:
             ficha["tipo"] = tipo_de_contacto(int(ficha["compras"]["compras"] or 0))
-        return {"lead": lead, "historial": self._repo.historial(lead_id), "contacto": ficha}
+        return {
+            "lead": lead, "historial": self._repo.historial(lead_id), "contacto": ficha,
+            "seguimientos": self._repo.seguimientos(lead_id),
+        }
 
     # ------------------------------------------------------------------ el dueño
     def cambiar_temperatura(

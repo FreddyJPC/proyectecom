@@ -60,6 +60,10 @@ def preparar_lead(f: Dict[str, Any]) -> Dict[str, Any]:
         "estadoConversacion": f.get("estado_conversacion"),
         "ultimoMensaje": ultimo,
         "ultimoClienteEn": _iso(f.get("ultimo_cliente_en")),
+        # El último mensaje de seguimiento automático que se le envió (empujón o plantilla), si hubo.
+        "ultimoSeguimiento": (
+            {"tipo": f["seguimiento_tipo"], "enviadoEn": _iso(f.get("seguimiento_en"))} if f.get("seguimiento_tipo") else None
+        ),
     }
 
 
@@ -125,7 +129,10 @@ def preparar_contacto(c: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             "llegadas": int(anuncios["llegadas"] or 0),
             "primera": _iso(anuncios.get("primera")),
             "ultima": _iso(anuncios.get("ultima")),
-            "primerAnuncio": c.get("primer_anuncio"),
+            "primerAnuncio": (
+                {"idAnuncio": c["primer_anuncio"]["id_anuncio"], "titulo": c["primer_anuncio"]["titulo"]}
+                if c.get("primer_anuncio") else None
+            ),
         },
     }
 
@@ -141,6 +148,14 @@ def preparar_detalle(d: Dict[str, Any]) -> Dict[str, Any]:
             for h in d["historial"]
         ],
         "contacto": preparar_contacto(d["contacto"]),
+        "seguimientos": [
+            {
+                "id": x["id"], "tipo": x["tipo"], "estado": x["estado"], "contenido": x.get("contenido"),
+                "plantilla": x.get("plantilla"), "error": x.get("error"), "creadoEn": _iso(x["creado_en"]),
+                "enviadoEn": _iso(x.get("enviado_en")),
+            }
+            for x in d.get("seguimientos", [])
+        ],
     }
 
 

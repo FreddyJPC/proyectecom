@@ -50,3 +50,22 @@ def test_la_etiqueta_del_cliente_dice_canal_y_telefono_o_identificador():
     # Si ya se conoce el teléfono de un cliente de otro canal, es lo más útil para el dueño.
     assert etiqueta_de_cliente("messenger", "9876", telefono="593987654321") == "Messenger · 593987654321"
     assert etiqueta_de_cliente(None, None) == "WhatsApp · —"
+
+
+def test_whatsapp_envia_plantillas_con_el_identificador_como_telefono():
+    cliente = MagicMock()
+    CanalWhatsApp(cliente).enviar_plantilla("593987654321", "retomar_conversacion")
+    cliente.enviar_plantilla.assert_called_once_with(
+        telefono="593987654321", nombre_plantilla="retomar_conversacion", variables=None, idioma="es"
+    )
+
+
+def test_el_registro_dice_que_canales_saben_enviar_plantillas():
+    class SoloTexto:
+        def enviar_texto(self, id_externo, mensaje):
+            return {}
+
+    registro = RegistroCanales({"whatsapp": CanalWhatsApp(MagicMock()), "instagram": SoloTexto()})
+    # Un canal sin plantillas queda fuera del seguimiento automático (no se le puede escribir pasadas las 24 h).
+    assert registro.con_plantillas() == ("whatsapp",)
+    assert registro.conectados() == ("whatsapp", "instagram")

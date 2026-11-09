@@ -166,7 +166,12 @@ GRUPOS: Tuple[Grupo, ...] = (
     Grupo("textos", "Mensajes fijos al cliente", "Frases que el sistema envía sin pasar por la IA, en situaciones puntuales."),
     Grupo("stock", "Stock y productos", "Cuánto stock se considera poco, qué hace el sistema solo cuando un producto cambia y cómo funcionan las pruebas."),
     Grupo("leads", "Leads (temperatura de los clientes)", "Cómo se enfría un lead cuando el cliente deja de contestar y de qué anuncio se considera que viene."),
-    Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy y enfría los leads por su cuenta."),
+    Grupo(
+        "seguimiento",
+        "Seguimiento automático de clientes",
+        "Mensajes que el sistema le escribe por su cuenta a un cliente que dejó de contestar: cuándo, a quién, cuántos y con qué texto.",
+    ),
+    Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
 # ----------------------------------------------------------------------------
@@ -497,6 +502,132 @@ CATALOGO: Tuple[Parametro, ...] = (
         unidad="días",
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
+    # ------------------------------------------------------------ Seguimiento
+    Parametro(
+        clave="seguimiento.empujon_activo",
+        grupo="seguimiento",
+        nombre="Escribirle un empujón al cliente que dejó de contestar",
+        para_que_sirve=(
+            "Si está activo, el sistema le escribe UN mensaje corto (el texto de abajo) al cliente interesado que lleva unas horas "
+            "sin contestar, mientras la ventana de 24 horas de WhatsApp sigue abierta (es gratis). Solo una vez por cliente en toda "
+            "su vida. Nunca le escribe a quien marcaste «no contactar», a leads perdidos o ganados, ni a conversaciones que atiendes tú. "
+            "El mensaje queda guardado en la conversación para que Victoria sepa que ya se le escribió."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+        sensible=True,
+        aviso="Escribirle a un cliente que no te escribió primero puede molestarlo; si muchos bloquean tus mensajes, Meta baja la calidad de tu número.",
+    ),
+    Parametro(
+        clave="seguimiento.plantilla_activa",
+        grupo="seguimiento",
+        nombre="Retomar con una plantilla a los clientes de anuncio",
+        para_que_sirve=(
+            "Si está activo, el sistema le envía UNA plantilla aprobada por Meta (la de abajo) al cliente que llegó por un anuncio, "
+            "mostró interés y dejó de contestar, pasadas las 24 horas, mientras Meta no cobra los mensajes de esa conversación (la "
+            "ventana gratuita de anuncio, hasta 7 días). Solo una vez por cliente en toda su vida y con las mismas protecciones que "
+            "el empujón. Requiere que la plantilla esté creada y aprobada en Meta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+        sensible=True,
+        aviso="Si Meta no tiene la plantilla aprobada, los envíos fallan (el sistema lo avisa por Telegram y deja de intentarlo en esa corrida).",
+    ),
+    Parametro(
+        clave="seguimiento.horas_empujon",
+        grupo="seguimiento",
+        nombre="Horas de silencio antes del empujón",
+        para_que_sirve=(
+            "Cuántas horas deben pasar desde el último mensaje del cliente para escribirle el empujón. Debe quedar tiempo antes de "
+            "que se cierre la ventana de 24 horas: pasada esa ventana, solo se puede enviar la plantilla."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=4,
+        minimo=1,
+        maximo=20,
+        unidad="horas",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.tope_diario",
+        grupo="seguimiento",
+        nombre="Máximo de seguimientos por día",
+        para_que_sirve=(
+            "Cuántos mensajes de seguimiento (empujones y plantillas juntos) se envían como máximo en un día, contado en hora de "
+            "Ecuador. Es un freno de seguridad: protege la calidad de tu número y evita sorpresas si algo se descontrola."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=10,
+        minimo=1,
+        maximo=200,
+        unidad="mensajes",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.hora_desde",
+        grupo="seguimiento",
+        nombre="Hora desde la que se envían seguimientos",
+        para_que_sirve="Primera hora del día (hora de Ecuador, de 0 a 23) en que el sistema puede escribirles a los clientes. Antes de esa hora no envía nada.",
+        tipo=TIPO_ENTERO,
+        defecto=9,
+        minimo=0,
+        maximo=23,
+        unidad="hora",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.hora_hasta",
+        grupo="seguimiento",
+        nombre="Hora hasta la que se envían seguimientos",
+        para_que_sirve=(
+            "Hora del día (hora de Ecuador, de 1 a 24) en que el sistema deja de escribirles a los clientes: con 20, el último "
+            "mensaje sale antes de las 20:00. Debe ser mayor que la hora de inicio; si no lo es, no se envía nada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=20,
+        minimo=1,
+        maximo=24,
+        unidad="hora",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.texto_empujon",
+        grupo="seguimiento",
+        nombre="Texto del empujón",
+        para_que_sirve="El mensaje corto que recibe el cliente que dejó de contestar, dentro de las 24 horas. Trátalo de usted, como Victoria.",
+        tipo=TIPO_TEXTO,
+        defecto="Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊",
+        largo_maximo=400,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.plantilla_nombre",
+        grupo="seguimiento",
+        nombre="Nombre de la plantilla en Meta",
+        para_que_sirve=(
+            "El nombre exacto de la plantilla aprobada en Meta que se envía fuera de las 24 horas (solo minúsculas, números y guion "
+            "bajo). Debe ser una plantilla sin variables."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="retomar_conversacion",
+        largo_maximo=100,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="seguimiento.texto_plantilla",
+        grupo="seguimiento",
+        nombre="Texto de la plantilla",
+        para_que_sirve=(
+            "Lo que dice la plantilla aprobada en Meta. Cambiarlo aquí NO cambia lo que recibe el cliente (eso lo define Meta): solo "
+            "sirve para dejar anotado en la conversación lo que se envió. Debe ser igual al texto aprobado."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido. ¿Sigue interesado(a)?",
+        largo_maximo=1024,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
     # ----------------------------------------------------------------- Tareas
     Parametro(
         clave="jobs.minutos_sync_productos",
@@ -541,6 +672,21 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=60,
         minimo=15,
         maximo=1440,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
+    ),
+    Parametro(
+        clave="jobs.minutos_seguimiento",
+        grupo="tareas",
+        nombre="Seguimiento automático de clientes",
+        para_que_sirve=(
+            "Cada cuántos minutos se revisa si hay clientes a quienes escribirles un seguimiento. Solo hace algo si activaste "
+            "alguno de los envíos en «Seguimiento automático de clientes»."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=30,
+        minimo=15,
+        maximo=240,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),

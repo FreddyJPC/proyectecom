@@ -86,6 +86,18 @@ class TestListar:
         assert (lead["origen"], lead["tituloAnuncio"], lead["noContactar"]) == ("anuncio", "Audífonos 2x1", False)
 
     @responses.activate
+    def test_la_lista_trae_el_ultimo_seguimiento_enviado(self, cliente):
+        mock_login_ok()
+        servicio = MagicMock()
+        servicio.listar.return_value = {
+            "items": [_fila(), _fila(id=8, seguimiento_tipo="empujon", seguimiento_en=AHORA)], "total": 2, "page": 1, "page_size": 20,
+        }
+        with _servicio(servicio):
+            sin, con = cliente.get("/leads", headers=AUTH_HEADER).get_json()["items"]
+        assert sin["ultimoSeguimiento"] is None
+        assert con["ultimoSeguimiento"] == {"tipo": "empujon", "enviadoEn": AHORA.isoformat()}
+
+    @responses.activate
     def test_pasa_los_filtros_al_servicio(self, cliente):
         mock_login_ok()
         servicio = MagicMock()
@@ -157,8 +169,38 @@ class TestDetalleYCambios:
         c = r.get_json()
         assert c["historial"][0]["a"] == "caliente" and c["contacto"]["tipo"] == "cliente"
         assert c["contacto"]["compras"] == {"cantidad": 1, "totalGastado": "40.00", "ganancia": "15.00", "comprasSinCosto": 0, "ultimaCompra": AHORA.isoformat()}
-        assert c["contacto"]["anuncios"]["primerAnuncio"]["idAnuncio"] if False else c["contacto"]["anuncios"]["primerAnuncio"] == {"id_anuncio": "123", "titulo": "Audífonos 2x1"}
+        assert c["contacto"]["anuncios"]["primerAnuncio"] == {"idAnuncio": "123", "titulo": "Audífonos 2x1"}
         assert c["contacto"]["conversaciones"][0]["idExterno"] == "593987654321"
+
+    @responses.activate
+    def test_el_detalle_trae_los_seguimientos_automaticos_enviados_y_fallidos(self, cliente):
+        mock_login_ok()
+        servicio = MagicMock()
+        servicio.detalle.return_value = {
+            "lead": _fila(), "historial": [], "contacto": _contacto(),
+            "seguimientos": [
+                {"id": 2, "tipo": "plantilla", "estado": "fallido", "contenido": "Hola", "plantilla": "retomar_conversacion",
+                 "error": "Plantilla no aprobada", "creado_en": AHORA, "enviado_en": None},
+                {"id": 1, "tipo": "empujon", "estado": "enviado", "contenido": "¿Sigue interesado(a)?", "plantilla": None,
+                 "error": None, "creado_en": AHORA, "enviado_en": AHORA},
+            ],
+        }
+        with _servicio(servicio):
+            c = cliente.get("/leads/7", headers=AUTH_HEADER).get_json()
+        assert [s["tipo"] for s in c["seguimientos"]] == ["plantilla", "empujon"]
+        assert c["seguimientos"][0] == {
+            "id": 2, "tipo": "plantilla", "estado": "fallido", "contenido": "Hola", "plantilla": "retomar_conversacion",
+            "error": "Plantilla no aprobada", "creadoEn": AHORA.isoformat(), "enviadoEn": None,
+        }
+        assert c["seguimientos"][1]["enviadoEn"] == AHORA.isoformat()
+
+    @responses.activate
+    def test_un_detalle_sin_seguimientos_los_trae_vacios(self, cliente):
+        mock_login_ok()
+        servicio = MagicMock()
+        servicio.detalle.return_value = {"lead": _fila(), "historial": [], "contacto": None}
+        with _servicio(servicio):
+            assert cliente.get("/leads/7", headers=AUTH_HEADER).get_json()["seguimientos"] == []
 
     @responses.activate
     def test_lead_inexistente_es_404(self, cliente):

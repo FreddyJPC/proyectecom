@@ -1,5 +1,5 @@
 import type { EstadoInfo } from "@/lib/estados";
-import type { MotivoPerdida, OrigenTemperatura, Temperatura, TipoDeContacto } from "@/types/leads";
+import type { MotivoPerdida, OrigenTemperatura, Seguimiento, Temperatura, TipoDeContacto, TipoSeguimiento } from "@/types/leads";
 
 /**
  * Temperatura de un lead (docs/PLAN_LEADS_CRM.md §2.2): qué tan probable es que compre. Espejo de
@@ -73,4 +73,17 @@ export function nombreOrigen(origen: string): string {
 /** ¿Esta fecha todavía no llega? (p. ej. hasta cuándo está fijada la temperatura). Solo presentación. */
 export function esFutura(iso: string | null | undefined): boolean {
   return !!iso && new Date(iso).getTime() > Date.now();
+}
+
+export const NOMBRE_DE_SEGUIMIENTO: Record<TipoSeguimiento, string> = {
+  empujon: "Empujón",
+  plantilla: "Plantilla de Meta",
+};
+
+/** Cómo se cuenta un seguimiento en la línea de tiempo: «Se le escribió un empujón», «No se pudo enviar la plantilla»… */
+export function descripcionDeSeguimiento(s: Pick<Seguimiento, "tipo" | "estado">): string {
+  const que = s.tipo === "plantilla" ? "la plantilla" : "un empujón";
+  if (s.estado === "fallido") return `No se pudo enviar ${que}`;
+  if (s.estado === "reservado") return `Se intentó enviar ${que} (sin confirmar)`;
+  return s.tipo === "plantilla" ? "Se le envió la plantilla" : "Se le escribió un empujón";
 }

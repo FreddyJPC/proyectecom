@@ -177,6 +177,10 @@ export default function LeadsPage() {
             <p>
               Calientes, tibios, fríos y el valor en juego son de <strong>ahora</strong>. La tasa de cierre (ganados entre ganados y perdidos) y los motivos de pérdida son del periodo que elijas.
             </p>
+            <h3>Seguimiento automático</h3>
+            <p>
+              Si lo activas en <strong>Parámetros</strong>, el sistema le escribe por su cuenta al cliente interesado que dejó de contestar: un <strong>empujón</strong> dentro de las 24 horas y, a los de anuncio, una <strong>plantilla</strong> después. Solo una vez de cada uno por cliente, con tope diario y horario. Viene apagado.
+            </p>
             <h3>No contactar</h3>
             <p>Protege a la persona: ningún mensaje automático le llega, en ningún canal. Se ve en el detalle de cada lead.</p>
           </InfoButton>
@@ -305,6 +309,11 @@ export default function LeadsPage() {
                         {l.noContactar && <StatusBadge label="No contactar" variant="danger" className="h-5 px-2 text-[0.7rem]" />}
                         <span className="rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">{etapaLead(l.etapa)}</span>
                         {l.origen === "anuncio" && <span className="rounded-full border px-2 py-0.5 text-[0.7rem] text-muted-foreground">Anuncio</span>}
+                        {l.ultimoSeguimiento && (
+                          <span className="rounded-full border px-2 py-0.5 text-[0.7rem] text-muted-foreground">
+                            Seguimiento · {tiempoRelativo(l.ultimoSeguimiento.enviadoEn)}
+                          </span>
+                        )}
                         {l.canal !== "whatsapp" && <span className="rounded-full border px-2 py-0.5 text-[0.7rem] text-muted-foreground">{nombreCanal(l.canal)}</span>}
                       </div>
                     </div>
@@ -364,7 +373,10 @@ export default function LeadsPage() {
                         {nombreOrigen(l.origen)}
                         {l.tituloAnuncio && <p className="max-w-40 truncate text-xs text-muted-foreground">{l.tituloAnuncio}</p>}
                       </TableCell>
-                      <TableCell className="pr-5 text-right text-sm text-muted-foreground">{tiempoRelativo(l.actualizadoEn)}</TableCell>
+                      <TableCell className="pr-5 text-right text-sm text-muted-foreground">
+                        {tiempoRelativo(l.actualizadoEn)}
+                        {l.ultimoSeguimiento && <p className="text-xs">Seguimiento {tiempoRelativo(l.ultimoSeguimiento.enviadoEn)}</p>}
+                      </TableCell>
                     </TableRow>
                   );
                 })}

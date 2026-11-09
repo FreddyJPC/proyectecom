@@ -95,25 +95,26 @@ class WhatsAppClient:
         }
         return self._post(payload)
 
-    def enviar_plantilla(self, telefono: str, nombre_plantilla: str, variables: Optional[List[str]] = None) -> dict:
+    def enviar_plantilla(
+        self, telefono: str, nombre_plantilla: str, variables: Optional[List[str]] = None, idioma: str = "es"
+    ) -> dict:
         """POST .../messages, type=template. Única forma permitida de
         escribirle primero a un cliente, o de reabrir la conversación tras
         24h sin respuesta -- Meta exige plantillas pre-aprobadas para eso
-        (ver docs/BotPlanifiacion.md, sección 4, Flujo 2)."""
+        (ver docs/BotPlanifiacion.md, sección 4, Flujo 2).
+
+        Una plantilla SIN variables se envía sin `components`: mandar un componente de cuerpo con la lista de parámetros
+        vacía no es lo que Meta espera para una plantilla que no los tiene."""
+        plantilla: dict = {"name": nombre_plantilla, "language": {"code": idioma}}
+        if variables:
+            plantilla["components"] = [
+                {"type": "body", "parameters": [{"type": "text", "text": variable} for variable in variables]}
+            ]
         payload = {
             "messaging_product": "whatsapp",
             "to": telefono,
             "type": "template",
-            "template": {
-                "name": nombre_plantilla,
-                "language": {"code": "es"},
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": variable} for variable in (variables or [])],
-                    }
-                ],
-            },
+            "template": plantilla,
         }
         return self._post(payload)
 

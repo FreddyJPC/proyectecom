@@ -1,6 +1,6 @@
 "use client";
 
-import { BellOff, ExternalLink, MessageCircle, Pencil, TriangleAlert } from "lucide-react";
+import { BellOff, ExternalLink, MessageCircle, Pencil, Send, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
@@ -17,11 +17,15 @@ import { useApi } from "@/hooks/use-api";
 import { lineaDeCanal, nombreCanal, nombreDeCliente } from "@/lib/canales";
 import { estadoConversacionInfo } from "@/lib/estados";
 import { formatFecha, formatFechaHora, formatMoney, tiempoRelativo } from "@/lib/format";
-import { esFutura, etapaLead, nombreOrigen, ORIGEN_TEMPERATURA, temperaturaImpuesta, temperaturaInfo, TIPOS_CONTACTO } from "@/lib/leads";
-import type { LeadDetalle } from "@/types/leads";
+import { descripcionDeSeguimiento, esFutura, etapaLead, NOMBRE_DE_SEGUIMIENTO, nombreOrigen, ORIGEN_TEMPERATURA, temperaturaImpuesta, temperaturaInfo, TIPOS_CONTACTO } from "@/lib/leads";
+import type { CambioDeTemperatura, LeadDetalle, Seguimiento } from "@/types/leads";
 
 import { CambiarTemperaturaDialog, NoContactarDialog } from "./acciones-lead";
 import { TemperaturaBadge } from "./temperatura-badge";
+
+type Evento =
+  | { clase: "temperatura"; id: string; fecha: string; cambio: CambioDeTemperatura }
+  | { clase: "seguimiento"; id: string; fecha: string; seguimiento: Seguimiento };
 
 function Seccion({ titulo, info, children }: { titulo: string; info?: ReactNode; children: ReactNode }) {
   return (
@@ -62,6 +66,14 @@ export function LeadDetalleSheet({ leadId, onCerrar, onCambio }: { leadId: numbe
   const nombre = lead ? nombreDeCliente({ nombre: lead.nombre, telefono: lead.telefono, idExterno: lead.idExterno }) : "Lead";
   const impuesta = lead ? temperaturaImpuesta(lead.etapa) : null;
   const fijadaVigente = esFutura(lead?.temperaturaFijadaHasta);
+
+  // La línea de tiempo mezcla los cambios de temperatura y los seguimientos automáticos, lo más reciente primero.
+  const eventos: Evento[] = datos
+    ? [
+        ...datos.historial.map((cambio): Evento => ({ clase: "temperatura", id: `t${cambio.id}`, fecha: cambio.creadoEn, cambio })),
+        ...datos.seguimientos.map((seguimiento): Evento => ({ clase: "seguimiento", id: `s${seguimiento.id}`, fecha: seguimiento.enviadoEn ?? seguimiento.creadoEn, seguimiento })),
+      ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    : [];
 
   function alGuardar() {
     detalle.recargar();
@@ -171,31 +183,62 @@ export function LeadDetalleSheet({ leadId, onCerrar, onCambio }: { leadId: numbe
                 </Button>
               </Seccion>
 
-              <Seccion titulo="Cómo ha cambiado">
-                {datos.historial.length === 0 ? (
+              <Seccion
+                titulo="Cómo ha cambiado"
+                info={
+                  <InfoButton titulo="La línea de tiempo del lead">
+                    <p>
+                      Cada cambio de temperatura (con quién lo hizo y por qué) y cada mensaje de <strong>seguimiento automático</strong> que el sistema le escribió al cliente por su cuenta.
+                    </p>
+                    <ul>
+                      <li><strong>Empujón:</strong> un mensaje corto dentro de las 24 horas de WhatsApp, cuando el cliente deja de contestar.</li>
+                      <li><strong>Plantilla:</strong> un mensaje aprobado por Meta, pasadas las 24 horas, para clientes que llegaron por un anuncio.</li>
+                    </ul>
+                    <p>Los seguimientos vienen apagados: los activas en Parámetros → «Seguimiento automático de clientes».</p>
+                  </InfoButton>
+                }
+              >
+                {eventos.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Todavía no hay cambios registrados.</p>
                 ) : (
                   <ol className="relative ml-1 space-y-4 border-l pl-4">
-                    {datos.historial.map((h) => (
-                      <li key={h.id} className="relative space-y-1">
-                        <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" aria-hidden />
-                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                          {h.de ? (
-                            <>
-                              <TemperaturaBadge temperatura={h.de} className="h-5 px-2 text-[0.7rem]" />
-                              <span aria-label="pasó a" className="text-muted-foreground">→</span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">Nació como</span>
+                    {eventos.map((e) =>
+                      e.clase === "temperatura" ? (
+                        <li key={e.id} className="relative space-y-1">
+                          <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" aria-hidden />
+                          <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                            {e.cambio.de ? (
+                              <>
+                                <TemperaturaBadge temperatura={e.cambio.de} className="h-5 px-2 text-[0.7rem]" />
+                                <span aria-label="pasó a" className="text-muted-foreground">→</span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">Nació como</span>
+                            )}
+                            <TemperaturaBadge temperatura={e.cambio.a} className="h-5 px-2 text-[0.7rem]" />
+                          </div>
+                          {e.cambio.motivo && <p className="text-sm">{e.cambio.motivo}</p>}
+                          <p className="text-xs text-muted-foreground">
+                            {ORIGEN_TEMPERATURA[e.cambio.origen] ?? e.cambio.origen} · {formatFechaHora(e.fecha)}
+                          </p>
+                        </li>
+                      ) : (
+                        <li key={e.id} className="relative space-y-1">
+                          <span className="absolute top-1.5 -left-5 size-2 rounded-full border border-primary bg-card" aria-hidden />
+                          <p className="flex items-center gap-1.5 text-sm">
+                            <Send className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className={e.seguimiento.estado === "enviado" ? undefined : "text-status-danger-ink"}>{descripcionDeSeguimiento(e.seguimiento)}</span>
+                          </p>
+                          {e.seguimiento.contenido && e.seguimiento.estado === "enviado" && (
+                            <p className="line-clamp-3 rounded-lg bg-muted/60 p-2.5 text-sm text-foreground/80">{e.seguimiento.contenido}</p>
                           )}
-                          <TemperaturaBadge temperatura={h.a} className="h-5 px-2 text-[0.7rem]" />
-                        </div>
-                        {h.motivo && <p className="text-sm">{h.motivo}</p>}
-                        <p className="text-xs text-muted-foreground">
-                          {ORIGEN_TEMPERATURA[h.origen] ?? h.origen} · {formatFechaHora(h.creadoEn)}
-                        </p>
-                      </li>
-                    ))}
+                          {e.seguimiento.error && <p className="break-words text-xs text-status-danger-ink">Meta respondió: {e.seguimiento.error}</p>}
+                          <p className="text-xs text-muted-foreground">
+                            {e.seguimiento.tipo === "plantilla" && e.seguimiento.plantilla ? `${NOMBRE_DE_SEGUIMIENTO.plantilla} «${e.seguimiento.plantilla}»` : "El sistema"} · {formatFechaHora(e.fecha)}
+                          </p>
+                        </li>
+                      ),
+                    )}
                   </ol>
                 )}
               </Seccion>
@@ -228,7 +271,7 @@ export function LeadDetalleSheet({ leadId, onCerrar, onCambio }: { leadId: numbe
                     <Dato etiqueta="Cliente desde">{formatFecha(contacto.creadoEn)}</Dato>
                     <Dato etiqueta="Llegadas por anuncio">{contacto.anuncios.llegadas > 0 ? contacto.anuncios.llegadas : null}</Dato>
                     <Dato etiqueta="Primer anuncio" ancho>
-                      {contacto.anuncios.primerAnuncio ? (contacto.anuncios.primerAnuncio.titulo ?? contacto.anuncios.primerAnuncio.id_anuncio) : null}
+                      {contacto.anuncios.primerAnuncio ? (contacto.anuncios.primerAnuncio.titulo ?? contacto.anuncios.primerAnuncio.idAnuncio) : null}
                     </Dato>
                   </dl>
 

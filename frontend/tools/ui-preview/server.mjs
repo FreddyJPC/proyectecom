@@ -235,6 +235,24 @@ const leadsMock = leadsBase.map((r, i) => {
     ultimoMensaje: { rol: ultimo[0], contenido: ultimo[1], creadoEn: ago(minutos) }, ultimoClienteEn: ago(minutos + 30),
   };
 });
+// Seguimiento automático: lo que el sistema le escribió a cada cliente (lead -> seguimientos, el más reciente primero).
+const seguimientosLeads = {};
+const textoEmpujon = "Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊";
+const textoPlantilla = "Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido. ¿Sigue interesado(a)?";
+leadsMock.forEach((l) => {
+  seguimientosLeads[l.id] = [];
+  l.ultimoSeguimiento = null;
+});
+const ponerSeguimiento = (nombre, items) => {
+  const l = leadsMock.find((x) => x.nombre === nombre);
+  if (!l) return;
+  items.forEach((it, i) => seguimientosLeads[l.id].push({ id: l.id * 10 + i, tipo: it.tipo, estado: it.estado || "enviado", contenido: it.tipo === "plantilla" ? textoPlantilla : textoEmpujon, plantilla: it.tipo === "plantilla" ? "retomar_conversacion" : null, error: it.error || null, creadoEn: ago(it.min), enviadoEn: it.estado === "fallido" ? null : ago(it.min) }));
+  const ultimo = seguimientosLeads[l.id].find((x) => x.estado === "enviado");
+  l.ultimoSeguimiento = ultimo ? { tipo: ultimo.tipo, enviadoEn: ultimo.enviadoEn } : null;
+};
+ponerSeguimiento("Daniela Vera", [{ tipo: "plantilla", min: 60 * 24 * 3 }, { tipo: "empujon", min: 60 * 24 * 4 }]);
+ponerSeguimiento("José Armijos", [{ tipo: "empujon", min: 60 * 24 * 1 }]);
+ponerSeguimiento("Pedro Villacís", [{ tipo: "plantilla", min: 60 * 20, estado: "fallido", error: "Template name does not exist in the translation" }, { tipo: "empujon", min: 60 * 24 * 5 }]);
 const historialLeads = {}; // leadId -> cambios (más reciente primero)
 leadsMock.forEach((l) => {
   const cambios = [];
@@ -258,10 +276,10 @@ const fichaContacto = (l) => {
          { id: 9001, conversacionId: l.conversacionId, productoNombre: LAM, temperatura: "ganado", etapa: "despachado", total: "34.90", origen: "directo", creadoEn: ago(60 * 24 * 40), cerradoEn: ago(60 * 24 * 38) }]
       : mia.map((x) => ({ id: x.id, conversacionId: x.conversacionId, productoNombre: x.productoNombre, temperatura: x.temperatura, etapa: x.etapa, total: x.total, origen: x.origen, creadoEn: x.creadoEn, cerradoEn: x.cerradoEn })),
     compras: { cantidad: compras, totalGastado: total, ganancia: compras ? "27.40" : "0.00", comprasSinCosto: 0, ultimaCompra: compras ? l.cerradoEn : null },
-    anuncios: { llegadas: l.origen === "anuncio" ? 1 : 0, primera: l.origen === "anuncio" ? l.creadoEn : null, ultima: l.origen === "anuncio" ? l.creadoEn : null, primerAnuncio: l.idAnuncio ? { id_anuncio: l.idAnuncio, titulo: l.tituloAnuncio } : null },
+    anuncios: { llegadas: l.origen === "anuncio" ? 1 : 0, primera: l.origen === "anuncio" ? l.creadoEn : null, ultima: l.origen === "anuncio" ? l.creadoEn : null, primerAnuncio: l.idAnuncio ? { idAnuncio: l.idAnuncio, titulo: l.tituloAnuncio } : null },
   };
 };
-const detalleLead = (l) => ({ lead: l, historial: historialLeads[l.id], contacto: fichaContacto(l) });
+const detalleLead = (l) => ({ lead: l, historial: historialLeads[l.id], contacto: fichaContacto(l), seguimientos: seguimientosLeads[l.id] || [] });
 const resumenLeads = (dias) => {
   const abiertos = leadsMock.filter((l) => TEMP_ABIERTAS.includes(l.temperatura));
   const ganados = leadsMock.filter((l) => l.temperatura === "ganado"), perdidos = leadsMock.filter((l) => l.temperatura === "perdido");
