@@ -30,7 +30,6 @@ from typing import List, Optional, Tuple
 from src.config.parametros import parametros
 from src.integrations.llm.contratos import HerramientaLLM, ResultadoHerramienta
 from src.integrations.rocketfy import RocketfyBusinessError, get_rocketfy_client
-from src.integrations.rocketfy.imagenes import url_de_imagen
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 from src.integrations.canales import etiqueta_de_cliente, get_registro_canales
 from src.routes.pedidos.dto import CrearPedidoInputDTO, LineaPedidoDTO
@@ -508,7 +507,7 @@ class HerramientasVictoria:
         """Fase G2 + ADR-012. Solo se envían fotos de un producto ACTIVO del catálogo (las URLs salen de la
         base, nunca de lo que escriba el modelo), en tandas de «Fotos por envío» (parámetro
         `bot.max_fotos_por_envio`) y sin repetir las que ya se mandaron en esta conversación. La galería
-        son las fotos que el dueño subió a la ficha o, si no subió ninguna, la de Rocketfy. Cualquier fallo
+        son SOLO las fotos que el dueño subió a la ficha (nunca la de Rocketfy). Cualquier fallo
         se le explica a Victoria y no escala: no tener fotos no es motivo para pasar a una persona."""
         consulta = (entrada.get("producto_sku") or "").strip()
         producto = self._productos.obtener_por_sku(consulta) if consulta else None
@@ -517,10 +516,8 @@ class HerramientasVictoria:
         if not self._esta_activo(producto):
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
 
-        # La base puede traer todavía la ruta relativa de Rocketfy (`/storage/...`): se completa.
-        galeria = galeria_para_enviar(
-            self._imagenes.listar(producto["sku"]), url_de_imagen(producto.get("imagen_url"))
-        )
+        # Solo las fotos que el dueño subió a la ficha (Supabase Storage); la foto de Rocketfy no se envía.
+        galeria = galeria_para_enviar(self._imagenes.listar(producto["sku"]))
         if not galeria:
             # Meta solo descarga enlaces https públicos.
             return (

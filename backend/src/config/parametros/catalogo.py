@@ -274,8 +274,8 @@ CATALOGO: Tuple[Parametro, ...] = (
         nombre="Enviar fotos del producto",
         para_que_sirve=(
             "Si está encendido, Victoria puede mandar por WhatsApp las fotos del producto cuando el cliente las pide. "
-            "Salen de la galería del producto (las que subes en su ficha) o, si no subiste ninguna, de la foto de "
-            "Rocketfy; Meta tiene que poder descargarlas. Si el producto no tiene fotos, Victoria le dice al cliente "
+            "Salen únicamente de la galería del producto (las que subes en su ficha); la foto de Rocketfy nunca se "
+            "envía. Si el producto no tiene fotos subidas, Victoria le dice al cliente "
             "que por ahora no hay imágenes. «Probar con Victoria» siempre simula las fotos, esté o no encendido."
         ),
         tipo=TIPO_BOOLEANO,

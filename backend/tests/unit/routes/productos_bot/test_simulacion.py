@@ -72,10 +72,13 @@ def compra_completa():
     return LLMGuionado(herramientas(DATOS, PRODUCTO, CONTRAENTREGA, CERRAR), texto("Listo, tu pedido va en camino."))
 
 
-def turno(llm, mensaje="Quiero comprarlos", historial=(), estado=None, desde_anuncio=False, producto=None):
+FOTO_SUBIDA = {"id": 1, "url": "https://xyz.supabase.co/storage/v1/object/public/productos/p1/audifonos.jpg", "orden": 0}
+
+
+def turno(llm, mensaje="Quiero comprarlos", historial=(), estado=None, desde_anuncio=False, producto=None, imagenes=None):
     return simular_turno(
         producto=producto or ficha(), mensaje=mensaje, historial=list(historial), estado=estado,
-        desde_anuncio=desde_anuncio, llm=llm,
+        desde_anuncio=desde_anuncio, llm=llm, imagenes=imagenes,
     )
 
 
@@ -282,17 +285,17 @@ FOTO = ("enviar_foto_producto", {"producto_sku": SKU})
 
 class TestFotoDelProducto:
     def test_la_foto_queda_a_la_vista_y_no_se_envia_nada(self):
-        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), mensaje="Tienes fotos?")
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), mensaje="Tienes fotos?", imagenes=[FOTO_SUBIDA])
         assert [h["nombre"] for h in r.herramientas] == ["enviar_foto_producto"]
         assert "Ya le enviaste la foto" in r.herramientas[0]["resultado"]
         assert r.fotos == [{
             "mensaje": f"📷 Foto de Audifonos Bluetooth ({SKU})",
-            "url": "https://cdn.rocketfy.example/audifonos.png",
+            "url": FOTO_SUBIDA["url"],
             "descripcion": "Audifonos Bluetooth",
         }]
 
-    def test_sin_imagen_en_la_ficha_no_hay_foto_y_victoria_lo_sabe(self):
-        r = turno(LLMGuionado(herramientas(FOTO), texto("No tengo foto.")), producto=ficha(imagen_url=None))
+    def test_sin_fotos_subidas_no_hay_foto_aunque_la_ficha_tenga_la_de_rocketfy(self):
+        r = turno(LLMGuionado(herramientas(FOTO), texto("No tengo foto.")), producto=ficha(imagen_url="https://cdn.rocketfy.example/audifonos.png"))
         assert r.fotos == [] and "todavía no tiene fotos" in r.herramientas[0]["resultado"]
 
     def test_no_repite_la_foto_si_ya_esta_en_el_historial_de_la_prueba(self):
@@ -301,7 +304,7 @@ class TestFotoDelProducto:
             {"rol": "bot", "contenido": f"📷 Foto de Audifonos Bluetooth ({SKU})"},
             {"rol": "bot", "contenido": "Te la mande."},
         ]
-        r = turno(LLMGuionado(herramientas(FOTO), texto("Ya te la mande.")), mensaje="Otra vez?", historial=historial)
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Ya te la mande.")), mensaje="Otra vez?", historial=historial, imagenes=[FOTO_SUBIDA])
         assert r.fotos == [] and "no la repitas" in r.herramientas[0]["resultado"]
 
     def test_la_foto_se_ve_en_el_historial_que_recibe_el_modelo(self):
@@ -326,5 +329,5 @@ class TestFotoDelProducto:
         monkeypatch.setattr("src.config.parametros.repository.ParametrosRepository.listar", staticmethod(lambda: {}))
         monkeypatch.setattr("src.config.database._get_pool", prohibido)
         monkeypatch.setattr("src.routes.whatsapp.tools.get_registro_canales", prohibido)
-        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")))
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), imagenes=[FOTO_SUBIDA])
         assert len(r.fotos) == 1 and len(responses.calls) == 0
