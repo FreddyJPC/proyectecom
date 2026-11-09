@@ -61,7 +61,7 @@ marketing** por compra. Cómo encaja aquí (comprobado en el esquema el 2026-11-
 
 | En un CRM grande | Aquí | Observación |
 |---|---|---|
-| **Contacto** (único, deduplicado por teléfono) | `conversaciones` | `telefono` ya es `unique`: no hay duplicados posibles. No se crea tabla nueva; hoy es 1 a 1 |
+| **Contacto** (único, deduplicado por teléfono) | `conversaciones` | `telefono` ya es `unique`: no hay duplicados posibles. No se crea tabla nueva; hoy es 1 a 1. **Sus filas no se borran nunca** (ver §10) |
 | **Oportunidad / Deal** | `leads` | Una fila por intención de compra. Se conserva el nombre `leads` en código y base (renombrar tocaría todo sin ganar nada) |
 | **Lead** (sin calificar) | la *temperatura* (frío/tibio) | No es una tabla aparte: calificar = subir la temperatura |
 | **Actividades / línea de tiempo** | `mensajes` + `conversacion_anuncios` + `lead_historial` | Se muestran juntas en la ficha |
@@ -98,7 +98,9 @@ cliente quiere dos productos, van como líneas de la misma venta; (b) **sin «Cu
   `temperatura_en`, `temperatura_fijada_hasta`); `leads.origen`, `leads.id_anuncio`, `leads.ctwa_clid` (atribución por
   oportunidad) y `leads.motivo_perdida`; `conversaciones.nombre`; `conversaciones.no_contactar` (+ motivo, fecha,
   quién); tabla `lead_historial`. **Relleno** de los leads existentes por reglas (ganado/perdido; el resto tibio; el
-  origen del lead se toma de la conversación).
+  origen del lead se toma de la conversación). **Además (§10):** las claves de `leads`, `conversacion_anuncios` y
+  `solicitudes_gestion` hacia `conversaciones` pasan de «borrar en cascada» a «impedir el borrado», para que la base se
+  niegue a borrar un contacto con historial.
 - **Migración 025 (con el seguimiento):** tabla `seguimientos` (qué se envió a quién y cuándo; impide repetir).
 - Solo se agregan objetos; no se edita nada ya aplicado.
 
@@ -145,6 +147,7 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
 | **F3** | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
 | **F4** | Seguimiento: migración 025, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
 | **F5** (opcional) | Tablero Kanban, exportar a CSV, recordatorios al dueño, conversión por temperatura y por anuncio | A pedido |
+| **R** (retención, cuando haga falta) | Depurar solo lo pesado y sin valor comercial (mensajes viejos de conversaciones cerradas, cola ya procesada, webhooks crudos), con interruptor apagado; ver §10 | Mediano; no urgente |
 
 **Paralelo:** la plantilla se puede enviar a revisión de Meta **apenas Freddy apruebe el texto final** (la revisión tarda
 y no depende del código). Cada fase se despliega por separado: primero la migración, después el código, con
@@ -167,3 +170,46 @@ confirmación de Freddy.
 
 ## 9. Fuera de este plan
 Varios usuarios o asignar leads a vendedores, tareas y calendario, importar contactos, integraciones con otros CRM.
+
+## 10. Qué se conserva para siempre y qué se puede depurar (pedido de Freddy, 2026-11-09)
+**Pedido:** poder liberar espacio de la base en el futuro sin perder nada que sirva para vender o analizar (contactos,
+nombres, teléfonos, intereses, ventas, anuncios). **Comprobado en producción (solo lectura) y en las migraciones:**
+
+**10.1 Lo que hay hoy**
+- `conversaciones` es a la vez el *contacto* (teléfono único) y el *estado de la charla*, pero su fila es diminuta
+  (11 columnas, casi todas cortas): **no ocupa espacio**. Lo que crece es `mensajes` (unos 108 caracteres de media por
+  mensaje; ~350 bytes por mensaje con sus índices, estimado con los 38 mensajes de prueba).
+- **No hay ningún borrado automático** en el sistema: ni mensajes, ni la cola (`cola_mensajes`, hoy 8 filas, todas ya
+  procesadas), ni `webhook_events` (el JSON crudo de Rocketfy, que trae datos del cliente que ya están en `ventas` y
+  `pedidos`). `stock_snapshots` crecería con el monitor de stock (hoy 0 filas porque no hay SKUs monitoreados; la
+  velocidad real no se midió).
+- **El riesgo real es la cascada:** borrar una fila de `conversaciones` arrastra `mensajes` y `cola_mensajes` (bien)
+  **pero también `leads`, `conversacion_anuncios` y `solicitudes_gestion`** (el historial de intereses y de anuncios,
+  justo lo que se quiere conservar). `ventas` está a salvo: copia nombre, teléfono, dirección, productos, costos y
+  origen, y su clave a la conversación es «dejar en blanco», no «borrar».
+
+**10.2 Clasificación**
+| Se conserva siempre | Se puede depurar con el tiempo |
+|---|---|
+| `conversaciones` (el contacto), `leads`, `lead_historial`, `seguimientos`, `conversacion_anuncios`, `ventas`, `ventas_lineas`, `solicitudes_gestion`, `pedidos` (auditoría contra duplicados), `anuncios_productos`, productos y parámetros con sus historiales | `mensajes` de conversaciones viejas y cerradas; `cola_mensajes` ya procesada; `webhook_events` ya procesados; `stock_snapshots` antiguos |
+
+**10.3 Decisiones de arquitectura (solo lo necesario)**
+- **No se crea una tabla `contactos` aparte.** Separarla no ahorraría espacio (la fila del contacto pesa unos cientos de
+  bytes) y obligaría a tocar el webhook, el bot, la API, leads, ventas y anuncios. Se reconsidera si un contacto llega a
+  tener más de un canal (por ejemplo Instagram).
+- **Sí se protege el contacto de borrados accidentales** (migración 024): las claves de `leads`,
+  `conversacion_anuncios` y `solicitudes_gestion` pasan a «impedir el borrado»; `mensajes` y `cola_mensajes` siguen en
+  cascada porque es lo depurable. Costo: unos diez archivos de pruebas y la herramienta `chat_con_victoria.py` limpian
+  borrando la conversación y necesitarán un ayudante que borre antes sus hijos. Si algún día un cliente pide que se
+  borren sus datos, habrá que hacerlo con un procedimiento explícito (hoy no existe).
+- **El interés sobrevive a los mensajes:** producto del lead, temperatura, motivo escrito por Victoria, origen, valor y
+  anuncio quedan en el lead; el contenido de la charla es lo único que se depura.
+
+**10.4 Fase R (retención), cuando haga falta; no ahora**
+- Todo como parámetros (ADR-011) y **apagado por defecto**: interruptor general; días para mensajes (propuesta: 180 desde
+  la última actividad), cola (30), webhooks (90) y snapshots (90).
+- Un mensaje solo se depura si su conversación **no tiene** lead abierto, venta por gestionar o cobrar, ni solicitud
+  pendiente, y pasó el plazo.
+- Tarea nocturna por lotes que registra cuántas filas borró; vista del tamaño de la base en Control.
+- Cuándo activarla: con la estimación del supuesto «100 conversaciones nuevas al día, 30 mensajes cada una» (mío, no
+  medido) serían unos 380 MB al año solo en mensajes. Falta confirmar el tamaño que permite el plan de Supabase de Freddy.
