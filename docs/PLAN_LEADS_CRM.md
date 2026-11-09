@@ -136,8 +136,9 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
 - **Empujón gratis** (texto libre dentro de las 24 h): a quien lleva unas horas callado; texto definido por Freddy:
   «Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊» (editable en Parámetros).
 - **Plantilla** (después de 24 h, **solo clientes de anuncio con la ventana gratuita abierta**, categoría marketing,
-  sin variables): «Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido.
-  ¿Sigue interesado(a)?» (nombre `retomar_conversacion`; se crea en la cuenta del número 096 316 2902).
+  sin variables): «Hola 👋 Soy Victoria, de AzoShop. ¿Sigue interesado(a)? Si necesita ayuda, escríbame y con gusto le
+  atiendo.» (texto aprobado por Freddy el 2026-11-09, opción D de cuatro; nombre `retomar_conversacion`, idioma `es`;
+  **creada en Meta el 2026-11-09, en revisión**, en la cuenta de mensajería del número 096 316 2902).
 - **Reglas:** nunca a «no contactar», ni a perdidos o ganados, ni a conversaciones que tomó una persona; **máximo un
   empujón y una plantilla por contacto en toda su vida**; tope diario; horario 9:00–20:00 (Ecuador); dos interruptores
   **apagados por defecto**; el mensaje se guarda en la conversación para que Victoria sepa que ya se le escribió.
@@ -152,7 +153,7 @@ Pantalla nueva **Leads** en «Operación» (en móvil, tarjetas; desde `md`, tab
 | **F1** (hecha y desplegada) | Migración 025, **varios leads por contacto** (ojo: `ConversacionRepository.listar` une `leads` por conversación y con varios leads repetiría filas: usar el lead más reciente), **atribución por oportunidad** (la venta copia el origen del lead), «no contactar» en el contacto, historial, reglas de temperatura y relleno, API de lectura. Tests | Grande (como Anuncios E1) |
 | **F2** (hecha y desplegada) | Victoria: herramientas `clasificar_lead` y `no_contactar`, instrucciones nuevas, trato de usted, **cliente recurrente con el historial del contacto en su contexto**, simulación. Tests | Mediano, el de más riesgo |
 | **F3** (hecha y desplegada) | Panel de Leads: pantalla, filtros, detalle, **ficha del contacto (360 y valor del cliente)**, acciones, menú, servidor falso, auditoría de accesibilidad | Grande (como Anuncios, frontend) |
-| **F4** (hecha y desplegada, apagada de fábrica; la plantilla de Meta no está creada) | Seguimiento: migración 026, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
+| **F4** (hecha y desplegada, apagada de fábrica; plantilla de Meta creada y en revisión) | Seguimiento: migración 026, job, parámetros, Telegram, plantilla enviada a Meta para revisión | Mediano |
 | **F5** (opcional) | Tablero Kanban, exportar a CSV, recordatorios al dueño, conversión por temperatura y por anuncio | A pedido |
 | **R** (retención, cuando haga falta) | Depurar solo lo pesado y sin valor comercial (mensajes viejos de conversaciones cerradas, cola ya procesada, webhooks crudos), con interruptor apagado; ver §10 | Mediano; no urgente |
 

@@ -73,7 +73,7 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
 - **Leads (ADR-015):** la temperatura se cambia SIEMPRE por `routes/leads/sql.py::fijar_temperatura` (deja el historial); el dueño
   manda sobre los hechos y estos sobre Victoria; «ganado» lo pone la venta, nunca la IA. **Nunca escribirle a un cliente por
   iniciativa propia sin pasar por el seguimiento (`jobs/seguimiento`)**: respeta «no contactar», un envío de cada tipo por
-  contacto de por vida, tope y horario, y viene apagado. No crear la plantilla de Meta sin el visto bueno de Freddy al texto.
+  contacto de por vida, tope y horario, y viene apagado. No crear ni cambiar plantillas de Meta sin el visto bueno de Freddy al texto.
 
 **Código**
 - Cambios con tests. Seguir el patrón de capas existente
@@ -266,7 +266,7 @@ posible y rotarlos.
   cada lead (caliente/tibio/frío/perdido/ganado) que fijan el dueño, los hechos, Victoria (`clasificar_lead`) y el tiempo (solo
   enfría), historial, un lead abierto por contacto, atribución por lead, «no contactar» en el contacto, Victoria atiende al
   cliente recurrente, pantalla **Leads** y seguimiento automático (`seguimientos`) con **dos interruptores apagados** y la
-  plantilla `retomar_conversacion` **sin crear en Meta** (pendiente #67). Aún no se ha visto la pantalla Leads con el login real ni a
+  plantilla `retomar_conversacion` **creada en Meta y en revisión** (2026-11-09; pendiente #67). Aún no se ha visto la pantalla Leads con el login real ni a
   Victoria clasificando con conversaciones reales (pendiente #69). **Al desplegar una migración: primero la migración, después el código.** Plan: `docs/PLAN_LEADS_CRM.md`.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.

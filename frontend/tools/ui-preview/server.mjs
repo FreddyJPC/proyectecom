@@ -238,7 +238,7 @@ const leadsMock = leadsBase.map((r, i) => {
 // Seguimiento automático: lo que el sistema le escribió a cada cliente (lead -> seguimientos, el más reciente primero).
 const seguimientosLeads = {};
 const textoEmpujon = "Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊";
-const textoPlantilla = "Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido. ¿Sigue interesado(a)?";
+const textoPlantilla = "Hola 👋 Soy Victoria, de AzoShop. ¿Sigue interesado(a)? Si necesita ayuda, escríbame y con gusto le atiendo.";
 leadsMock.forEach((l) => {
   seguimientosLeads[l.id] = [];
   l.ultimoSeguimiento = null;

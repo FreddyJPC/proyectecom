@@ -624,7 +624,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "sirve para dejar anotado en la conversación lo que se envió. Debe ser igual al texto aprobado."
         ),
         tipo=TIPO_TEXTO,
-        defecto="Hola 👋 Soy Victoria, de AzoShop. Hace poco estuvimos conversando y quedó pendiente su pedido. ¿Sigue interesado(a)?",
+        defecto="Hola 👋 Soy Victoria, de AzoShop. ¿Sigue interesado(a)? Si necesita ayuda, escríbame y con gusto le atiendo.",
         largo_maximo=1024,
         aplica=APLICA_PROXIMA_CORRIDA,
     ),
