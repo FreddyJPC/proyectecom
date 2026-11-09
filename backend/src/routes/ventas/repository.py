@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional
 
 from src.config.database import get_connection
 from src.routes.gestion.repository import ResultadoUpsert, upsert_solicitud
+from src.routes.leads.sql import fijar_temperatura
+from src.routes.leads.temperaturas import GANADO, ORIGEN_REGLA, PERDIDO
 
 from .exceptions import AccionDeVentaNoPermitidaError, StockInsuficienteError, VentaNoEncontradaError, VentaYaRegistradaError
 from .reglas import motivo_para_no_cancelar, motivo_para_no_cobrar, motivo_para_no_deshacer_cobro
@@ -120,6 +122,7 @@ class VentasRepository:
                 cur.execute(
                     "update leads set estado = 'por_gestionar', actualizado_en = now() where id = %s", (lead_id,)
                 )
+                fijar_temperatura(cur, lead_id, GANADO, ORIGEN_REGLA, "Venta cerrada (producto propio)")
                 solicitud: ResultadoUpsert = upsert_solicitud(
                     cur, conversacion_id, lead_id, "pedido_cerrado", detalle_solicitud, venta_id=venta_id
                 )
@@ -217,6 +220,9 @@ class VentasRepository:
                 )
                 if venta["lead_id"] is not None:
                     cur.execute("update leads set estado = 'cancelado', actualizado_en = now() where id = %s", (venta["lead_id"],))
+                    fijar_temperatura(
+                        cur, venta["lead_id"], PERDIDO, ORIGEN_REGLA, motivo or "Venta cancelada", usuario, motivo_perdida="otro"
+                    )
 
                 nota = "Venta cancelada" + (f": {motivo}" if motivo else ".")
                 cur.execute(

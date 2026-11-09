@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { MOTIVOS_PERDIDA, temperaturaInfo } from "@/lib/leads";
 import { cn } from "@/lib/utils";
 import type { AvisoSimulado, EstadoPrueba, FotoSimulada, LlamadaHerramienta, MensajePrueba, PedidoSimulado, ProbarInput, SolicitudSimulada, TurnoSimulado, UsoPruebas, VentaManualSimulada } from "@/types/producto-bot";
 
@@ -50,7 +51,21 @@ const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   enviar_foto_producto: "Envió fotos del producto",
   registrar_entrega: "Ofreció / registró la entrega",
   solicitar_gestion: "Avisó al dueño",
+  clasificar_lead: "Clasificó al cliente (temperatura)",
+  no_contactar: "Marcó al cliente como «no contactar»",
 };
+
+/** Cómo se ve la temperatura que Victoria puso al clasificar (herramienta `clasificar_lead`). */
+function resumenDeClasificacion(entrada: Record<string, unknown>): string | null {
+  const t = typeof entrada.temperatura === "string" ? temperaturaInfo(entrada.temperatura).label : null;
+  if (!t) return null;
+  const motivo = typeof entrada.motivo === "string" && entrada.motivo.trim() ? ` · ${entrada.motivo.trim()}` : "";
+  const perdida =
+    entrada.temperatura === "perdido" && typeof entrada.motivo_perdida === "string" && entrada.motivo_perdida in MOTIVOS_PERDIDA
+      ? ` · motivo de pérdida: ${MOTIVOS_PERDIDA[entrada.motivo_perdida as keyof typeof MOTIVOS_PERDIDA]}`
+      : "";
+  return `${t}${motivo}${perdida}`;
+}
 
 type Turno = {
   cliente: string;
@@ -190,7 +205,11 @@ function HerramientasUsadas({ herramientas }: { herramientas: LlamadaHerramienta
         {herramientas.map((h, i) => (
           <li key={`${h.nombre}-${i}`} className="space-y-0.5 rounded-md bg-muted/60 p-2">
             <p className="font-medium text-foreground">{NOMBRE_DE_HERRAMIENTA[h.nombre] ?? h.nombre}</p>
-            {Object.keys(h.entrada).length > 0 && <p className="break-words">Datos: {JSON.stringify(h.entrada)}</p>}
+            {h.nombre === "clasificar_lead" && resumenDeClasificacion(h.entrada) ? (
+              <p className="break-words">Temperatura: {resumenDeClasificacion(h.entrada)}</p>
+            ) : (
+              Object.keys(h.entrada).length > 0 && <p className="break-words">Datos: {JSON.stringify(h.entrada)}</p>
+            )}
             <p className="break-words">Respuesta del sistema: {h.resultado}</p>
           </li>
         ))}
@@ -224,6 +243,9 @@ function ExplicacionPrueba({ nombre, usarBorrador, propio }: { nombre: string; u
         </li>
         <li>
           <strong>El cliente llega desde un anuncio:</strong> así Victoria ya sabe de qué producto habla. Se elige antes del primer mensaje.
+        </li>
+        <li>
+          <strong>Es un cliente que ya nos compró antes:</strong> Victoria lo recibe como a un cliente conocido (con una compra y un lead anterior de mentira) y lo atiende igual que a cualquiera; si pregunta por su pedido anterior, te avisa a ti. Se elige antes del primer mensaje.
         </li>
         <li>
           <strong>Lo que Victoria ha anotado:</strong> así se iría armando el pedido de verdad.
@@ -270,6 +292,7 @@ export function ProbarConVictoria({
   const [pedido, setPedido] = useState<PedidoSimulado | null>(null);
   const [escalada, setEscalada] = useState(false);
   const [desdeAnuncio, setDesdeAnuncio] = useState(true);
+  const [recurrente, setRecurrente] = useState(false);
   const [borrador, setBorrador] = useState("");
   const [pendiente, setPendiente] = useState<string | null>(null);
   const [error, setError] = useState<{ mensaje: string; motivos: string[] } | null>(null);
@@ -303,7 +326,7 @@ export function ProbarConVictoria({
     setPendiente(mensaje);
     setError(null);
     setBorrador("");
-    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada, ...(usarBorrador ? { usarBorrador: true } : {}) };
+    const cuerpo: ProbarInput = { mensaje, historial: aHistorial(turnos), estado, desdeAnuncio, escalada, ...(recurrente ? { clienteRecurrente: true } : {}), ...(usarBorrador ? { usarBorrador: true } : {}) };
     try {
       const res = await apiFetch<TurnoSimulado>(`/productos-bot/${encodeURIComponent(sku)}/probar`, {
         method: "POST",
@@ -396,6 +419,13 @@ export function ProbarConVictoria({
                   <Checkbox id="prueba-anuncio" checked={desdeAnuncio} disabled={hayPrueba || enviando} onCheckedChange={(c) => setDesdeAnuncio(c === true)} className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">El cliente llega desde un anuncio de este producto</span>
+                  </span>
+                </label>
+
+                <label htmlFor="prueba-recurrente" className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+                  <Checkbox id="prueba-recurrente" checked={recurrente} disabled={hayPrueba || enviando} onCheckedChange={(c) => setRecurrente(c === true)} className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">Es un cliente que ya nos compró antes</span>
                   </span>
                 </label>
 

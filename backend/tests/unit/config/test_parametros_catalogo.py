@@ -22,9 +22,15 @@ class TestInvariantesDelCatalogo:
         claves = [p.clave for p in CATALOGO]
         assert len(claves) == len(set(claves))
 
-    def test_los_dieciseis_parametros_estan(self):
-        # 15 del plan de parametrización + «Fotos por envío» (ADR-012, galería de fotos).
-        assert len(CATALOGO) == 16
+    def test_estan_todos_los_parametros(self):
+        # 15 del plan de parametrización + «Fotos por envío» (ADR-012) + 8 de leads (enfriamiento, atribución y cliente
+        # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea).
+        assert len(CATALOGO) == 34
+
+    def test_el_seguimiento_automatico_viene_apagado_de_fabrica(self):
+        """Escribirle a un cliente por iniciativa propia nunca debe empezar solo: hay que encenderlo a propósito."""
+        assert definicion("seguimiento.empujon_activo").defecto is False
+        assert definicion("seguimiento.plantilla_activa").defecto is False
 
     @pytest.mark.parametrize("p", CATALOGO, ids=lambda p: p.clave)
     def test_cada_parametro_esta_explicado_y_pertenece_a_un_grupo_real(self, p):

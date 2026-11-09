@@ -70,6 +70,10 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   origen** (cómo llegó: anuncio/directo). Se envía siempre por `integrations/canales.py` (`registro.para(canal)`), nunca
   llamando directo al cliente de WhatsApp. **No borrar conversaciones, leads ni contactos**: la base lo impide; solo
   `mensajes` y la cola son depurables. En las pruebas, limpiar con `tests/helpers_db.py`.
+- **Leads (ADR-015):** la temperatura se cambia SIEMPRE por `routes/leads/sql.py::fijar_temperatura` (deja el historial); el dueño
+  manda sobre los hechos y estos sobre Victoria; «ganado» lo pone la venta, nunca la IA. **Nunca escribirle a un cliente por
+  iniciativa propia sin pasar por el seguimiento (`jobs/seguimiento`)**: respeta «no contactar», un envío de cada tipo por
+  contacto de por vida, tope y horario, y viene apagado. No crear la plantilla de Meta sin el visto bueno de Freddy al texto.
 
 **Código**
 - Cambios con tests. Seguir el patrón de capas existente
@@ -110,7 +114,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **1608 tests pasando**.
+   desde `backend/`. Estado actual: **1887 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -255,11 +259,15 @@ posible y rotarlos.
   `conversacion_anuncios`). Cada llegada por anuncio se guarda completa; pantalla «Anuncios»; panel «Origen»
   en cada conversación; el texto libre del panel depende solo de las 24 h (la ventana gratuita de anuncio, «hasta 7 días
   desde que respondemos», es informativa). **Aún no ha llegado un anuncio real** (pendiente #66).
-- **Cimientos multicanal (ADR-014, migración 024) — implementado y probado EN LOCAL, SIN DESPLEGAR** (a la espera de
-  Freddy): `contactos`, conversación por canal, `ventas.canal`→`origen` + `canal` nuevo, `fep`→`anuncio`, claves a
-  `restrict`. La migración y el código **van juntos** (el código anterior no entiende las columnas nuevas ni las
-  retiradas): aplicar la migración en Supabase y desplegar el backend enseguida. Instagram y Messenger **no están
-  conectados** (pendiente #71); hoy solo WhatsApp. Plan de Leads/CRM: `docs/PLAN_LEADS_CRM.md` (F1 en adelante).
+- **Cimientos multicanal (ADR-014, migración 024) — desplegado 2026-11-09 (PR #27):** `contactos`, conversación por canal,
+  `ventas.canal`→`origen` + `canal` nuevo, `fep`→`anuncio`, claves a `restrict`. Instagram y Messenger **no están
+  conectados** (pendiente #71); hoy solo WhatsApp.
+- **Leads (CRM) y seguimiento (ADR-015, migraciones 025 y 026) — implementado y probado EN LOCAL, SIN DESPLEGAR:** temperatura de
+  cada lead (caliente/tibio/frío/perdido/ganado) que fijan el dueño, los hechos, Victoria (`clasificar_lead`) y el tiempo (solo
+  enfría), historial, un lead abierto por contacto, atribución por lead, «no contactar» en el contacto, Victoria atiende al
+  cliente recurrente, pantalla **Leads** y seguimiento automático (`seguimientos`) con **dos interruptores apagados** y la
+  plantilla `retomar_conversacion` **sin crear en Meta** (pendiente #67). **Al desplegar: primero las migraciones 025 y 026 en
+  Supabase, después el código** (el código nuevo lee columnas y tablas que no existen antes). Plan: `docs/PLAN_LEADS_CRM.md`.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

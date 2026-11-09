@@ -3,7 +3,7 @@ Ayudantes para las pruebas que usan la base de datos real (la desechable de prue
 
 Desde la migración 024 la base se NIEGA a borrar una conversación que tiene leads, llegadas por anuncio o solicitudes de
 gestión (antes lo hacía en cascada): es la protección del historial del contacto. Las pruebas, que sí necesitan limpiar
-lo que crean, borran en el orden correcto con `borrar_conversaciones_de_prueba`.
+lo que crean, borran en el orden correcto con `borrar_conversaciones_de_prueba` (también los seguimientos automáticos).
 """
 from src.config.database import get_connection
 
@@ -23,11 +23,16 @@ def borrar_conversaciones_de_prueba(*ids_externos: str, canal: str = "whatsapp")
             conversaciones = [f[0] for f in filas]
             contactos = sorted({f[1] for f in filas})
             if conversaciones:
+                cur.execute("delete from seguimientos where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute("delete from solicitudes_gestion where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute(
                     "delete from ventas where conversacion_id = any(%s) or contacto_id = any(%s)", (conversaciones, contactos)
                 )
                 cur.execute("delete from conversacion_anuncios where conversacion_id = any(%s)", (conversaciones,))
+                cur.execute(
+                    "delete from lead_historial where lead_id in (select id from leads where conversacion_id = any(%s))",
+                    (conversaciones,),
+                )
                 cur.execute("delete from leads where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute("delete from conversaciones where id = any(%s)", (conversaciones,))
             if contactos:

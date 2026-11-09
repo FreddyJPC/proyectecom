@@ -34,7 +34,7 @@ La única llamada de red real es la de la IA (Anthropic): sin ella no hay prueba
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
@@ -42,6 +42,7 @@ from src.integrations.llm.contratos import LLMProvider
 from src.routes.gestion.repository import ResultadoUpsert
 from src.routes.gestion.services import ResultadoSolicitud
 from src.routes.gestion.tipos import tipo as tipo_de_solicitud
+from src.routes.leads.temperaturas import GANADO, TEMPERATURAS
 from src.routes.pedidos.services import PedidoService
 from src.routes.ventas.snapshot import armar_venta, ganancia_de
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
@@ -160,6 +161,7 @@ class ConversacionesEnMemoria:
         return {
             "id": conversacion_id,
             "contacto_id": 1,
+            "contacto_nombre": None,
             "canal": "whatsapp",
             "id_externo": TELEFONO_DE_PRUEBA,
             "telefono": TELEFONO_DE_PRUEBA,
@@ -179,11 +181,18 @@ class ConversacionesEnMemoria:
 
 
 class LeadsEnMemoria:
-    def __init__(self, lead: Dict[str, Any]):
+    def __init__(self, lead: Dict[str, Any], historial: Optional[Dict[str, Any]] = None):
         self.lead = lead
+        self._historial = historial or {"previos": [], "compras": 0}
 
-    def obtener_o_crear(self, conversacion_id: int, contacto_id: int, telefono: Optional[str]) -> Dict[str, Any]:
+    def obtener_o_crear(
+        self, conversacion_id: int, contacto_id: int, telefono: Optional[str], dias_atribucion: int = 30
+    ) -> Dict[str, Any]:
         return dict(self.lead)
+
+    def resumen_del_contacto(self, contacto_id: int, lead_actual_id: int) -> Dict[str, Any]:
+        """El pasado del cliente de mentira: vacío, o el de un «cliente recurrente» si se pidió ese escenario."""
+        return self._historial
 
     def obtener_por_id(self, lead_id: int) -> Dict[str, Any]:
         return dict(self.lead)
@@ -474,6 +483,25 @@ class RocketfyDeEnsayo:
 # ----------------------------------------------------------------------
 # Ejecutor de herramientas con bitácora
 # ----------------------------------------------------------------------
+class ClasificacionEnEnsayo:
+    """El servicio de leads de mentira: aplica las MISMAS reglas que Victoria tiene en producción sobre lo que puede
+    clasificar (nada de «ganado»), pero solo lo anota: la temperatura que habría puesto, sin tocar la base."""
+
+    def __init__(self):
+        self.clasificaciones: List[Dict[str, Any]] = []
+        self.no_contactar: Optional[str] = None
+
+    def clasificar_por_ia(self, lead_id, temperatura, motivo, motivo_perdida=None) -> Dict[str, Any]:
+        if temperatura not in TEMPERATURAS or temperatura == GANADO:
+            return {"aplicado": False, "razon": "Temperatura no válida para ti: usa caliente, tibio, frio o perdido."}
+        self.clasificaciones.append({"temperatura": temperatura, "motivo": motivo or ""})
+        return {"aplicado": True, "cambio": True, "razon": ""}
+
+    def no_contactar_por_ia(self, contacto_id, motivo) -> bool:
+        self.no_contactar = motivo or "El cliente pidió que no lo contacten"
+        return True
+
+
 class HerramientasConBitacora(HerramientasVictoria):
     """Las herramientas reales de Victoria, anotando cada llamada para mostrarla
     en la app (qué herramienta usó, con qué datos y qué le respondió el sistema)."""
@@ -486,6 +514,20 @@ class HerramientasConBitacora(HerramientasVictoria):
         resultado = super().ejecutar(nombre, lead_id, conversacion_id, entrada, id_llamada)
         self.bitacora.append({"nombre": nombre, "entrada": dict(entrada or {}), "resultado": resultado.contenido})
         return resultado
+
+
+def _historial_de_un_cliente_recurrente() -> Dict[str, Any]:
+    """El escenario «cliente recurrente»: ya compró una vez y antes preguntó por otro producto que no se concretó."""
+    ahora = datetime.now(timezone.utc)
+    return {
+        "previos": [
+            {"producto_nombre": "Auriculares (pedido de ejemplo)", "temperatura": "ganado", "motivo_perdida": None,
+             "creado_en": ahora - timedelta(days=62), "cerrado_en": ahora - timedelta(days=60)},
+            {"producto_nombre": "Reloj deportivo (consulta de ejemplo)", "temperatura": "perdido", "motivo_perdida": "precio",
+             "creado_en": ahora - timedelta(days=120), "cerrado_en": ahora - timedelta(days=110)},
+        ],
+        "compras": 1,
+    }
 
 
 # ----------------------------------------------------------------------
@@ -515,13 +557,14 @@ def simular_turno(
     plantilla: Optional[str] = None,
     entregas: Optional[List[Dict[str, Any]]] = None,
     imagenes: Optional[List[Dict[str, Any]]] = None,
+    cliente_recurrente: bool = False,
 ) -> ResultadoDelTurno:
     """Procesa UN mensaje del cliente de mentira y devuelve lo que Victoria
     respondió, qué herramientas usó y cómo quedó la venta. `producto` es la
     ficha tal como está guardada (misma forma que `productos_bot`)."""
     lead = lead_desde_estado(estado)
     conversaciones = ConversacionesEnMemoria(desde_anuncio)
-    leads = LeadsEnMemoria(lead)
+    leads = LeadsEnMemoria(lead, _historial_de_un_cliente_recurrente() if cliente_recurrente else None)
     mensajes = MensajesEnMemoria(historial, mensaje)
     productos = ProductosEnEnsayo(producto)
     rocketfy = RocketfyDeEnsayo()
@@ -541,6 +584,7 @@ def simular_turno(
         minimo_repo=MinimosEnEnsayo(),
         mensaje_repo=mensajes,
         canales=whatsapp,
+        leads_servicio=ClasificacionEnEnsayo(),
         enviar_fotos=True,
         entrega_repo=EntregasEnEnsayo(entregas),
         gestion_service=gestion,

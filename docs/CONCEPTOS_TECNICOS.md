@@ -1456,3 +1456,47 @@ usuario de Instagram que nunca dio su teléfono) será una acción manual del du
 
 **Dos mensajes a la vez.** Si un cliente nuevo escribe dos mensajes seguidos, ambos se procesan: crear la conversación es «crear o
 traer» y el segundo recibe la que creó el primero (antes el segundo podía fallar por duplicado y perderse).
+
+## 45. Leads: la temperatura, «no contactar» y el seguimiento automático
+**Para qué sirve:** saber, de un vistazo, quién quiere comprar y qué tan en serio; no perder a quien se enfría; no molestar a
+quien pidió que lo dejen en paz; y recuperar ventas sin que tengas que escribirle a cada cliente.
+
+**Qué es un lead.** Una *intención de compra*: un cliente interesado en un producto. Una misma persona (contacto) puede tener
+varios con el tiempo («audífonos en octubre», «zapatos en noviembre»), pero solo uno abierto a la vez.
+
+**Etapa y temperatura son cosas distintas.** La **etapa** dice *dónde va el pedido* (recopilando datos, esperando pago,
+despachado…): la fija el sistema. La **temperatura** dice *qué tan probable es que compre*:
+- **Caliente:** va en serio (pide precio, da su dirección, pregunta cómo pagar). Atiéndelo ya.
+- **Tibio:** hay interés pero no se decide.
+- **Frío:** dejó de responder; todavía se puede recuperar.
+- **Perdido:** ya no va a comprar (queda guardado el *motivo*: el precio, no respondió, compró en otro lado…).
+- **Ganado:** compró.
+Caliente, tibio y frío son *abiertas*; perdido y ganado son *finales*.
+
+**Quién decide la temperatura (de más a menos fuerte).** (1) **Tú**, a mano: queda fijada unos días y nada la cambia sola. (2) **Los
+hechos:** una venta cerrada es «ganado» y una cancelada es «perdido»; nadie las contradice. (3) **Victoria**, al leer la
+conversación: ajusta caliente/tibio/frío/perdido con un motivo, pero no puede decir «ganado» ni pisar lo que fijaste. (4) **El
+tiempo:** solo enfría (caliente → tibio → frío → perdido según los días sin respuesta, ajustables en Parámetros). Cada cambio
+queda en el historial del lead: quién, cuándo y por qué.
+
+**«No contactar».** Se marca en la *persona* (no en un lead ni en un canal): nadie del sistema le escribe por iniciativa propia, en
+ningún canal, y sus leads abiertos pasan a «perdido». Si el cliente escribe, Victoria lo sigue atendiendo. Victoria lo marca sola
+cuando el cliente pide que no le escriban; tú también puedes hacerlo desde el detalle del lead.
+
+**De dónde viene cada lead.** Cada lead recuerda con qué anuncio nació: si el cliente tocó un anuncio en los últimos 30 días
+(ajustable) el lead cuenta como de ese anuncio; si no, es «directo». Así una compra orgánica de un cliente que llegó por un anuncio
+hace meses no se le atribuye al anuncio.
+
+**El cliente recurrente.** Victoria es tu vendedora: también atiende al cliente que ya compró. Recibe su historial (qué compró,
+qué le interesó antes) y lo trata de usted. Lo del pedido anterior (un reclamo, dónde está, un cambio) lo pasa a una persona.
+
+**El seguimiento automático (apagado de fábrica).** Si lo activas en Parámetros, el sistema le escribe por su cuenta al cliente
+interesado que dejó de contestar:
+- **Empujón:** un mensaje corto (texto libre) dentro de las 24 horas de WhatsApp. Es gratis.
+- **Plantilla:** un mensaje aprobado por Meta, pasadas las 24 horas, solo a los clientes que llegaron por un anuncio y mientras
+  Meta no cobra los mensajes de esa conversación (la ventana gratuita de anuncio).
+Reglas que no se rompen: como máximo **uno de cada tipo por cliente en toda su vida**; tope por día y horario (hora de
+Ecuador); nunca a «no contactar», perdidos, ganados, fríos ni a conversaciones que atiendes tú; si el envío falla, se anota y se
+frena un tiempo (si falla la plantilla, te avisa por Telegram). Lo que se envió queda en la conversación, así Victoria sabe qué se
+le dijo si el cliente contesta. En el detalle del lead se ve cuándo se le escribió.
+

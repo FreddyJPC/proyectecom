@@ -1,9 +1,22 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.integrations.whatsapp import WhatsAppAuthError
 from src.routes.anuncios.referral import normalizar_referral
 from src.routes.whatsapp.dto import MensajeEntranteDTO
 from src.routes.whatsapp.services import WebhookService
+
+
+@pytest.fixture
+def postventa_a_una_persona(monkeypatch):
+    """El comportamiento de ANTES de los leads: con el parámetro apagado, un cliente con pedido previo pasa a una persona."""
+    from src.config.parametros import parametros
+
+    real = parametros.valor
+    monkeypatch.setattr(
+        parametros, "valor", lambda clave: False if clave == "bot.atender_clientes_recurrentes" else real(clave)
+    )
 
 
 class FakeConversacionRepository:
@@ -279,7 +292,7 @@ class TestLlegadaPorAnuncio:
         )
         telegram.notificar_aviso.assert_not_called()
 
-    def test_el_aviso_de_escalado_incluye_de_donde_viene_el_cliente(self):
+    def test_el_aviso_de_escalado_incluye_de_donde_viene_el_cliente(self, postventa_a_una_persona):
         telegram = MagicMock()
         lead_repo = FakeLeadRepository(despachados_por_telefono=["593987654321"])
         conv_repo = FakeConversacionRepository(
@@ -305,7 +318,7 @@ class TestReglasDeterministasDeEscalado:
 
         bot_worker.encolar.assert_not_called()
 
-    def test_telefono_con_lead_despachado_escala_sin_invocar_al_llm(self):
+    def test_telefono_con_lead_despachado_escala_sin_invocar_al_llm(self, postventa_a_una_persona):
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
         )
@@ -347,7 +360,10 @@ class TestReglasDeterministasDeEscalado:
         from src.config.parametros import parametros
 
         real = parametros.valor
-        editados = {"bot.texto_postventa": "Texto de postventa editado", "bot.texto_comprobante_recibido": "Comprobante editado"}
+        editados = {
+            "bot.texto_postventa": "Texto de postventa editado", "bot.texto_comprobante_recibido": "Comprobante editado",
+            "bot.atender_clientes_recurrentes": False,
+        }
         monkeypatch.setattr(parametros, "valor", lambda clave: editados[clave] if clave in editados else real(clave))
 
         postventa = MagicMock()
@@ -363,6 +379,25 @@ class TestReglasDeterministasDeEscalado:
             lead_repo=FakeLeadRepository(leads_por_conversacion={1: {"estado": "esperando_pago"}}), bot_worker=comprobante,
         ).procesar_mensaje_entrante(_dto(wamid="wamid.2", tipo="imagen", contenido="[imagen]"))
         assert comprobante.encolar.call_args.kwargs["texto_fijo"] == "Comprobante editado"
+
+    def test_por_defecto_victoria_atiende_al_cliente_que_ya_compro(self):
+        """Pedido de Freddy: Victoria es la vendedora, atiende y da seguimiento al cliente recurrente; solo pasa a una persona lo
+        que no sabe o lo que es de un pedido anterior (eso lo decide ella con escalar_a_humano, no una regla fija)."""
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
+        )
+        lead_repo = FakeLeadRepository(despachados_por_telefono={"593987654321"})
+        telegram = MagicMock()
+        bot_worker = MagicMock()
+
+        _service(
+            conv_repo=conv_repo, lead_repo=lead_repo, telegram=telegram, bot_worker=bot_worker
+        ).procesar_mensaje_entrante(_dto(contenido="Hola, quiero comprar otra cosa"))
+
+        assert conv_repo.tabla["593987654321"]["estado"] == "activa"
+        telegram.notificar_escalado.assert_not_called()
+        kwargs = bot_worker.encolar.call_args.kwargs
+        assert kwargs["modo"] == "ia" and kwargs["texto_mensaje_cliente"] == "Hola, quiero comprar otra cosa"
 
     def test_imagen_sin_lead_esperando_pago_no_escala_pasa_a_victoria(self):
         conv_repo = FakeConversacionRepository(
@@ -422,7 +457,7 @@ class TestConversacionEnGestion:
 
         bot_worker.encolar.assert_not_called()
 
-    def test_quien_tiene_un_pedido_previo_por_gestionar_recibe_la_respuesta_fija_de_postventa(self):
+    def test_quien_tiene_un_pedido_previo_por_gestionar_recibe_la_respuesta_fija_de_postventa(self, postventa_a_una_persona):
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
         )

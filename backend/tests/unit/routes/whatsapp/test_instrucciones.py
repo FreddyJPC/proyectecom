@@ -34,8 +34,8 @@ def _validas(**cambios):
 
 
 class TestElArchivoOriginal:
-    def test_tiene_las_nueve_secciones_que_el_codigo_espera(self):
-        assert [s.id for s in SECCIONES] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "estado", "fecha"]
+    def test_tiene_las_diez_secciones_que_el_codigo_espera(self):
+        assert [s.id for s in SECCIONES] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "clasificacion", "estado", "fecha"]
         # Si alguien renombra un título del archivo, esto avisa antes de llegar a producción.
         assert ins._trozos().keys() == {s.id for s in SECCIONES}
 

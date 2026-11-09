@@ -47,8 +47,11 @@ class FakeLeadRepository:
     def __init__(self, lead=None):
         self._lead = lead or {"id": 1}
 
-    def obtener_o_crear(self, conversacion_id, contacto_id, telefono):
+    def obtener_o_crear(self, conversacion_id, contacto_id, telefono, dias_atribucion=30):
         return self._lead
+
+    def resumen_del_contacto(self, contacto_id, lead_actual_id):
+        return {"previos": [], "compras": 0}
 
 
 class FakeMensajeRepository:

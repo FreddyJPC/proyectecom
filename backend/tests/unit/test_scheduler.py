@@ -28,19 +28,19 @@ def scheduler_falso():
 
 
 class TestStartScheduler:
-    def test_registra_los_cuatro_jobs_y_arranca(self, scheduler_falso):
+    def test_registra_los_cinco_jobs_y_arranca(self, scheduler_falso):
         app_module.start_scheduler()
 
         instancia = scheduler_falso.return_value
         ids = {llamada.kwargs["id"] for llamada in instancia.add_job.call_args_list}
-        assert ids == {"reconciliacion_pedidos", "stock_watcher", "sync_productos", "latido_db"}
+        assert ids == {"reconciliacion_pedidos", "stock_watcher", "sync_productos", "enfriar_leads", "seguimiento", "latido_db"}
         instancia.start.assert_called_once()
 
     def test_sin_nada_guardado_los_intervalos_son_los_de_siempre(self, scheduler_falso):
         app_module.start_scheduler()
 
         minutos = {c.kwargs["id"]: c.kwargs.get("minutes") for c in scheduler_falso.return_value.add_job.call_args_list}
-        assert minutos == {"reconciliacion_pedidos": 45, "stock_watcher": 60, "sync_productos": 60, "latido_db": None}
+        assert minutos == {"reconciliacion_pedidos": 45, "stock_watcher": 60, "sync_productos": 60, "enfriar_leads": 60, "seguimiento": 30, "latido_db": None}
 
     def test_los_intervalos_se_leen_de_los_parametros_al_arrancar(self, scheduler_falso):
         try:

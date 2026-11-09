@@ -24,6 +24,7 @@ from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
 from src.routes.ventas.origen import es_de_cierre_manual
 
+from .contexto_contacto import formatear_historial
 from .ficha import formatear_ficha_producto
 from .instrucciones import instrucciones_vigentes
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
@@ -80,7 +81,10 @@ class VictoriaConversationService:
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: str) -> str:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(
-            conversacion_id, contacto_id=conversacion["contacto_id"], telefono=conversacion.get("telefono")
+            conversacion_id,
+            contacto_id=conversacion["contacto_id"],
+            telefono=conversacion.get("telefono"),
+            dias_atribucion=parametros.valor("leads.dias_atribucion"),
         )
 
         producto_contexto = self._resolver_producto_contexto(lead, conversacion)
@@ -88,7 +92,8 @@ class VictoriaConversationService:
         system_prompt = plantilla.format(
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
             + self._formatear_contexto_producto(producto_contexto),
-            contexto_lead_actual=self._formatear_contexto_lead(lead, producto_contexto),
+            contexto_lead_actual=self._formatear_contexto_lead(lead, producto_contexto)
+            + self._historial_del_cliente(conversacion, lead),
             fecha_actual=_fecha_legible_ecuador(),
         )
 
@@ -237,6 +242,19 @@ class VictoriaConversationService:
             "antes de seguir. Si el cliente pregunta por uno de ellos, usa ver_ficha_producto "
             "para leer su información completa antes de responder:\n" + lista
         )
+
+    def _historial_del_cliente(self, conversacion: dict, lead: dict) -> str:
+        """Lo que se habló y compró antes con este contacto (como la ficha de un CRM), para que Victoria no lo trate como a un
+        desconocido. Best-effort: si falla, Victoria responde igual sin el historial."""
+        try:
+            resumen = self._leads.resumen_del_contacto(conversacion["contacto_id"], lead["id"])
+            texto = formatear_historial(
+                resumen["previos"], resumen["compras"], nombre=lead.get("nombre_cliente") or conversacion.get("contacto_nombre")
+            )
+        except Exception:
+            logger.exception("No se pudo armar el historial del cliente (se responde sin él)")
+            return ""
+        return f"\n\n{texto}" if texto else ""
 
     @staticmethod
     def _formatear_contexto_lead(lead: dict, producto: Optional[dict] = None) -> str:

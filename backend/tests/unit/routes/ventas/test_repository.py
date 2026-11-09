@@ -12,6 +12,8 @@ from src.routes.productos_bot.repository import ProductoBotGestionRepository as 
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
 from src.routes.ventas.repository import VentasRepository
 from src.routes.ventas.snapshot import armar_venta
+from src.routes.anuncios.referral import normalizar_referral
+from src.routes.anuncios.repository import AnuncioRepository
 from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository
 from tests.helpers_db import borrar_conversaciones_de_prueba
 
@@ -47,6 +49,9 @@ def _producto(stock=3, controla=True, **cambios):
 
 def _lead_listo(producto, cantidad=2):
     conversacion = ConversacionRepository.crear(id_externo=TELEFONO, origen="anuncio", id_anuncio=ID_ANUNCIO)
+    # La atribución es POR LEAD: el lead nace del anuncio por el que llegó el contacto (su llegada reciente).
+    referral = {"source_id": ID_ANUNCIO, "source_type": "ad", "ctwa_clid": "clic-ventas-test"}
+    AnuncioRepository.registrar_llegada(conversacion["id"], None, "wamid.ventas-test", normalizar_referral(referral), referral)
     lead = LeadRepository.obtener_o_crear(conversacion["id"], conversacion["contacto_id"], telefono=TELEFONO)
     LeadRepository.actualizar_datos_cliente(lead["id"], "Ana", "Calle 1", "Cuenca", "Azuay")
     LeadRepository.actualizar_producto(
@@ -81,6 +86,9 @@ class TestCerrarManual:
         assert resultado["stock_restante"] == 3 and _stock(producto["sku"]) == 3
         assert resultado["pausado_por_agotado"] is False
         assert LeadRepository.obtener_por_id(lead["id"])["estado"] == "por_gestionar"
+        # Una venta cerrada es «ganado» por regla, con su entrada en el historial, en la misma transacción.
+        ganado = LeadRepository.obtener_por_id(lead["id"])
+        assert (ganado["temperatura"], ganado["temperatura_origen"], ganado["cerrado_en"] is not None) == ("ganado", "regla", True)
         assert _estado_conversacion(conversacion["id"]) == "en_gestion"
 
         venta = VentasRepository.obtener_por_lead(lead["id"])

@@ -89,6 +89,17 @@ class AnuncioRepository:
                     """,
                     (id_anuncio, datos.get("ctwa_clid"), conversacion_id),
                 )
+                # La atribución es POR LEAD: si el contacto ya tiene un lead abierto, ese lead pasa a venir de este anuncio
+                # (el último toque antes de la compra). Un lead que aún no existe lo creará el bot y heredará esta llegada.
+                cur.execute(
+                    """
+                    update leads set origen = 'anuncio', id_anuncio = coalesce(%s, id_anuncio),
+                                     ctwa_clid = coalesce(%s, ctwa_clid), actualizado_en = now()
+                    where temperatura in ('caliente', 'tibio', 'frio')
+                      and contacto_id = (select contacto_id from conversaciones where id = %s)
+                    """,
+                    (id_anuncio, datos.get("ctwa_clid"), conversacion_id),
+                )
                 return {"registrada": True, "anuncio_nuevo": anuncio_nuevo}
 
     @staticmethod
