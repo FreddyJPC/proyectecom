@@ -51,6 +51,14 @@ class TelegramNotifier:
         partes += [f"Conversación ID: {conversacion_id}", "", "Míralo en la app: Por gestionar."]
         self._enviar("\n".join(partes), {"conversacion_id": conversacion_id}, "una gestión pendiente")
 
+    def notificar_recordatorio(self, conversacion_id: int, cliente: str, espera: str, numero: int, maximo: int, motivo: str, ultimo_mensaje: str, enlace: str) -> None:
+        """Recordatorio de un chat que Victoria le pasó al dueño y sigue sin abrir (jobs/recordatorios). Best-effort como todos."""
+        partes = [f"⏰ Recordatorio {numero} de {maximo}: un cliente espera hace {espera}", "", f"Cliente: {cliente}", f"Motivo: {motivo}"]
+        if ultimo_mensaje:
+            partes.append(f"Su último mensaje: «{ultimo_mensaje}»")
+        partes += ["", f"Abre el chat: {enlace}", "Dejo de avisar apenas lo abras."]
+        self._enviar("\n".join(partes), {"conversacion_id": conversacion_id}, "un recordatorio")
+
     def notificar_pedido_cerrado(self, datos: dict) -> None:
         """El cliente cerró la compra de un producto propio: el pedido no se crea solo, hay que gestionar
         el envío. `datos` ya viene con textos listos (ver `VictoriaTools._avisar_pedido_cerrado`)."""

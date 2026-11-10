@@ -11,6 +11,7 @@ from src.config.supabase_auth import verificar_token
 from src.integrations.rocketfy import get_rocketfy_client
 from src.jobs.latido import LatidoService, estado_latido
 from src.jobs.reconciliacion import ReconciliacionService
+from src.jobs.recordatorios import RecordatoriosService
 from src.jobs.seguimiento import SeguimientoService
 from src.jobs.stock_watcher import StockWatcherService
 from src.routes.ajustes import ajustes_bp
@@ -161,6 +162,13 @@ def _job_seguimiento() -> None:
         logging.getLogger(__name__).exception("Fallo no controlado en job de seguimiento de clientes")
 
 
+def _job_recordatorios() -> None:
+    try:
+        RecordatoriosService().ejecutar()
+    except Exception:
+        logging.getLogger(__name__).exception("Fallo no controlado en job de recordatorios")
+
+
 def _job_latido() -> None:
     try:
         LatidoService().ejecutar()
@@ -177,6 +185,7 @@ _INTERVALOS_DE_JOBS = {
     "sync_productos": "jobs.minutos_sync_productos",
     "enfriar_leads": "jobs.minutos_enfriar_leads",
     "seguimiento": "jobs.minutos_seguimiento",
+    "recordatorios": "jobs.minutos_recordatorios",
 }
 
 
@@ -235,6 +244,7 @@ def start_scheduler():
     )
     scheduler.add_job(_job_enfriar_leads, "interval", minutes=minutos["enfriar_leads"], id="enfriar_leads")
     scheduler.add_job(_job_seguimiento, "interval", minutes=minutos["seguimiento"], id="seguimiento")
+    scheduler.add_job(_job_recordatorios, "interval", minutes=minutos["recordatorios"], id="recordatorios")
     scheduler.add_job(
         _job_latido,
         "interval",
@@ -249,9 +259,9 @@ def start_scheduler():
     # Logger propio: el de Flask se llama igual que este módulo ("src.app")
     # y tiene su propio handler, así que un mensaje de __name__ salía doble.
     logging.getLogger("src.scheduler").info(
-        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, enfriamiento de leads %d min, seguimiento de clientes %d min, latido DB %d h)",
+        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, enfriamiento de leads %d min, seguimiento de clientes %d min, recordatorios %d min, latido DB %d h)",
         minutos["reconciliacion_pedidos"], minutos["stock_watcher"], minutos["sync_productos"], minutos["enfriar_leads"],
-        minutos["seguimiento"], HORAS_ENTRE_LATIDOS,
+        minutos["seguimiento"], minutos["recordatorios"], HORAS_ENTRE_LATIDOS,
     )
     return scheduler
 

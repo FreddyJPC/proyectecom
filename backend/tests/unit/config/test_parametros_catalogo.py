@@ -25,7 +25,7 @@ class TestInvariantesDelCatalogo:
     def test_estan_todos_los_parametros(self):
         # 15 del plan de parametrización + «Fotos por envío» (ADR-012) + 8 de leads (enfriamiento, atribución y cliente
         # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea).
-        assert len(CATALOGO) == 42
+        assert len(CATALOGO) == 49
 
     def test_el_seguimiento_automatico_viene_apagado_de_fabrica(self):
         """Escribirle a un cliente por iniciativa propia nunca debe empezar solo: hay que encenderlo a propósito."""
@@ -65,8 +65,10 @@ class TestInvariantesDelCatalogo:
             assert not any(palabra in n for n in nombres), f"{p.clave} parece un secreto ({palabra})"
 
     def test_las_tareas_automaticas_tienen_un_minimo_que_protege_a_rocketfy(self):
+        # Los recordatorios al dueño solo miran la base propia (no llaman a Rocketfy): pueden revisarse cada pocos minutos.
+        solo_base_propia = {"jobs.minutos_recordatorios"}
         for p in CATALOGO:
-            if p.clave.startswith("jobs.minutos_"):
+            if p.clave.startswith("jobs.minutos_") and p.clave not in solo_base_propia:
                 assert p.minimo >= 15
 
     def test_el_modelo_de_ia_es_una_lista_cerrada_sin_los_modelos_que_rompen_el_codigo(self):

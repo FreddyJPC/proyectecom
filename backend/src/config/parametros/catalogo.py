@@ -171,6 +171,11 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Seguimiento automático de clientes",
         "Mensajes que el sistema le escribe por su cuenta a un cliente que dejó de contestar: cuándo, a quién, cuántos y con qué texto.",
     ),
+    Grupo(
+        "recordatorios",
+        "Recordatorios para ti",
+        "Avisos por Telegram cuando un chat que Victoria te pasó sigue sin atender: cuándo, cada cuánto y cuántas veces.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -675,6 +680,84 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_PROXIMA_CORRIDA,
     ),
     Parametro(
+        clave="recordatorios.activo",
+        grupo="recordatorios",
+        nombre="Recordarme los chats sin atender",
+        para_que_sirve=(
+            "Cuando Victoria te pasa un chat (la escalada, o una venta que debes gestionar) te avisa por Telegram. Si no lo abres, el sistema "
+            "te vuelve a avisar, hasta el máximo que definas. Apenas abres el chat, los recordatorios paran. Solo te escriben a ti, nunca al cliente."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="recordatorios.minutos_primero",
+        grupo="recordatorios",
+        nombre="Primer recordatorio",
+        para_que_sirve="Cuántos minutos esperar, desde que el chat quedó en tus manos, antes del primer recordatorio.",
+        tipo=TIPO_ENTERO,
+        defecto=15,
+        minimo=5,
+        maximo=240,
+        unidad="minutos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="recordatorios.minutos_entre",
+        grupo="recordatorios",
+        nombre="Tiempo entre recordatorios",
+        para_que_sirve="Cuántos minutos pasan entre un recordatorio y el siguiente mientras el chat siga sin abrir.",
+        tipo=TIPO_ENTERO,
+        defecto=30,
+        minimo=10,
+        maximo=480,
+        unidad="minutos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="recordatorios.maximo",
+        grupo="recordatorios",
+        nombre="Máximo de recordatorios por chat",
+        para_que_sirve="Cuántos recordatorios se mandan como máximo por cada chat, para que no te acosen. El aviso original no cuenta.",
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=10,
+        unidad="recordatorios",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="recordatorios.hora_desde",
+        grupo="recordatorios",
+        nombre="Hora desde la que te recuerdan",
+        para_que_sirve=(
+            "Primera hora del día (hora de Ecuador, de 0 a 23) en que pueden llegarte recordatorios. Si uno toca de madrugada, no se pierde: "
+            "sale apenas empieza este horario."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=8,
+        minimo=0,
+        maximo=23,
+        unidad="hora",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="recordatorios.hora_hasta",
+        grupo="recordatorios",
+        nombre="Hora hasta la que te recuerdan",
+        para_que_sirve=(
+            "Hora del día (hora de Ecuador, de 1 a 24) en que dejan de llegarte recordatorios: con 21, el último sale antes de las 21:00. "
+            "Debe ser mayor que la hora de inicio; si no lo es, no se envía nada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=21,
+        minimo=1,
+        maximo=24,
+        unidad="hora",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
         clave="seguimiento.tope_diario",
         grupo="seguimiento",
         nombre="Máximo de seguimientos por día",
@@ -811,6 +894,18 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=30,
         minimo=15,
         maximo=240,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
+    ),
+    Parametro(
+        clave="jobs.minutos_recordatorios",
+        grupo="tareas",
+        nombre="Revisión de chats sin atender",
+        para_que_sirve="Cada cuántos minutos el sistema mira si hay chats que Victoria te pasó y sigues sin abrir, para mandarte un recordatorio.",
+        tipo=TIPO_ENTERO,
+        defecto=5,
+        minimo=1,
+        maximo=60,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),

@@ -1610,3 +1610,15 @@ cliente escriba.
 **Servientrega.** Los pedidos se despachan por Servientrega (nombre editable en Parámetros). Victoria la menciona cuando el pedido va por envío y **no** cuando el producto es de
 retiro o de entrega en persona: lo decide la información de entrega de cada producto.
 
+## 52. Recordatorios: que ningún cliente se quede esperando
+
+**El problema.** Cuando Victoria te pasa un chat (el cliente pide una persona, manda un comprobante, o hay un pedido que gestionar) el sistema te avisa **una vez** por Telegram. Si ese
+aviso se pierde, el cliente espera y la venta se enfría.
+
+**Qué hace.** Un trabajo automático revisa cada pocos minutos los chats que Victoria te pasó y **no has abierto**. Si pasó el tiempo, te manda otro aviso por Telegram con el cliente,
+el motivo, su último mensaje y un enlace al chat. Por defecto: el primero a los **15 minutos**, luego cada **30**, **3 veces como máximo**, y solo entre las **8:00 y las 21:00** (si algo toca
+de madrugada, sale a las 8:00). Solo te escribe a ti, nunca al cliente. Todo se ajusta en Parámetros → «Recordatorios para ti», y se puede apagar.
+
+**Cómo sabe que lo atendiste.** El sistema considera atendido un chat cuando **lo abres en el panel**. También se detiene si el chat deja de estar en tus manos: se lo devuelves a Victoria,
+lo tomas con «Atiendes tú» o se cierra. Mirarlo solo en la lista de chats no cuenta: hay que abrirlo. Si lo escalan de nuevo más tarde, la cuenta empieza desde cero.
+
