@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, MessageSquareText, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Calculator, Landmark, MessageSquareText, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -105,6 +105,18 @@ export default function ParametrosPage() {
           </div>
           <Button asChild variant="outline">
             <Link href="/parametros/instrucciones">Abrir instrucciones</Link>
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-neutral-soft text-status-neutral-ink">
+            <Landmark className="size-[1.1rem]" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-semibold">Cuentas para transferir</p>
+            <p className="text-sm text-muted-foreground">Las cuentas que Victoria da a quien paga por transferencia.</p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href="/parametros/cuentas">Abrir cuentas</Link>
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">

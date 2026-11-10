@@ -16,6 +16,7 @@ from src.jobs.stock_watcher import StockWatcherService
 from src.routes.ajustes import ajustes_bp
 from src.routes.anuncios import anuncios_bp
 from src.routes.categorias import categorias_bp
+from src.routes.cuentas_bancarias import cuentas_bancarias_bp
 from src.routes.catalogos import catalogos_bp
 from src.routes.conversaciones import conversaciones_bp
 from src.routes.gestion import gestion_bp
@@ -75,6 +76,7 @@ def create_app() -> Flask:
     app.register_blueprint(anuncios_bp)
     app.register_blueprint(catalogos_bp)
     app.register_blueprint(categorias_bp)
+    app.register_blueprint(cuentas_bancarias_bp)
     app.register_blueprint(conversaciones_bp)
     app.register_blueprint(gestion_bp)
     app.register_blueprint(ventas_bp)

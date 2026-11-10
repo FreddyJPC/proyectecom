@@ -1576,3 +1576,17 @@ el chat usa **«Devolver a Victoria»**. Si la ventana de 24 h de WhatsApp está
 **Dos detalles de comportamiento de Victoria** (instrucciones, no reglas del código): ante un audio que no se entiende no adivina: dice que no lo entendió y pide mandarlo de
 nuevo o escribirlo; y el **máximo de unidades por pedido** solo lo menciona si el cliente pregunta cuántas puede llevar o pide más (el código igual impide pasarse del máximo).
 
+## 50. Cuentas para transferir: que Victoria nunca se equivoque de número
+
+Si un cliente paga por **transferencia**, necesita saber a qué cuenta. Victoria **no escribe nunca un número de cuenta**: el sistema lo toma de la tabla de cuentas
+(pantalla **Parámetros → Cuentas para transferir**) y arma el mensaje completo; Victoria solo lo manda tal cual. Así no hay forma de que cambie un dígito.
+
+**Cómo conversa.** Primero le pregunta al cliente **desde qué banco** va a transferir (una transferencia entre cuentas del mismo banco suele ser inmediata y sin comisión).
+Si tienes una cuenta en ese banco, le da esa; si el cliente dice «cualquiera», le da la principal (la de arriba de la lista). El banco se entiende aunque venga mal escrito
+(«Bano Pichncha», «la jep», «pich»). Si dice un banco que no tienes («Rumiñahui»), Victoria le explica que por ahora no hay cuenta ahí y le ofrece los bancos que sí tienes; el
+cliente elige uno, o no (y entonces la venta sigue por otro camino, por ejemplo contra entrega). El mensaje incluye banco, tipo de cuenta, número, titular, cédula y el **valor a
+transferir** (el total que calculó el sistema).
+
+**Detalles.** Una cuenta apagada no se da, pero no se pierde. Tus datos bancarios viven solo en la base de datos, nunca en el código ni en el repositorio. En productos
+propios (cierre manual) no se usa: ahí el pago lo coordinas tú.
+
