@@ -82,6 +82,7 @@ export function InboxList() {
     },
     { value: "esperando_pago", label: "Esperando pago", count: totales?.esperandoPago },
     { value: "en_gestion", label: "En gestión", count: totales?.enGestion },
+    { value: "manual", label: "Atiendes tú", count: totales?.manual },
   ];
 
   const hayFiltros = vista !== "todas" || origen !== "todos" || canal !== "todos" || busqueda !== "";

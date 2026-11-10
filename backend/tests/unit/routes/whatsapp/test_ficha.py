@@ -24,6 +24,11 @@ class TestFormatearFichaProducto:
         assert "Precio por unidad: $24.99" in ficha
         assert "Unidades máximas por pedido: 3" in ficha
 
+    def test_el_maximo_es_un_dato_interno_que_victoria_no_debe_mencionar_por_su_cuenta(self):
+        ficha = formatear_ficha_producto(_producto(max_unidades_por_pedido=1))
+        assert "NO lo menciones por tu cuenta" in ficha
+        assert "solo dilo si el cliente pregunta" in ficha
+
     def test_sin_maximo_en_los_datos_se_asume_una_unidad(self):
         assert "Unidades máximas por pedido: 1" in formatear_ficha_producto(_producto())
         assert "Unidades máximas por pedido: 1" in formatear_ficha_producto(_producto(max_unidades_por_pedido=None))

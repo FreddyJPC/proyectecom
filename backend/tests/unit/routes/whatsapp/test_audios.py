@@ -69,6 +69,15 @@ class TestConElServicioEncendido:
         texto = _correr(MensajesConArchivos([_audio()]), TranscriptorFalso(dicho))
         assert "sin voz clara" in texto
 
+    @pytest.mark.parametrize("dicho", ["", "no se pudo"])
+    def test_el_audio_que_no_se_entiende_le_pide_a_victoria_decirlo_y_pedir_otro(self, audios_encendidos, dicho):
+        """Lo pidió Freddy: ante un audio ilegible, Victoria dice que no lo entendió y pide enviarlo de nuevo o escribirlo."""
+        falla = TranscriptorFalso(error=TranscripcionError("x")) if dicho else TranscriptorFalso(dicho)
+        texto = _correr(MensajesConArchivos([_audio()]), falla)
+        assert "no lograste entender el audio" in texto
+        assert "donde se escuche mejor" in texto
+        assert "no adivines" in texto
+
     def test_sin_servicio_configurado_se_pide_que_escriba(self, audios_encendidos, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         llm = LLMProviderFalso([_fin()])

@@ -1563,3 +1563,16 @@ Parámetros. Mientras no esté, Victoria le pide amablemente al cliente que lo e
 
 **Para el dueño.** En cada conversación se ve la foto o se escucha el audio, con el análisis y la transcripción. El servidor lo trae de Meta al momento; no se
 guarda ninguna copia fuera de la base. Si el archivo ya venció en Meta (más de ~30 días), el panel lo avisa.
+
+## 49. Quién atiende la conversación: Victoria o tú
+
+Cada conversación tiene un estado que decide **quién responde**. Mientras está «Activa» (o «Esperando pago»), contesta Victoria. Pasa a manos de una persona, y Victoria
+se calla, en tres casos: **Escalada** (Victoria pidió ayuda), **En gestión** (hay algo que gestionar de un producto propio) y **Atiendes tú** (la tomaste tú).
+
+**Cómo sacar a Victoria.** Hay dos formas. Con el botón **«Tomar la conversación»** del chat, o simplemente **escribiéndole al cliente desde el panel**: si Victoria
+seguía a cargo, el sistema entiende que ahora atiendes tú y la saca (si no, cuando el cliente respondiera, Victoria contestaría también y se estorbarían). Para devolverle
+el chat usa **«Devolver a Victoria»**. Si la ventana de 24 h de WhatsApp está cerrada y no se puede enviar el mensaje, la conversación no cambia de estado.
+
+**Dos detalles de comportamiento de Victoria** (instrucciones, no reglas del código): ante un audio que no se entiende no adivina: dice que no lo entendió y pide mandarlo de
+nuevo o escribirlo; y el **máximo de unidades por pedido** solo lo menciona si el cliente pregunta cuántas puede llevar o pide más (el código igual impide pasarse del máximo).
+

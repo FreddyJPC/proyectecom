@@ -71,6 +71,8 @@ export const ESTADOS_CONVERSACION: Record<string, EstadoInfo> = {
   escalada: { label: "Escalada", variant: "danger" },
   // ADR-012: el dueño la atiende (producto propio): Victoria ya no responde.
   en_gestion: { label: "En gestión", variant: "info" },
+  // El dueño sacó a Victoria de la conversación (botón «Tomar la conversación» o al escribirle al cliente desde el panel).
+  manual: { label: "Atiendes tú", variant: "info" },
   cerrada: { label: "Cerrada", variant: "neutral" },
   fria: { label: "Fría", variant: "neutral" },
 };

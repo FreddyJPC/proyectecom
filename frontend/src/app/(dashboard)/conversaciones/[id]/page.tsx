@@ -191,6 +191,7 @@ export default function ConversacionDetallePage() {
   const [notaLocal, setNotaLocal] = useState<string | null>(null);
   const [guardandoNota, setGuardandoNota] = useState(false);
   const [reactivando, setReactivando] = useState(false);
+  const [tomando, setTomando] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -255,6 +256,19 @@ export default function ConversacionDetallePage() {
       toast.error(err instanceof ApiError ? err.message : "No se pudo guardar la nota.");
     } finally {
       setGuardandoNota(false);
+    }
+  }
+
+  async function handleTomar() {
+    setTomando(true);
+    try {
+      await apiFetch(`/conversaciones/${id}/tomar`, { method: "POST" });
+      toast.success("Victoria ya no responde en este chat: lo atiendes tú.");
+      recargar();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo tomar la conversación.");
+    } finally {
+      setTomando(false);
     }
   }
 
@@ -372,6 +386,44 @@ export default function ConversacionDetallePage() {
                 <>
                   <span className="hidden sm:inline">Devolver a Victoria</span>
                   <span className="sm:hidden">Devolver</span>
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* El dueño tomó la conversación a mano: Victoria no responde hasta que se la devuelva. */}
+        {conversacion.estado === "manual" && (
+          <div className="flex items-center justify-between gap-3 border-b bg-status-info-soft px-4 py-2.5 text-status-info-ink">
+            <p className="text-sm">
+              <strong className="font-semibold">Atiendes tú este chat.</strong>
+              <span className="hidden opacity-85 md:inline"> Victoria no responde mientras tanto. Devuélvele el control cuando quieras.</span>
+            </p>
+            <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
+              {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
+              {reactivando ? "Devolviendo…" : (
+                <>
+                  <span className="hidden sm:inline">Devolver a Victoria</span>
+                  <span className="sm:hidden">Devolver</span>
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Victoria atiende este chat: el dueño puede sacarla y responder él (si no, al escribir desde aquí también la saca). */}
+        {(conversacion.estado === "activa" || conversacion.estado === "esperando_pago") && (
+          <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2 text-foreground">
+            <p className="text-sm">
+              <strong className="font-semibold">Victoria atiende este chat.</strong>
+              <span className="hidden text-muted-foreground md:inline"> Si le escribes al cliente desde aquí, ella se calla.</span>
+            </p>
+            <Button variant="outline" size="sm" onClick={handleTomar} disabled={tomando} className="shrink-0 bg-card">
+              {tomando ? <Loader2 className="animate-spin" /> : <UserRound />}
+              {tomando ? "Tomando…" : (
+                <>
+                  <span className="hidden sm:inline">Tomar la conversación</span>
+                  <span className="sm:hidden">Tomar</span>
                 </>
               )}
             </Button>

@@ -38,8 +38,9 @@ TIPOS_QUE_PIDE_VICTORIA: Tuple[str, ...] = tuple(t.clave for t in TIPOS.values()
 ESTADOS = ("pendiente", "atendida")
 
 # Estados de una conversación en los que una persona está a cargo y Victoria ya no responde: la escaló
-# ella misma, o está «en gestión» (el dueño atiende una intención de compra o un pedido cerrado).
-ESTADOS_EN_MANOS_DEL_DUENO = ("escalada", "en_gestion")
+# ella misma, está «en gestión» (el dueño atiende una intención de compra o un pedido cerrado) o es «manual» (el dueño
+# decidió atenderla él, con el botón «Tomar la conversación» o al escribirle al cliente desde el panel).
+ESTADOS_EN_MANOS_DEL_DUENO = ("escalada", "en_gestion", "manual")
 
 
 def tipo(clave: str) -> TipoSolicitud:

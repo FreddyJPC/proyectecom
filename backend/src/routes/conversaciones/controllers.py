@@ -75,6 +75,15 @@ def ver_archivo_de_un_mensaje(conversacion_id: int, mensaje_id: int):
     return Response(datos, mimetype=mime.split(";")[0], headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
 
 
+@conversaciones_bp.post("/<int:conversacion_id>/tomar")
+def tomar_conversacion(conversacion_id: int):
+    try:
+        _build_service().tomar(conversacion_id)
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    return jsonify(status="ok"), 200
+
+
 @conversaciones_bp.post("/<int:conversacion_id>/reactivar")
 def reactivar_conversacion(conversacion_id: int):
     try:

@@ -37,6 +37,7 @@ class TotalesPorFiltroRapidoDTO:
     escaladas_sin_revisar: int
     esperando_pago: int
     en_gestion: int = 0
+    manual: int = 0
 
 
 @dataclass

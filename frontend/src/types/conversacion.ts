@@ -33,6 +33,8 @@ export type TotalesPorFiltroRapido = {
   esperandoPago: number;
   /** Conversaciones que el dueño atiende (intención de compra de un producto propio). */
   enGestion: number;
+  /** Conversaciones que el dueño tomó a mano: Victoria ya no responde. */
+  manual: number;
 };
 
 export type ConversacionesListado = {

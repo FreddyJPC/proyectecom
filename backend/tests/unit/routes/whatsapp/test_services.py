@@ -462,6 +462,17 @@ class TestConversacionEnGestion:
 
         bot_worker.encolar.assert_not_called()
 
+    def test_una_conversacion_que_tomo_el_dueno_a_mano_no_recibe_respuesta_automatica(self):
+        """Si el dueño toma la conversación (o le escribe al cliente desde el panel), Victoria se calla aunque el cliente responda."""
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "manual"}}
+        )
+        bot_worker = MagicMock()
+
+        _service(conv_repo=conv_repo, bot_worker=bot_worker).procesar_mensaje_entrante(_dto())
+
+        bot_worker.encolar.assert_not_called()
+
     def test_quien_tiene_un_pedido_previo_por_gestionar_recibe_la_respuesta_fija_de_postventa(self, postventa_a_una_persona):
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}

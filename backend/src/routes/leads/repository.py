@@ -261,7 +261,7 @@ class LeadsRepository:
                     ) mc on true
                     where l.temperatura = any(%s)
                       and (l.temperatura_fijada_hasta is null or l.temperatura_fijada_hasta <= now())
-                      and c.estado not in ('escalada', 'en_gestion')
+                      and c.estado not in ('escalada', 'en_gestion', 'manual')
                     """,
                     (list(ABIERTAS),),
                 )
