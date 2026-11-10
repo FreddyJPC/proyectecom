@@ -127,7 +127,8 @@ class VentasRepository:
                     cur, conversacion_id, lead_id, "pedido_cerrado", detalle_solicitud, venta_id=venta_id
                 )
                 cur.execute(
-                    "update conversaciones set estado = 'en_gestion', vista_en = null, actualizada_en = now() "
+                    "update conversaciones set estado = 'en_gestion', vista_en = null, pendiente_desde = now(), recordatorios_enviados = 0, "
+                    "ultimo_recordatorio_en = null, actualizada_en = now() "
                     "where id = %s",
                     (conversacion_id,),
                 )

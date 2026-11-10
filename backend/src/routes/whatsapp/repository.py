@@ -146,7 +146,7 @@ class ConversacionRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "update conversaciones set estado = 'escalada', vista_en = null, actualizada_en = now() where id = %s",
+                    "update conversaciones set estado = 'escalada', vista_en = null, pendiente_desde = now(), recordatorios_enviados = 0, ultimo_recordatorio_en = null, actualizada_en = now() where id = %s",
                     (conversacion_id,),
                 )
 
@@ -170,7 +170,7 @@ class ConversacionRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "update conversaciones set estado = 'en_gestion', vista_en = null, actualizada_en = now() where id = %s",
+                    "update conversaciones set estado = 'en_gestion', vista_en = null, pendiente_desde = now(), recordatorios_enviados = 0, ultimo_recordatorio_en = null, actualizada_en = now() where id = %s",
                     (conversacion_id,),
                 )
 
