@@ -274,7 +274,7 @@ posible y rotarlos.
   (`bot.confirmar_datos_antes_de_cerrar`). **Aún no se ha visto con la IA real ni con clientes reales** (pendiente #74: lista en `docs/PRUEBAS_CON_ERRORES_HUMANOS.md`).
 - **Imágenes, audios y otros tipos de mensaje (pendiente #73, entrada 0.0.122) — desplegado 2026-11-10 (PR #33):** migración **028** (`mensajes.media_id`,
   `media_mime`, `media_nombre`, `analisis`) aplicada en Supabase (28 migraciones); 41 parámetros; Victoria ve fotos/PDF y un comprobante nunca confirma el pago (lo confirma una
-  persona); los audios necesitan `OPENAI_API_KEY` en Railway y el interruptor «Que Victoria escuche los audios» (apagado). **No se ha probado con la IA real ni con WhatsApp real** (pendiente #75). Plan: `docs/PLAN_IMAGENES_AUDIO.md`. 
+  persona); los audios usan `OPENAI_API_KEY` (puesta en Railway) y el interruptor «Que Victoria escuche los audios» (Freddy lo encendió y la primera prueba real funcionó). Estado `manual` («Atiendes tú», PR #34): el dueño saca a Victoria con el botón «Tomar la conversación» o al escribirle al cliente desde el panel. **No se ha probado con la IA real ni con WhatsApp real** (pendiente #75). Plan: `docs/PLAN_IMAGENES_AUDIO.md`. 
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
