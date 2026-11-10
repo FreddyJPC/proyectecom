@@ -30,7 +30,7 @@ from .dto import (
     UltimoMensajeDTO,
     VentanaGratuitaDTO,
 )
-from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
+from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, SinPedidoEnCursoError, VentanaMensajeriaCerradaError
 
 # Cuántas llegadas por anuncio se listan en la pantalla de una conversación (la más reciente primero).
 MAXIMO_LLEGADAS_LISTADAS = 20
@@ -48,7 +48,9 @@ class ConversacionesService:
         lead_repo: Optional[LeadRepository] = None,
         mensaje_repo: Optional[MensajeRepository] = None,
         anuncio_servicio: Optional[AnuncioServicio] = None,
+        bot_worker=None,
     ):
+        self._bot_worker_fijo = bot_worker
         self._anuncios = anuncio_servicio or AnuncioServicio()
         self._canales = canales or get_registro_canales()
         self._conversaciones = conversacion_repo or ConversacionRepository()
@@ -266,6 +268,58 @@ class ConversacionesService:
         if self._conversaciones.obtener_por_id(conversacion_id) is None:
             raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
         self._conversaciones.marcar_manual(conversacion_id)
+
+    def _bot_worker(self):
+        if self._bot_worker_fijo is None:
+            from src.routes.whatsapp.factory import get_bot_worker  # perezoso: evita un ciclo de importación al arrancar
+
+            self._bot_worker_fijo = get_bot_worker()
+        return self._bot_worker_fijo
+
+    def continuar_venta(self, conversacion_id: int, pago_confirmado: bool = False, nota: Optional[str] = None) -> dict:
+        """El dueño le devuelve la conversación a Victoria para que SIGA CON EL CIERRE DE LA VENTA.
+
+        Con `pago_confirmado` el dueño ya vio en su banco que la transferencia llegó: se deja constancia en el pedido (ya no se
+        pide comprobante). En los dos casos la conversación vuelve a Victoria y se le deja un aviso interno (que el cliente nunca
+        ve) con lo que debe hacer: avisarle al cliente, pedir lo que falte y cerrar el pedido (en Rocketfy, crearlo; en un producto
+        propio, tomar los datos y pasárselo al dueño). `nota` es una indicación opcional del dueño para ella.
+
+        Si la ventana de 24 h está cerrada, Victoria no puede escribirle al cliente: se deja todo listo (el pago confirmado, el
+        aviso) y no se encola nada; apenas el cliente escriba, Victoria ya lo sabe. Devuelve {"victoriaContinua": bool}."""
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        if conversacion is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+
+        if pago_confirmado:
+            lead = self._leads.obtener_por_conversacion(conversacion_id)
+            if lead is None or lead.get("metodo_pago") != "transferencia":
+                raise SinPedidoEnCursoError("Esta conversación no tiene un pedido por transferencia: no hay un pago que confirmar.")
+            self._leads.marcar_pago_confirmado(lead["id"])
+            aviso = (
+                "[Aviso interno del sistema, no lo escribió el cliente: el dueño verificó su cuenta y CONFIRMÓ que el pago por "
+                "transferencia de este cliente llegó. Avísale con calidez que ya recibimos su pago y sigue con tu objetivo, que es "
+                "cerrar la venta: si falta algún dato (nombre, dirección, cantón, provincia, producto, entrega), pídeselo; si ya "
+                "está todo, muéstrale el resumen para que lo confirme o, si ya lo confirmó, cierra la venta con cerrar_venta. Si en "
+                "algún punto no puedes avanzar, usa escalar_a_humano.]"
+            )
+        else:
+            aviso = (
+                "[Aviso interno del sistema, no lo escribió el cliente: el dueño te devuelve esta conversación para que continúes "
+                "con tu objetivo, que es cerrar la venta. Revisa qué falta (datos del cliente, producto, entrega, pago) y sigue desde "
+                "ahí; llega hasta donde puedas con tus herramientas y, cuando ya no puedas avanzar, usa escalar_a_humano.]"
+            )
+        nota = (nota or "").strip()
+        if nota:
+            aviso += f"\n[Indicación del dueño para ti: {nota}]"
+
+        self._mensajes.crear(conversacion_id=conversacion_id, rol="sistema", contenido=aviso, tipo="texto", wamid=None)
+        self._conversaciones.actualizar_estado(conversacion_id, "activa")
+
+        abierta, _ = self._ventana_abierta(conversacion)
+        if not abierta:
+            return {"victoriaContinua": False}
+        self._bot_worker().encolar(conversacion_id=conversacion_id, canal=conversacion["canal"], id_externo=conversacion["id_externo"])
+        return {"victoriaContinua": True}
 
     def reactivar(self, conversacion_id: int) -> None:
         if self._conversaciones.obtener_por_id(conversacion_id) is None:

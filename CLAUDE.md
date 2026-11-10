@@ -114,7 +114,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2129 tests pasando**.
+   desde `backend/`. Estado actual: **2215 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -274,7 +274,9 @@ posible y rotarlos.
   (`bot.confirmar_datos_antes_de_cerrar`). **Aún no se ha visto con la IA real ni con clientes reales** (pendiente #74: lista en `docs/PRUEBAS_CON_ERRORES_HUMANOS.md`).
 - **Imágenes, audios y otros tipos de mensaje (pendiente #73, entrada 0.0.122) — desplegado 2026-11-10 (PR #33):** migración **028** (`mensajes.media_id`,
   `media_mime`, `media_nombre`, `analisis`) aplicada en Supabase (28 migraciones); 41 parámetros; Victoria ve fotos/PDF y un comprobante nunca confirma el pago (lo confirma una
-  persona); los audios necesitan `OPENAI_API_KEY` en Railway y el interruptor «Que Victoria escuche los audios» (apagado). **No se ha probado con la IA real ni con WhatsApp real** (pendiente #75). Plan: `docs/PLAN_IMAGENES_AUDIO.md`. 
+  persona); los audios usan `OPENAI_API_KEY` (puesta en Railway) y el interruptor «Que Victoria escuche los audios» (Freddy lo encendió y la primera prueba real funcionó). Estado `manual` («Atiendes tú», PR #34): el dueño saca a Victoria con el botón «Tomar la conversación» o al escribirle al cliente desde el panel. **No se ha probado con la IA real ni con WhatsApp real** (pendiente #75). Plan: `docs/PLAN_IMAGENES_AUDIO.md`. 
+- **Cuentas para transferir (pendiente #76, entrada 0.0.126) — construido 2026-11-10, SIN desplegar:** migración **029** (`cuentas_bancarias`) **no aplicada en Supabase** (hoy 28); Victoria pregunta el banco y el código arma el mensaje con la cuenta (herramienta `enviar_cuenta_para_transferir`); las cuentas se cargan desde Parámetros → Cuentas para transferir (nunca en el repositorio). Al desplegar: primero la migración, después el código.
+- **Confirmar pago y «Que Victoria continúe» + Servientrega (entrada 0.0.127) — construido 2026-11-10, SIN desplegar** (sin migración nueva; 42 parámetros): el dueño confirma una transferencia con un botón del panel y Victoria sigue cerrando la venta; `rol = 'sistema'` en `mensajes` guarda los avisos internos al bot. Se despliega junto con la 029.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

@@ -43,11 +43,13 @@ from src.routes.pedidos.exceptions import (
 from src.routes.pedidos.services import PedidoService
 from src.routes.entregas.logica import describir, elegir_opcion, opciones_aplicables, total_con_envio
 from src.routes.entregas.repository import EntregaRepository
+from src.routes.cuentas_bancarias.repository import CuentaBancariaRepository
 from src.routes.gestion.services import GestionService
 from src.routes.gestion.tipos import TIPOS_QUE_PIDE_VICTORIA
 from src.catalogs.ecuador_locations import get_catalog
 from .coincidencia import base, buscar
 from .confirmacion import datos_que_faltan, texto_de_confirmacion
+from .cuentas import respuesta_para_victoria
 from .ubicacion import revisar_ubicacion
 from src.routes.imagenes.logica import galeria_para_enviar
 from src.routes.imagenes.repository import ImagenRepository
@@ -225,6 +227,23 @@ HERRAMIENTAS_VICTORIA = [
                 },
             },
             "required": ["producto_sku"],
+        },
+    ),
+    HerramientaLLM(
+        nombre="enviar_cuenta_para_transferir",
+        descripcion=(
+            "Le da al cliente los datos de la cuenta para que transfiera. Úsala cuando elija pagar por transferencia o te pida a qué "
+            "cuenta transferir. NUNCA escribas tú un número de cuenta: el sistema arma el mensaje con los datos exactos y tú lo mandas "
+            "tal cual. Primero pregúntale desde qué banco va a transferir; cuando responda, llama esta herramienta con ese banco tal "
+            "como lo escribió el cliente (aunque tenga faltas). Si el cliente no sabe o dice que cualquiera, usa cualquiera=true. Si "
+            "llamas sin banco, te dirá que se lo preguntes. Si ese banco no está entre los nuestros, te dirá cómo ofrecerle los que sí."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "banco": {"type": "string", "description": "El banco que dijo el cliente, tal como lo escribió. Vacío si aún no lo dijo."},
+                "cualquiera": {"type": "boolean", "description": "true si al cliente le da igual a qué banco transferir."},
+            },
         },
     ),
     HerramientaLLM(
@@ -450,6 +469,7 @@ class HerramientasVictoria:
         ventas_service: Optional[VentasService] = None,
         imagen_repo: Optional[ImagenRepository] = None,
         catalogo_ubicaciones=None,
+        cuentas_repo: Optional[CuentaBancariaRepository] = None,
     ):
         self._catalogo_fijo = catalogo_ubicaciones
         self._leads = lead_repo or LeadRepository()
@@ -465,6 +485,7 @@ class HerramientasVictoria:
         self._gestion = gestion_service or GestionService(telegram=self._telegram)
         self._ventas = ventas_service or VentasService()
         self._imagenes = imagen_repo or ImagenRepository()
+        self._cuentas = cuentas_repo or CuentaBancariaRepository()
         # Perezoso: el registro de canales solo se arma si de verdad se envía una foto.
         self._canales = canales
         # Perezoso, igual que los canales: el servicio de leads (temperatura y «no contactar») se arma al usarlo.
@@ -477,6 +498,7 @@ class HerramientasVictoria:
             "ver_ficha_producto": self._handle_ver_ficha_producto,
             "registrar_producto": self._handle_registrar_producto,
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
+            "enviar_cuenta_para_transferir": self._handle_enviar_cuenta_para_transferir,
             "registrar_entrega": self._handle_registrar_entrega,
             "solicitar_gestion": self._handle_solicitar_gestion,
             "registrar_imagen_recibida": self._handle_registrar_imagen_recibida,
@@ -896,6 +918,20 @@ class HerramientasVictoria:
             self._conversaciones.marcar_esperando_pago(conversacion_id)
         return "Método de pago registrado."
 
+    def _handle_enviar_cuenta_para_transferir(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        """Los datos de la cuenta los arma el código desde la tabla `cuentas_bancarias` (nunca la IA): ver `cuentas.py`."""
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        producto = self._productos.obtener_por_sku(lead["producto_sku"]) if lead.get("producto_sku") else None
+        if es_de_cierre_manual(producto):
+            return (
+                "Este producto lo gestiona el dueño: tú no das cuentas bancarias. Dile al cliente que el dueño le pasa los datos para el "
+                "pago y sigue el proceso de cierre manual (solicitar_gestion)."
+            )
+        if producto is not None and "transferencia" not in _normalizar_texto(producto.get("metodos_pago_aceptados") or ""):
+            return "Este producto no acepta pago por transferencia. Explícaselo al cliente y ofrécele los métodos de pago que sí acepta."
+        cuentas = self._cuentas.listar(solo_activas=True)
+        return respuesta_para_victoria(entrada.get("banco"), bool(entrada.get("cualquiera")), cuentas, lead.get("total"))
+
     def _handle_registrar_imagen_recibida(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         """La IA vio una foto o PDF del cliente: se guarda lo que entendió (para el historial y para el dueño) y, si es un comprobante,
         se avisa a una persona. Nunca se da un pago por confirmado por una imagen (docs/PLAN_IMAGENES_AUDIO.md, decisión 2)."""
@@ -1024,7 +1060,7 @@ class HerramientasVictoria:
 
         # En Rocketfy la transferencia obliga a esperar el comprobante; en un producto propio la verificación
         # del pago la hace el dueño, así que no frena el cierre (ADR-012).
-        if not manual and lead["metodo_pago"] == "transferencia":
+        if not manual and lead["metodo_pago"] == "transferencia" and lead.get("estado_pago") != "confirmado":
             return (
                 "Este pedido es por transferencia. Pide al cliente la foto del comprobante "
                 "antes de continuar. No se puede cerrar todavía."

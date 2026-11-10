@@ -98,6 +98,10 @@ const mensajesDe = (c) => {
       { id: c.id * 100 + 51, rol: "cliente", contenido: "[audio]", tipo: "audio", creadoEn: ago(118), tieneArchivo: true, analisis: "quiero dos más pero de color blanco, ¿me los pueden enviar juntos?" },
     );
   }
+  // Aviso del dueño a Victoria (rol «sistema»): solo en la conversación 300, que espera la confirmación de un pago.
+  if (c.id === 300) {
+    lista.push({ id: c.id * 100 + 90, rol: "sistema", contenido: "[Aviso interno del sistema, no lo escribió el cliente: el dueño verificó su cuenta y CONFIRMÓ que el pago llegó.]\n[Indicación del dueño para ti: pídele su cédula]", tipo: "texto", creadoEn: ago(2) });
+  }
   return lista;
 };
 // Anuncios (Click-to-WhatsApp): lo que Meta manda de cada uno y a qué producto está vinculado (null = sin vincular).
@@ -1154,6 +1158,35 @@ function manejarCategorias(req, res, p, send) {
   });
 }
 
+// Cuentas para transferir (ficticias): GET/POST /cuentas-bancarias y PATCH/DELETE /cuentas-bancarias/<id>.
+const cuentasBancarias = [
+  { id: 1, banco: "Banco Pichincha", tipoCuenta: "Cuenta de ahorro transaccional", numero: "2200000001", titular: "Ana Prueba Demo", identificacion: "0900000001", activa: true, orden: 1 },
+  { id: 2, banco: "Banco Guayaquil", tipoCuenta: "Cuenta de ahorros", numero: "0050000002", titular: "Ana Prueba Demo", identificacion: "0900000001", activa: true, orden: 2 },
+  { id: 3, banco: "Cooperativa JEP", tipoCuenta: "AhorrosJEP", numero: "400000000003", titular: "PRUEBA DEMO ANA", identificacion: null, activa: false, orden: 3 },
+];
+let siguienteIdCuenta = 4;
+function manejarCuentas(req, res, p, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const cuerpo = raw ? JSON.parse(raw) : {};
+    const id = Number(p.split("/")[2] || 0);
+    if (req.method === "GET") return send(cuentasBancarias);
+    if (req.method === "POST") {
+      for (const k of ["banco", "tipoCuenta", "numero", "titular"]) if (!String(cuerpo[k] || "").trim()) return send({ error: "Datos inválidos.", detalle: { [k]: ["No puede estar vacío."] } }, 422);
+      if (cuentasBancarias.some((c) => c.banco === cuerpo.banco && c.numero === cuerpo.numero)) return send({ error: `Ya existe la cuenta ${cuerpo.numero} de ${cuerpo.banco}.` }, 409);
+      const nueva = { id: siguienteIdCuenta++, identificacion: cuerpo.identificacion || null, activa: cuerpo.activa !== false, orden: cuentasBancarias.length + 1, banco: cuerpo.banco, tipoCuenta: cuerpo.tipoCuenta, numero: cuerpo.numero, titular: cuerpo.titular };
+      cuentasBancarias.push(nueva);
+      return send(nueva, 201);
+    }
+    const i = cuentasBancarias.findIndex((c) => c.id === id);
+    if (i < 0) return send({ error: `No existe la cuenta ${id}.` }, 404);
+    if (req.method === "PATCH") { cuentasBancarias[i] = { ...cuentasBancarias[i], ...cuerpo, identificacion: cuerpo.identificacion === "" ? null : (cuerpo.identificacion ?? cuentasBancarias[i].identificacion) }; return send(cuentasBancarias[i]); }
+    if (req.method === "DELETE") { cuentasBancarias.splice(i, 1); return send({ status: "ok" }); }
+    send({ error: "mock: método no implementado" }, 405);
+  });
+}
+
 // ---------- servidor ----------
 function paginar(arr, q) {
   const page = Number(q.get("page") || 1), pageSize = Number(q.get("pageSize") || 20);
@@ -1200,7 +1233,8 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
-    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|notas)$/)) return send({ ok: true });
+    if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|continuar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;
       if (q.get("estado")) items = items.filter((x) => x.estadoLocal === q.get("estado"));
@@ -1229,6 +1263,7 @@ const server = http.createServer((req, res) => {
     if (p === "/leads" || p.startsWith("/leads/") || p.startsWith("/contactos/")) return manejarLeads(req, res, p, q, send);
     if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
+    if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
     if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }

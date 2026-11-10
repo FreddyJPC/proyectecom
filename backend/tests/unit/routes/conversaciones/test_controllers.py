@@ -10,6 +10,7 @@ import responses
 
 from src.app import create_app
 from src.routes.conversaciones.exceptions import (
+    SinPedidoEnCursoError,
     ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
@@ -125,6 +126,34 @@ class TestReactivarYNotas:
         with patch("src.routes.conversaciones.controllers.ConversacionesService"):
             resp = _client().post("/conversaciones/1/reactivar", headers=AUTH_HEADER)
         assert resp.status_code == 200
+
+    @responses.activate
+    def test_continuar_ok_y_pasa_el_pago_y_la_nota(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.continuar_venta.return_value = {"victoriaContinua": True}
+            resp = _client().post("/conversaciones/4/continuar", json={"pagoConfirmado": True, "nota": "pide la cédula"}, headers=AUTH_HEADER)
+        assert resp.status_code == 200 and resp.get_json()["victoriaContinua"] is True
+        MockService.return_value.continuar_venta.assert_called_once_with(4, True, "pide la cédula")
+
+    @responses.activate
+    def test_continuar_sin_cuerpo_es_continuar_sin_confirmar_pago(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.continuar_venta.return_value = {"victoriaContinua": False}
+            resp = _client().post("/conversaciones/4/continuar", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        MockService.return_value.continuar_venta.assert_called_once_with(4, False, None)
+
+    @responses.activate
+    def test_continuar_errores(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.continuar_venta.side_effect = SinPedidoEnCursoError("no hay pago")
+            assert _client().post("/conversaciones/4/continuar", json={"pagoConfirmado": True}, headers=AUTH_HEADER).status_code == 409
+            MockService.return_value.continuar_venta.side_effect = ConversacionNoEncontradaError("no existe")
+            assert _client().post("/conversaciones/4/continuar", headers=AUTH_HEADER).status_code == 404
+        assert _client().post("/conversaciones/4/continuar", json={"nota": "x" * 600}, headers=AUTH_HEADER).status_code in (401, 422)
 
     @responses.activate
     def test_tomar_ok(self):

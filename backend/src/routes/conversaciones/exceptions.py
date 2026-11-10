@@ -15,5 +15,9 @@ class EnvioWhatsAppFallidoError(Exception):
     probablemente el cliente no lo recibió."""
 
 
+class SinPedidoEnCursoError(Exception):
+    """Se quiso confirmar un pago, pero la conversación no tiene un pedido por transferencia pendiente."""
+
+
 class ArchivoNoDisponibleError(Exception):
     """El mensaje no tiene archivo, o Meta ya no lo entrega."""

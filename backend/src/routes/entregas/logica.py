@@ -129,18 +129,29 @@ def donde_aplica(opcion: Dict[str, Any]) -> str:
     return "el resto del país"
 
 
-def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]]) -> str:
-    """Lo que Victoria sabe del envío de un producto (va en su ficha)."""
+def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]], transportadora: Optional[str] = None) -> str:
+    """Lo que Victoria sabe del envío de un producto (va en su ficha). `transportadora` es la que despacha los envíos
+    («Servientrega»): solo se nombra en un ENVÍO; en un retiro el cliente va a buscarlo y no hay transportadora."""
     activas = [o for o in opciones if o.get("activo", True)]
     if envio_incluido:
         # Las opciones solo existen cuando el envío se cobra aparte: con el envío incluido no hay nada que elegir.
-        return "Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente."
+        por = f" Se despacha por {transportadora}." if transportadora else ""
+        return f"Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente.{por}"
     if not activas:
         return "Envío: este producto todavía no tiene opciones de entrega definidas; si el cliente pregunta, usa escalar_a_humano."
-    lineas = [f"- {describir(o)} (para {donde_aplica(o)})" for o in activas]
+    lineas = [
+        f"- {describir(o)}{f' · se despacha por {transportadora}' if transportadora and o['tipo'] == 'envio' else ''} (para {donde_aplica(o)})"
+        for o in activas
+    ]
+    aclaracion = (
+        f"\nLos envíos se despachan por {transportadora}; en una opción de retiro NO menciones {transportadora}: el cliente va a retirar."
+        if transportadora
+        else ""
+    )
     return (
         "Envío: se cobra aparte según el destino del cliente. Opciones:\n"
         + "\n".join(lineas)
+        + aclaracion
         + "\nCuando sepas el cantón y la provincia del cliente, usa registrar_entrega para ofrecerle las que le aplican."
     )
 

@@ -10,6 +10,7 @@ import pytest
 
 from src.integrations.whatsapp import WhatsAppBusinessError
 from src.routes.conversaciones.exceptions import (
+    SinPedidoEnCursoError,
     ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
@@ -73,9 +74,13 @@ class FakeConversacionRepository:
 class FakeLeadRepository:
     def __init__(self, leads_por_conversacion=None):
         self._leads = leads_por_conversacion or {}
+        self.pagos_confirmados = []
 
     def obtener_por_conversacion(self, conversacion_id):
         return self._leads.get(conversacion_id)
+
+    def marcar_pago_confirmado(self, lead_id):
+        self.pagos_confirmados.append(lead_id)
 
 
 class FakeMensajeRepository:
@@ -140,8 +145,9 @@ class FakeAnuncioRepository:
         return self._vinculos.get(id_anuncio)
 
 
-def _servicio(conversaciones=None, leads=None, mensajes=None, whatsapp=None, llegadas=None, vinculos=None):
+def _servicio(conversaciones=None, leads=None, mensajes=None, whatsapp=None, llegadas=None, vinculos=None, bot_worker=None):
     return ConversacionesService(
+        bot_worker=bot_worker,
         canales=registro_de_whatsapp(whatsapp or MagicMock()),
         conversacion_repo=FakeConversacionRepository(conversaciones=conversaciones or []),
         lead_repo=FakeLeadRepository(leads_por_conversacion=leads or {}),
@@ -467,6 +473,74 @@ class TestTomarLaConversacion:
         with pytest.raises(VentanaMensajeriaCerradaError):
             servicio.enviar_mensaje_manual(1, "hola")
         assert servicio._conversaciones.obtener_por_id(1)["estado"] == "activa"
+
+
+def _transferencia(estado_pago="pendiente", metodo_pago="transferencia"):
+    return {1: {"id": 77, "metodo_pago": metodo_pago, "estado_pago": estado_pago}}
+
+
+def _ventana_abierta():
+    return {1: [{"id": 1, "rol": "cliente", "contenido": "ya transferí", "creado_en": AHORA - timedelta(hours=2)}]}
+
+
+class TestContinuarLaVenta:
+    """«Confirmar pago» y «Que Victoria continúe»: el dueño le devuelve la conversación a Victoria para que cierre la venta."""
+
+    def test_confirmar_el_pago_lo_marca_deja_un_aviso_reactiva_y_encola_a_victoria(self):
+        worker = MagicMock()
+        servicio = _servicio(conversaciones=[_conversacion(estado="escalada")], leads=_transferencia(), mensajes=_ventana_abierta(), bot_worker=worker)
+
+        resultado = servicio.continuar_venta(1, pago_confirmado=True)
+
+        assert resultado == {"victoriaContinua": True}
+        assert servicio._leads.pagos_confirmados == [77]
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "activa"
+        aviso = servicio._mensajes.obtener_por_conversacion(1)[-1]
+        assert aviso["rol"] == "sistema" and "CONFIRMÓ" in aviso["contenido"] and "cerrar_venta" in aviso["contenido"]
+        worker.encolar.assert_called_once_with(conversacion_id=1, canal="whatsapp", id_externo="593987654321")
+
+    def test_nada_se_le_manda_al_cliente_desde_aqui(self):
+        whatsapp = MagicMock()
+        servicio = _servicio(conversaciones=[_conversacion(estado="escalada")], leads=_transferencia(), mensajes=_ventana_abierta(), whatsapp=whatsapp, bot_worker=MagicMock())
+        servicio.continuar_venta(1, pago_confirmado=True)
+        whatsapp.enviar_texto.assert_not_called()
+
+    def test_con_la_ventana_cerrada_queda_todo_listo_pero_no_se_encola(self):
+        worker = MagicMock()
+        servicio = _servicio(conversaciones=[_conversacion(estado="escalada")], leads=_transferencia(), bot_worker=worker)
+
+        resultado = servicio.continuar_venta(1, pago_confirmado=True)
+
+        assert resultado == {"victoriaContinua": False}
+        assert servicio._leads.pagos_confirmados == [77]
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "activa"
+        worker.encolar.assert_not_called()
+
+    def test_no_se_puede_confirmar_un_pago_que_no_es_transferencia(self):
+        servicio = _servicio(conversaciones=[_conversacion()], leads=_transferencia(metodo_pago="contraentrega"), mensajes=_ventana_abierta(), bot_worker=MagicMock())
+        with pytest.raises(SinPedidoEnCursoError):
+            servicio.continuar_venta(1, pago_confirmado=True)
+        assert servicio._leads.pagos_confirmados == []
+
+    def test_no_se_puede_confirmar_un_pago_sin_pedido(self):
+        servicio = _servicio(conversaciones=[_conversacion()], mensajes=_ventana_abierta(), bot_worker=MagicMock())
+        with pytest.raises(SinPedidoEnCursoError):
+            servicio.continuar_venta(1, pago_confirmado=True)
+
+    def test_continuar_sin_confirmar_pago_tambien_sirve_y_lleva_la_nota_del_dueno(self):
+        worker = MagicMock()
+        servicio = _servicio(conversaciones=[_conversacion(estado="manual")], mensajes=_ventana_abierta(), bot_worker=worker)
+
+        servicio.continuar_venta(1, nota="  pídele el número de cédula  ")
+
+        aviso = servicio._mensajes.obtener_por_conversacion(1)[-1]["contenido"]
+        assert "te devuelve esta conversación" in aviso and "Indicación del dueño para ti: pídele el número de cédula" in aviso
+        assert servicio._leads.pagos_confirmados == []
+        worker.encolar.assert_called_once()
+
+    def test_conversacion_inexistente(self):
+        with pytest.raises(ConversacionNoEncontradaError):
+            _servicio(conversaciones=[]).continuar_venta(5)
 
 
 class TestArchivosDeLosMensajes:
