@@ -65,6 +65,7 @@ class VictoriaConversationService:
         plantilla: Optional[str] = None,
         entrega_repo: Optional[EntregaRepository] = None,
         canales=None,
+        transcriptor=None,
     ):
         # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
         # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
@@ -86,6 +87,8 @@ class VictoriaConversationService:
         self._plantilla_fija = plantilla
         # Perezoso: el registro de canales (para bajar las fotos del cliente) solo se arma si llega una foto.
         self._canales_fijo = canales
+        # Perezoso, igual: el servicio de transcripción (voz -> texto) solo se arma si llega un audio. None = el de producción.
+        self._transcriptor_fijo = transcriptor
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: Optional[str] = None) -> str:
         """Responde lo que el cliente escribió y Victoria todavía no contestó.
@@ -289,12 +292,52 @@ class VictoriaConversationService:
                     lineas.append(self._etiqueta_adjunta(fila))
                 else:
                     lineas.append(f"{fila['contenido']} {nota}".strip())
+            elif fila.get("tipo") == "audio":
+                lineas.append(self._texto_de_un_audio(conversacion, fila))
             elif fila.get("tipo") in ("imagen", "documento"):
                 motivo = "(foto que no pudiste ver: la función está apagada)" if not entender else "(foto anterior, no se analizó: pasó el tope de fotos por mensaje)"
                 lineas.append(f"{fila['contenido']} {motivo}".strip())
             else:
                 lineas.append(fila["contenido"])
         return "\n".join(lineas), adjuntos
+
+    def _texto_de_un_audio(self, conversacion: dict, fila: dict) -> str:
+        """Lo que dijo el cliente en una nota de voz, ya en texto (se transcribe una sola vez y queda guardado). La API de Claude no
+        entiende audio, por eso se usa un servicio de transcripción. Si no se puede, se le dice a Victoria para que le pida al cliente
+        que escriba: nunca se finge que se escuchó."""
+        if fila.get("analisis"):
+            return f"[audio transcrito] {fila['analisis']}"
+        no_se_pudo = "[audio que no pudiste escuchar: dile con amabilidad que por ahora no escuchas audios y pídele que escriba su mensaje]"
+        if not parametros.valor("bot.entender_audios") or not fila.get("media_id"):
+            return no_se_pudo
+        try:
+            transcriptor = self._transcriptor_fijo
+            if transcriptor is None:
+                from src.integrations.transcripcion import get_transcriptor  # perezoso: sin clave devuelve None
+
+                transcriptor = get_transcriptor()
+            if transcriptor is None:
+                return no_se_pudo
+            registro = self._canales_fijo
+            if registro is None:
+                from src.integrations.canales import get_registro_canales
+
+                registro = self._canales_fijo = get_registro_canales()
+            maximo = parametros.valor("bot.max_mb_audio") * 1024 * 1024
+            datos, mime = registro.para(conversacion["canal"]).descargar_media(fila["media_id"], max_bytes=maximo)
+            texto = transcriptor.transcribir(datos, fila.get("media_mime") or mime or "")
+        except Exception:
+            logger.warning("No se pudo transcribir el audio del cliente", extra={"conversacion_id": conversacion.get("id"), "mensaje_id": fila.get("id")}, exc_info=True)
+            return "[audio que no se pudo escuchar: pídele con amabilidad que lo escriba o lo vuelva a enviar]"
+        # Sin voz clara (silencio, ruido) estos servicios a veces inventan frases sueltas: un texto casi vacío no cuenta.
+        if len(texto.strip()) < 3:
+            return "[audio sin voz clara: pídele con amabilidad que lo escriba o lo vuelva a enviar]"
+        try:
+            if fila.get("id") is not None:
+                self._mensajes.guardar_analisis(fila["id"], texto)
+        except Exception:
+            logger.warning("No se pudo guardar la transcripción", exc_info=True, extra={"mensaje_id": fila.get("id")})
+        return f"[audio transcrito] {texto}"
 
     @staticmethod
     def _etiqueta_adjunta(fila: dict) -> str:

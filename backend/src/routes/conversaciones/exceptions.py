@@ -13,3 +13,7 @@ class EnvioWhatsAppFallidoError(Exception):
     """El mensaje ya quedó guardado localmente (rol='humano') pero el
     envío real a WhatsApp falló -- el dueño necesita saber que
     probablemente el cliente no lo recibió."""
+
+
+class ArchivoNoDisponibleError(Exception):
+    """El mensaje no tiene archivo, o Meta ya no lo entrega."""

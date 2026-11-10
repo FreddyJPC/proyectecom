@@ -114,6 +114,8 @@ class MensajeSchema(Schema):
     contenido = fields.Str()
     tipo = fields.Str()
     creado_en = fields.Str(data_key="creadoEn", allow_none=True)
+    tiene_archivo = fields.Bool(data_key="tieneArchivo")
+    analisis = fields.Str(allow_none=True)
 
 
 class DetalleCompletoSchema(Schema):

@@ -1,7 +1,8 @@
 # Plan: que Victoria entienda imágenes, audios y otros tipos de mensaje (pendiente #73)
 
 > Estado: **plan aprobado por Freddy el 2026-11-10 («Sí, empieza con el desarrollo», con las recomendaciones de abajo)**. Las fases
-> se marcan al terminar; ver `PROGRESS.md` para lo hecho.
+> se marcan al terminar; ver `PROGRESS.md` para lo hecho. **Estado 2026-11-10: F1, F2, F3, F4 y F5 construidas (entrada 0.0.122); sin desplegar; falta F6.**
+> Nota: ante un fallo de audio la implementación le pasa una nota a Victoria (que pide al cliente escribirlo) en vez de un texto fijo.
 
 ## Para qué sirve (en llano)
 Hoy, si un cliente manda una **foto**, una **nota de voz**, su **ubicación** o un **sticker**, Victoria recibe solo un marcador de

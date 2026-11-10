@@ -89,7 +89,15 @@ const mensajesDe = (c) => {
     [c.estado === "escalada" ? "bot" : "bot", c.estado === "escalada" ? "Entiendo. Voy a pasar tu caso a una persona del equipo para que te ayude mejor." : "Perfecto, ¿qué dirección registro para la entrega?"],
     [c.ultimoMensaje.rol, c.ultimoMensaje.contenido],
   ];
-  return base.map((m, i) => ({ id: c.id * 100 + i, rol: m[0], contenido: m[1], tipo: "texto", creadoEn: ago(180 - i * 22) }));
+  const lista = base.map((m, i) => ({ id: c.id * 100 + i, rol: m[0], contenido: m[1], tipo: "texto", creadoEn: ago(180 - i * 22) }));
+  // Archivos del cliente (fotos y audios) para ver cómo se muestran: solo en las dos primeras conversaciones.
+  if (c.id >= 300) {
+    lista.splice(4, 0,
+      { id: c.id * 100 + 50, rol: "cliente", contenido: "[imagen]", tipo: "imagen", creadoEn: ago(120), tieneArchivo: true, analisis: "Comprobante de pago: Transferencia (monto: $34.90; fecha: 2026-11-09; banco: Pichincha; referencia: 884412)" },
+      { id: c.id * 100 + 51, rol: "cliente", contenido: "[audio]", tipo: "audio", creadoEn: ago(118), tieneArchivo: true, analisis: "quiero dos más pero de color blanco, ¿me los pueden enviar juntos?" },
+    );
+  }
+  return lista;
 };
 // Anuncios (Click-to-WhatsApp): lo que Meta manda de cada uno y a qué producto está vinculado (null = sin vincular).
 const anunciosMeta = {
@@ -1180,6 +1188,17 @@ const server = http.createServer((req, res) => {
     }
     let m;
     if ((m = p.match(/^\/conversaciones\/(\d+)$/))) return send(convDetalle(m[1]));
+    if ((m = p.match(/^\/conversaciones\/\d+\/mensajes\/(\d+)\/archivo$/))) {
+      if (m[1].endsWith("51")) {
+        // Un WAV de 0,2 s en silencio: lo justo para que el reproductor se vea.
+        const n = 1600, buf = Buffer.alloc(44 + n * 2);
+        buf.write("RIFF", 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write("WAVEfmt ", 8); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20);
+        buf.writeUInt16LE(1, 22); buf.writeUInt32LE(8000, 24); buf.writeUInt32LE(16000, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
+        buf.write("data", 36); buf.writeUInt32LE(n * 2, 40);
+        res.writeHead(200, { "Content-Type": "audio/wav" }); return res.end(buf);
+      }
+      res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
+    }
     if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;

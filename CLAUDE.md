@@ -114,7 +114,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2010 tests pasando**.
+   desde `backend/`. Estado actual: **2116 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -272,6 +272,9 @@ posible y rotarlos.
   27 migraciones):** Victoria junta los mensajes seguidos (`bot.segundos_espera_mensajes`), la cola reintenta y avisa por Telegram, solo envía fotos del
   bucket de Supabase, corrige sin preguntar lo evidente (ciudades y variantes) y pide al cliente confirmar un resumen de sus datos antes de cerrar
   (`bot.confirmar_datos_antes_de_cerrar`). **Aún no se ha visto con la IA real ni con clientes reales** (pendiente #74: lista en `docs/PRUEBAS_CON_ERRORES_HUMANOS.md`).
+- **Imágenes, audios y otros tipos de mensaje (pendiente #73, entrada 0.0.122) — construido 2026-11-10, SIN desplegar:** migración **028** (`mensajes.media_id`,
+  `media_mime`, `media_nombre`, `analisis`) **no aplicada en Supabase** (hoy 27); 41 parámetros; Victoria ve fotos/PDF y un comprobante nunca confirma el pago (lo confirma una
+  persona); los audios necesitan `OPENAI_API_KEY` en Railway y el interruptor «Que Victoria escuche los audios» (apagado). **No se ha probado con la IA real ni con WhatsApp real** (pendiente #75). Plan: `docs/PLAN_IMAGENES_AUDIO.md`. Al desplegar: primero la migración, después el código.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

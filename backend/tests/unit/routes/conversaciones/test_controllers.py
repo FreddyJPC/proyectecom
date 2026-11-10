@@ -10,6 +10,7 @@ import responses
 
 from src.app import create_app
 from src.routes.conversaciones.exceptions import (
+    ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
     VentanaMensajeriaCerradaError,
@@ -142,3 +143,33 @@ class TestReactivarYNotas:
             resp = _client().patch("/conversaciones/1/notas", json={"notasInternas": "nota"}, headers=AUTH_HEADER)
 
         assert resp.status_code == 404
+
+
+class TestArchivoDeUnMensaje:
+    @responses.activate
+    def test_entrega_el_archivo_con_su_tipo_y_sin_cache_ni_sniffing(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.obtener_archivo.return_value = (b"JPGDATA", "image/jpeg")
+            resp = _client().get("/conversaciones/1/mensajes/10/archivo", headers=AUTH_HEADER)
+        assert resp.status_code == 200 and resp.data == b"JPGDATA"
+        assert resp.mimetype == "image/jpeg"
+        assert resp.headers["X-Content-Type-Options"] == "nosniff" and "no-store" in resp.headers["Cache-Control"]
+
+    @responses.activate
+    def test_un_tipo_con_parametros_se_limpia(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.obtener_archivo.return_value = (b"x", "audio/ogg; codecs=opus")
+            resp = _client().get("/conversaciones/1/mensajes/10/archivo", headers=AUTH_HEADER)
+        assert resp.mimetype == "audio/ogg"
+
+    @responses.activate
+    def test_404_si_no_hay_archivo_o_la_conversacion(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.obtener_archivo.side_effect = ArchivoNoDisponibleError("Meta ya no entrega este archivo")
+            assert _client().get("/conversaciones/1/mensajes/10/archivo", headers=AUTH_HEADER).status_code == 404
+
+    def test_sin_iniciar_sesion_no_se_entrega_nada(self):
+        assert _client().get("/conversaciones/1/mensajes/10/archivo").status_code == 401

@@ -1,10 +1,10 @@
 from dataclasses import asdict
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 from marshmallow import ValidationError
 
 from . import conversaciones_bp
-from .exceptions import ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
+from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
 from .schemas import (
     conversacion_detalle_schema,
     conversacion_lista_schema,
@@ -60,6 +60,19 @@ def enviar_mensaje(conversacion_id: int):
         return jsonify(error=f"El mensaje se guardó pero no se pudo enviar: {exc}"), 502
 
     return jsonify(mensaje_schema.dump(asdict(mensaje))), 200
+
+
+@conversaciones_bp.get("/<int:conversacion_id>/mensajes/<int:mensaje_id>/archivo")
+def ver_archivo_de_un_mensaje(conversacion_id: int, mensaje_id: int):
+    """La foto, el audio o el PDF que mandó el cliente, para verlo en el panel (el servidor lo trae de Meta al momento)."""
+    try:
+        datos, mime = _build_service().obtener_archivo(conversacion_id, mensaje_id)
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except ArchivoNoDisponibleError as exc:
+        return jsonify(error=str(exc)), 404
+    # `nosniff` + sin caché compartida: es un archivo de un cliente, no una página; nunca debe interpretarse como HTML.
+    return Response(datos, mimetype=mime.split(";")[0], headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
 
 
 @conversaciones_bp.post("/<int:conversacion_id>/reactivar")
