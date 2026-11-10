@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CircleSlash, Clock, Info, Loader2, NotebookPen, Package, SendHorizontal, UserRound } from "lucide-react";
+import { Banknote, Bot, CircleSlash, Clock, Info, Loader2, NotebookPen, Package, Play, SendHorizontal, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion } from "@/types/conversacion";
 
 import { ArchivoDelMensaje } from "./archivo-del-mensaje";
+import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
 const REFRESCO_MS = 15_000;
@@ -36,7 +37,24 @@ function Dato({ label, children }: { label: string; children?: ReactNode }) {
   );
 }
 
+/** Lo que el dueño le dejó dicho a Victoria desde el panel (el cliente nunca lo ve): se muestra como una nota corta, no como el texto interno. */
+function NotaDelSistema({ m }: { m: MensajeConversacion }) {
+  const confirmoElPago = m.contenido.includes("CONFIRMÓ");
+  const indicacion = /\[Indicación del dueño para ti: ([\s\S]*?)\]\s*$/.exec(m.contenido)?.[1]?.trim();
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-1 text-center">
+      <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+        <Bot className="size-3" aria-hidden />
+        {confirmoElPago ? "Confirmaste el pago y Victoria continúa con el pedido" : "Le devolviste la conversación a Victoria para que continúe"}
+        <span className="tabular shrink-0 whitespace-nowrap opacity-80">· {formatHora(m.creadoEn)}</span>
+      </span>
+      {indicacion && <span className="max-w-xs text-xs text-muted-foreground">Tu indicación: «{indicacion}»</span>}
+    </div>
+  );
+}
+
 function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string }) {
+  if (m.rol === "sistema") return <NotaDelSistema m={m} />;
   const esCliente = m.rol === "cliente";
   const esBot = m.rol === "bot";
   const esMedia = m.tipo !== "texto" || /^\[.*\]$/.test(m.contenido);
@@ -372,6 +390,29 @@ export default function ConversacionDetallePage() {
           </Sheet>
         </div>
 
+        {/* Pago por transferencia que espera la confirmación del dueño: al confirmar, Victoria sigue y cierra el pedido. */}
+        {lead?.metodoPago === "transferencia" && lead.estadoPago !== "confirmado" && lead.idPedidoRocketfy == null && (
+          <div className="flex items-center justify-between gap-3 border-b bg-status-warning-soft px-4 py-2.5 text-status-warning-ink">
+            <p className="text-sm">
+              <strong className="font-semibold">Pago por transferencia pendiente</strong>
+              {lead.total && <span className="tabular"> · {formatMoney(lead.total)}</span>}
+              <span className="hidden opacity-85 md:inline"> Cuando veas el pago en tu banco, confírmalo.</span>
+            </p>
+            <ContinuarVentaDialog
+              conversacionId={id}
+              pagoConfirmado
+              total={lead.total ? formatMoney(lead.total) : null}
+              trigger={
+                <Button size="sm" className="shrink-0">
+                  <Banknote />
+                  Confirmar pago
+                </Button>
+              }
+              onListo={recargar}
+            />
+          </div>
+        )}
+
         {/* Aviso de escalada: la acción principal es responder; devolverle el
             control a Victoria es la salida cuando ya no hace falta una persona. */}
         {conversacion.estado === "escalada" && (
@@ -380,15 +421,29 @@ export default function ConversacionDetallePage() {
               <strong className="font-semibold">Victoria pasó este chat a una persona.</strong>
               <span className="hidden opacity-85 md:inline"> Respóndele al cliente o devuélvele el control.</span>
             </p>
-            <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
-              {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
-              {reactivando ? "Devolviendo…" : (
-                <>
-                  <span className="hidden sm:inline">Devolver a Victoria</span>
-                  <span className="sm:hidden">Devolver</span>
-                </>
-              )}
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <ContinuarVentaDialog
+                conversacionId={id}
+                pagoConfirmado={false}
+                trigger={
+                  <Button variant="outline" size="sm" className="bg-card text-foreground">
+                    <Play />
+                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="sm:hidden">Continuar</span>
+                  </Button>
+                }
+                onListo={recargar}
+              />
+              <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="bg-card text-foreground">
+                {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
+                {reactivando ? "Devolviendo…" : (
+                  <>
+                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="sm:hidden">Devolver</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -399,15 +454,29 @@ export default function ConversacionDetallePage() {
               <strong className="font-semibold">Atiendes tú este chat.</strong>
               <span className="hidden opacity-85 md:inline"> Victoria no responde mientras tanto. Devuélvele el control cuando quieras.</span>
             </p>
-            <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
-              {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
-              {reactivando ? "Devolviendo…" : (
-                <>
-                  <span className="hidden sm:inline">Devolver a Victoria</span>
-                  <span className="sm:hidden">Devolver</span>
-                </>
-              )}
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <ContinuarVentaDialog
+                conversacionId={id}
+                pagoConfirmado={false}
+                trigger={
+                  <Button variant="outline" size="sm" className="bg-card text-foreground">
+                    <Play />
+                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="sm:hidden">Continuar</span>
+                  </Button>
+                }
+                onListo={recargar}
+              />
+              <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="bg-card text-foreground">
+                {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
+                {reactivando ? "Devolviendo…" : (
+                  <>
+                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="sm:hidden">Devolver</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -437,15 +506,29 @@ export default function ConversacionDetallePage() {
               <strong className="font-semibold">Este chat está en gestión: lo atiendes tú.</strong>
               <span className="hidden opacity-85 md:inline"> Victoria ya no responde. Mira «Por gestionar» para ver qué pidió el cliente.</span>
             </p>
-            <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="shrink-0 bg-card text-foreground">
-              {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
-              {reactivando ? "Devolviendo…" : (
-                <>
-                  <span className="hidden sm:inline">Devolver a Victoria</span>
-                  <span className="sm:hidden">Devolver</span>
-                </>
-              )}
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <ContinuarVentaDialog
+                conversacionId={id}
+                pagoConfirmado={false}
+                trigger={
+                  <Button variant="outline" size="sm" className="bg-card text-foreground">
+                    <Play />
+                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="sm:hidden">Continuar</span>
+                  </Button>
+                }
+                onListo={recargar}
+              />
+              <Button variant="outline" size="sm" onClick={handleReactivar} disabled={reactivando} className="bg-card text-foreground">
+                {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
+                {reactivando ? "Devolviendo…" : (
+                  <>
+                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="sm:hidden">Devolver</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         )}
 

@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 # Lo que la IA puede ver (docs/PLAN_IMAGENES_AUDIO.md, F2). Un archivo más pesado se rechaza antes de pedirlo a Meta.
 _MIMES_DE_IMAGEN = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 _MIME_PDF = "application/pdf"
+# Quién le «habla» a Victoria: el cliente y el sistema (avisos internos del panel, que el cliente nunca ve).
+ROLES_QUE_ESPERAN_RESPUESTA = ("cliente", "sistema")
+
 _AUDIO_NO_ENTENDIDO = (
     "[audio {motivo}: dile con amabilidad que no lograste entender el audio y que, por favor, lo envíe de nuevo donde se "
     "escuche mejor o que te escriba su mensaje; no adivines ni inventes lo que dijo]"
@@ -249,7 +252,8 @@ class VictoriaConversationService:
         """(lo anterior, mensajes seguidos del cliente al final sin respuesta). Lo «sin responder» es la racha de
         filas del cliente que cierra la conversación; en cuanto hay algo del bot (o del dueño) después, está contestado."""
         corte = len(filas)
-        while corte > 0 and filas[corte - 1]["rol"] == "cliente":
+        # Los avisos internos del sistema (p. ej. «el dueño confirmó el pago») también esperan respuesta de Victoria.
+        while corte > 0 and filas[corte - 1]["rol"] in ROLES_QUE_ESPERAN_RESPUESTA:
             corte -= 1
         return filas[:corte], filas[corte:]
 
@@ -260,7 +264,7 @@ class VictoriaConversationService:
         if max_historial:
             anteriores = anteriores[-max_historial:]
         return [
-            MensajeLLM(rol="user" if fila["rol"] == "cliente" else "assistant", texto=VictoriaConversationService._texto_del_historial(fila))
+            MensajeLLM(rol="user" if fila["rol"] in ROLES_QUE_ESPERAN_RESPUESTA else "assistant", texto=VictoriaConversationService._texto_del_historial(fila))
             for fila in anteriores
         ]
 
@@ -448,6 +452,8 @@ class VictoriaConversationService:
         faltantes = [etiqueta for etiqueta, valor in campos.items() if not valor]
 
         partes = []
+        if lead.get("metodo_pago") == "transferencia" and lead.get("estado_pago") == "confirmado":
+            partes.append("El pago por transferencia YA está CONFIRMADO por el dueño: no le pidas comprobante ni vuelvas a pedirle que pague.")
         if lead.get("datos_confirmados_en"):
             partes.append("El cliente ya confirmó el resumen de sus datos de envío.")
         elif lead.get("datos_confirmacion_pedida_en"):

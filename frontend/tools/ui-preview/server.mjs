@@ -98,6 +98,10 @@ const mensajesDe = (c) => {
       { id: c.id * 100 + 51, rol: "cliente", contenido: "[audio]", tipo: "audio", creadoEn: ago(118), tieneArchivo: true, analisis: "quiero dos más pero de color blanco, ¿me los pueden enviar juntos?" },
     );
   }
+  // Aviso del dueño a Victoria (rol «sistema»): solo en la conversación 300, que espera la confirmación de un pago.
+  if (c.id === 300) {
+    lista.push({ id: c.id * 100 + 90, rol: "sistema", contenido: "[Aviso interno del sistema, no lo escribió el cliente: el dueño verificó su cuenta y CONFIRMÓ que el pago llegó.]\n[Indicación del dueño para ti: pídele su cédula]", tipo: "texto", creadoEn: ago(2) });
+  }
   return lista;
 };
 // Anuncios (Click-to-WhatsApp): lo que Meta manda de cada uno y a qué producto está vinculado (null = sin vincular).
@@ -1229,7 +1233,8 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
-    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|notas)$/)) return send({ ok: true });
+    if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|continuar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;
       if (q.get("estado")) items = items.filter((x) => x.estadoLocal === q.get("estado"));

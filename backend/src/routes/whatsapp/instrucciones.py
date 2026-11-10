@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 RUTA_ORIGINAL = Path(__file__).resolve().parent / "victoria_system_prompt.txt"
 
 # Largo máximo del prompt completo ya armado (el original, con las secciones atadas al código, ronda los 8.000 caracteres).
-MAXIMO_TOTAL = 10000
+MAXIMO_TOTAL = 14000
 # Clave de los errores que no son de una sección en particular.
 GENERAL = "_general"
 

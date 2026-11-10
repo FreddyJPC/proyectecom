@@ -4,9 +4,16 @@ from flask import Response, jsonify, request
 from marshmallow import ValidationError
 
 from . import conversaciones_bp
-from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
+from .exceptions import (
+    ArchivoNoDisponibleError,
+    ConversacionNoEncontradaError,
+    EnvioWhatsAppFallidoError,
+    SinPedidoEnCursoError,
+    VentanaMensajeriaCerradaError,
+)
 from .schemas import (
     conversacion_detalle_schema,
+    continuar_input_schema,
     conversacion_lista_schema,
     enviar_mensaje_input_schema,
     mensaje_schema,
@@ -82,6 +89,22 @@ def tomar_conversacion(conversacion_id: int):
     except ConversacionNoEncontradaError as exc:
         return jsonify(error=str(exc)), 404
     return jsonify(status="ok"), 200
+
+
+@conversaciones_bp.post("/<int:conversacion_id>/continuar")
+def continuar_venta(conversacion_id: int):
+    """Devuelve la conversación a Victoria para que siga cerrando la venta (con o sin pago confirmado, y con una nota opcional)."""
+    try:
+        datos = continuar_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+    try:
+        resultado = _build_service().continuar_venta(conversacion_id, bool(datos.get("pago_confirmado")), datos.get("nota"))
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except SinPedidoEnCursoError as exc:
+        return jsonify(error=str(exc)), 409
+    return jsonify(status="ok", **resultado), 200
 
 
 @conversaciones_bp.post("/<int:conversacion_id>/reactivar")

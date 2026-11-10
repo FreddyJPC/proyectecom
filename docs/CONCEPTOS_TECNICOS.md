@@ -1590,3 +1590,23 @@ transferir** (el total que calculó el sistema).
 **Detalles.** Una cuenta apagada no se da, pero no se pierde. Tus datos bancarios viven solo en la base de datos, nunca en el código ni en el repositorio. En productos
 propios (cierre manual) no se usa: ahí el pago lo coordinas tú.
 
+## 51. Confirmar el pago y devolverle la venta a Victoria
+
+**El problema.** Cuando un cliente paga por transferencia, Victoria no puede saber si el dinero llegó: solo tú lo ves en tu banco. Por eso, al recibir el comprobante, te pasa
+la conversación. Hasta ahora no había forma de decirle «ya llegó, sigue».
+
+**Confirmar pago.** En el chat aparece una barra amarilla «Pago por transferencia pendiente» con el botón **Confirmar pago**. Revisa tu banco y púlsalo. Victoria le avisa al cliente
+que recibimos su pago y **sigue con el objetivo de cerrar la venta**: si falta un dato lo pide, muestra el resumen para que el cliente lo confirme y cierra el pedido (en un producto
+de Rocketfy lo crea en Rocketfy; en un producto propio toma lo necesario y te lo pasa en «Por gestionar»). Sin tu confirmación una transferencia **nunca** cierra, aunque el
+cliente mande un comprobante: una foto puede ser falsa o de otra persona.
+
+**Que Victoria continúe.** Es lo mismo sin confirmar un pago: sirve para devolverle cualquier venta que se quedó a medias (datos que faltan, una duda resuelta, una conversación que
+tomaste). Puedes dejarle una **indicación** («pídele su cédula y confirma que la entrega es en Cuenca»): ella la lee, el cliente no.
+
+**Cómo funciona por dentro.** El botón deja un aviso interno en la conversación (no se envía al cliente) y vuelve a poner a Victoria a cargo; ese aviso hace que Victoria
+responda. En el chat se ve como una nota corta. Si la ventana de 24 h de WhatsApp está cerrada, Victoria no puede escribir: el pago queda confirmado y ella continúa en cuanto el
+cliente escriba.
+
+**Servientrega.** Los pedidos se despachan por Servientrega (nombre editable en Parámetros). Victoria la menciona cuando el pedido va por envío y **no** cuando el producto es de
+retiro o de entrega en persona: lo decide la información de entrega de cada producto.
+

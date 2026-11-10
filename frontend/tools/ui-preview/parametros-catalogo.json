@@ -330,6 +330,29 @@
           "avisos": [],
           "actualizadoPor": null,
           "actualizadoEn": null
+        },
+        {
+          "clave": "bot.transportadora",
+          "nombre": "Transportadora de los envíos",
+          "paraQueSirve": "El nombre de la transportadora con la que se despachan los pedidos. Victoria se lo dice al cliente cuando el pedido se envía (por ejemplo «va por Servientrega»). Si un producto es de retiro o de entrega en persona, no la menciona.",
+          "tipo": "texto",
+          "valor": "Servientrega",
+          "origen": "original",
+          "valorOriginal": "Servientrega",
+          "valorApp": null,
+          "variableServidor": null,
+          "valorServidor": null,
+          "minimo": null,
+          "maximo": null,
+          "largoMaximo": 40,
+          "unidad": "",
+          "aplica": "Desde el siguiente mensaje de un cliente.",
+          "sensible": false,
+          "aviso": "",
+          "opciones": [],
+          "avisos": [],
+          "actualizadoPor": null,
+          "actualizadoEn": null
         }
       ]
     },

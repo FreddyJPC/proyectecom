@@ -1060,7 +1060,7 @@ class HerramientasVictoria:
 
         # En Rocketfy la transferencia obliga a esperar el comprobante; en un producto propio la verificación
         # del pago la hace el dueño, así que no frena el cierre (ADR-012).
-        if not manual and lead["metodo_pago"] == "transferencia":
+        if not manual and lead["metodo_pago"] == "transferencia" and lead.get("estado_pago") != "confirmado":
             return (
                 "Este pedido es por transferencia. Pide al cliente la foto del comprobante "
                 "antes de continuar. No se puede cerrar todavía."

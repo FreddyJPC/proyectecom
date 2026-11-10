@@ -139,8 +139,17 @@ class NotasInputSchema(Schema):
     notas_internas = fields.Str(data_key="notasInternas", allow_none=True, load_default=None)
 
 
+class ContinuarInputSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    pago_confirmado = fields.Bool(data_key="pagoConfirmado", load_default=False)
+    nota = fields.Str(allow_none=True, load_default=None, validate=validate.Length(max=500))
+
+
 conversacion_lista_schema = ListaConversacionesSchema()
 conversacion_detalle_schema = DetalleCompletoSchema()
 mensaje_schema = MensajeSchema()
 enviar_mensaje_input_schema = EnviarMensajeInputSchema()
 notas_input_schema = NotasInputSchema()
+continuar_input_schema = ContinuarInputSchema()

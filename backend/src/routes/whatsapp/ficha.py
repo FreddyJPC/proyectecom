@@ -15,6 +15,7 @@ de darle a Victoria reglas distintas por producto sin tocar sus instrucciones ge
 """
 from typing import List, Optional
 
+from src.config.parametros import parametros
 from src.routes.entregas.logica import texto_para_la_ficha
 from src.routes.ventas.origen import es_de_cierre_manual
 
@@ -46,7 +47,9 @@ def formatear_ficha_producto(producto: dict, entregas: Optional[List[dict]] = No
         partes.append(f"Temas que NO debes responder: {producto['temas_no_responder']}")
     # `entregas=None` = no se consultó (no se dice nada del envío); [] = se consultó y no tiene opciones.
     if entregas is not None:
-        partes.append(texto_para_la_ficha(bool(producto.get("envio_incluido", True)), entregas))
+        partes.append(
+            texto_para_la_ficha(bool(producto.get("envio_incluido", True)), entregas, (parametros.valor("bot.transportadora") or "").strip() or None)
+        )
     if es_de_cierre_manual(producto):
         partes.append(CIERRE_MANUAL)
     return "\n".join(partes)

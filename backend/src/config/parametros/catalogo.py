@@ -409,6 +409,19 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=True,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
+    Parametro(
+        clave="bot.transportadora",
+        grupo="victoria",
+        nombre="Transportadora de los envíos",
+        para_que_sirve=(
+            "El nombre de la transportadora con la que se despachan los pedidos. Victoria se lo dice al cliente cuando el pedido se "
+            "envía (por ejemplo «va por Servientrega»). Si un producto es de retiro o de entrega en persona, no la menciona."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="Servientrega",
+        largo_maximo=40,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
     # ----------------------------------------------------------------- Textos
     Parametro(
         clave="bot.texto_postventa",

@@ -54,7 +54,7 @@ class TestVer:
         cuerpo = _llamar("get", "").get_json()
         assert cuerpo["usando"] == "original" and cuerpo["publicada"] is None and cuerpo["borrador"] is None
         assert [s["id"] for s in cuerpo["secciones"]] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "clasificacion", "estado", "fecha"]
-        assert cuerpo["maximoTotal"] == 10000 and cuerpo["caracteresFijos"] > 0
+        assert cuerpo["maximoTotal"] == 14000 and cuerpo["caracteresFijos"] > 0
 
         personalidad = next(s for s in cuerpo["secciones"] if s["id"] == "personalidad")
         assert personalidad["editable"] is True and personalidad["vigente"] == personalidad["original"] and personalidad["borrador"] is None

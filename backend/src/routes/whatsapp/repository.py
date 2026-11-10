@@ -273,7 +273,7 @@ class ConversacionRepository:
                     {_LEAD_ACTUAL}
                     left join lateral (
                         select rol, contenido, creado_en from mensajes
-                        where conversacion_id = c.id order by creado_en desc limit 1
+                        where conversacion_id = c.id and rol <> 'sistema' order by creado_en desc limit 1
                     ) m on true
                     {where}
                     order by {orden}
@@ -848,11 +848,29 @@ class LeadRepository:
                     update leads set
                         metodo_pago = %s,
                         estado = case when %s and %s = 'transferencia' then 'esperando_pago' else estado end,
+                        estado_pago = case when %s then 'pendiente' else estado_pago end,
                         {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
                         actualizado_en = now()
                     where id = %s
                     """,
-                    (metodo_pago, esperar_comprobante, metodo_pago, lead_id),
+                    (metodo_pago, esperar_comprobante, metodo_pago, cambio, lead_id),
+                )
+
+    @staticmethod
+    def marcar_pago_confirmado(lead_id: int) -> None:
+        """El dueño verificó en su banco que el pago por transferencia llegó: ya no se espera ningún comprobante, y Victoria puede
+        seguir con el cierre de la venta. Si el lead estaba «esperando_pago», vuelve a «recopilando_datos»."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update leads set
+                        estado_pago = 'confirmado',
+                        estado = case when estado = 'esperando_pago' then 'recopilando_datos' else estado end,
+                        actualizado_en = now()
+                    where id = %s
+                    """,
+                    (lead_id,),
                 )
 
     @staticmethod
