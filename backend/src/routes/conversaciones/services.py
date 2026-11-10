@@ -118,6 +118,7 @@ class ConversacionesService:
                 escaladas_sin_revisar=totales["escaladas_sin_revisar"],
                 esperando_pago=totales["esperando_pago"],
                 en_gestion=totales.get("en_gestion", 0),
+                manual=totales.get("manual", 0),
             ),
         )
 
@@ -225,6 +226,10 @@ class ConversacionesService:
         mensaje = self._mensajes.crear(
             conversacion_id=conversacion_id, rol="humano", contenido=contenido, tipo="texto", wamid=None
         )
+        # Si el dueño le escribe al cliente y la conversación sigue en manos de Victoria, la toma él: si no, cuando el cliente
+        # responda, Victoria contestaría también y los dos se estorbarían. «Devolver a Victoria» la regresa cuando él quiera.
+        if conversacion["estado"] not in ESTADOS_QUE_ESPERAN_AL_DUENO:
+            self._conversaciones.marcar_manual(conversacion_id)
 
         try:
             self._canales.para(conversacion["canal"]).enviar_texto(conversacion["id_externo"], contenido)
@@ -255,6 +260,12 @@ class ConversacionesService:
             # Lo más común: Meta ya no lo guarda (pasaron ~30 días) o el enlace venció.
             raise ArchivoNoDisponibleError(f"Meta ya no entrega este archivo ({exc}).") from exc
         return datos, (mensaje.get("media_mime") or mime or "application/octet-stream")
+
+    def tomar(self, conversacion_id: int) -> None:
+        """El dueño saca a Victoria de esta conversación y la atiende él (estado «manual»)."""
+        if self._conversaciones.obtener_por_id(conversacion_id) is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        self._conversaciones.marcar_manual(conversacion_id)
 
     def reactivar(self, conversacion_id: int) -> None:
         if self._conversaciones.obtener_por_id(conversacion_id) is None:

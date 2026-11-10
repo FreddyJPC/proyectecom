@@ -127,6 +127,22 @@ class TestReactivarYNotas:
         assert resp.status_code == 200
 
     @responses.activate
+    def test_tomar_ok(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            resp = _client().post("/conversaciones/1/tomar", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        MockService.return_value.tomar.assert_called_once_with(1)
+
+    @responses.activate
+    def test_tomar_inexistente_da_404(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.tomar.side_effect = ConversacionNoEncontradaError("no existe")
+            resp = _client().post("/conversaciones/9/tomar", headers=AUTH_HEADER)
+        assert resp.status_code == 404
+
+    @responses.activate
     def test_notas_ok(self):
         mock_login_ok()
         with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:

@@ -73,6 +73,7 @@ const convs = [
   ["593955667788", "Marcelo Ortiz", "anuncio", "en_gestion", "Zapatos de cuero", true, "bot", "Listo, le avisé al dueño: te escribe enseguida para coordinar 🙋", 12],
   ["17841400000000002", "Valeria Quishpe", "anuncio", "activa", "Lámpara LED Recargable", false, "cliente", "¿Hacen envíos a Loja? Vi su anuncio en Instagram", 6, "instagram"],
   ["7391850264412009", null, "directo", "escalada", "Cargador Rápido 33W", true, "cliente", "¿Pueden llamarme? Mi número es 0991112233", 33, "messenger"],
+  ["593969001122", "Carla Romero", "directo", "manual", "Lámpara LED Recargable", false, "humano", "Hola Carla, soy Freddy, yo te ayudo con tu pedido.", 4],
 ];
 const conversaciones = convs.map((c, i) => ({
   id: 301 - i, canal: c[9] || "whatsapp", idExterno: c[0], telefono: c[9] ? null : c[0], nombre: c[9] ? (c[1] || "usuario_" + c[0].slice(-4)) : c[1],
@@ -1160,7 +1161,7 @@ function paginar(arr, q) {
 }
 function totalesConv() {
   const esc = conversaciones.filter((c) => c.estado === "escalada");
-  return { escaladas: esc.length, escaladasSinRevisar: esc.filter((c) => c.sinRevisar).length, esperandoPago: conversaciones.filter((c) => c.estado === "esperando_pago").length, enGestion: conversaciones.filter((c) => c.estado === "en_gestion").length };
+  return { escaladas: esc.length, escaladasSinRevisar: esc.filter((c) => c.sinRevisar).length, esperandoPago: conversaciones.filter((c) => c.estado === "esperando_pago").length, enGestion: conversaciones.filter((c) => c.estado === "en_gestion").length, manual: conversaciones.filter((c) => c.estado === "manual").length };
 }
 
 const server = http.createServer((req, res) => {
@@ -1199,7 +1200,7 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
-    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|notas)$/)) return send({ ok: true });
+    if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;
       if (q.get("estado")) items = items.filter((x) => x.estadoLocal === q.get("estado"));

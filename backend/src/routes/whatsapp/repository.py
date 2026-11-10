@@ -151,6 +151,17 @@ class ConversacionRepository:
                 )
 
     @staticmethod
+    def marcar_manual(conversacion_id: int) -> None:
+        """El dueño toma la conversación: Victoria deja de responder. A diferencia de una escalada, el dueño ya la está
+        viendo (la acaba de abrir o de escribir), así que queda como vista y no suma a «sin revisar»."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update conversaciones set estado = 'manual', vista_en = now(), actualizada_en = now() where id = %s",
+                    (conversacion_id,),
+                )
+
+    @staticmethod
     def marcar_en_gestion(conversacion_id: int) -> None:
         """La conversación pasa a manos del dueño (ADR-012): un producto propio no crea el pedido solo,
         así que ante una intención de compra que Victoria no puede resolver, o al cerrar la venta, la
@@ -285,7 +296,8 @@ class ConversacionRepository:
                         count(*) filter (where estado = 'escalada') as escaladas,
                         count(*) filter (where estado = 'escalada' and vista_en is null) as escaladas_sin_revisar,
                         count(*) filter (where estado = 'esperando_pago') as esperando_pago,
-                        count(*) filter (where estado = 'en_gestion') as en_gestion
+                        count(*) filter (where estado = 'en_gestion') as en_gestion,
+                        count(*) filter (where estado = 'manual') as manual
                     from conversaciones
                     """
                 )

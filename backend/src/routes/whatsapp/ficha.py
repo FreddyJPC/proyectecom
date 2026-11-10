@@ -35,7 +35,8 @@ def formatear_ficha_producto(producto: dict, entregas: Optional[List[dict]] = No
         f"Precio por unidad: ${producto['precio']}",
         f"Tiempo de entrega: {producto['tiempo_entrega']}",
         f"Métodos de pago aceptados: {producto['metodos_pago_aceptados']}",
-        f"Unidades máximas por pedido: {producto.get('max_unidades_por_pedido') or 1}",
+        f"Unidades máximas por pedido: {producto.get('max_unidades_por_pedido') or 1} "
+        "(dato interno: NO lo menciones por tu cuenta; solo dilo si el cliente pregunta cuántas puede llevar)",
     ]
     if producto.get("variantes"):
         partes.append(f"Variantes: {producto['variantes']}")

@@ -62,6 +62,10 @@ class FakeConversacionRepository:
     def actualizar_estado(self, conversacion_id, estado):
         self.tabla[conversacion_id]["estado"] = estado
 
+    def marcar_manual(self, conversacion_id):
+        self.tabla[conversacion_id]["estado"] = "manual"
+        self.tabla[conversacion_id]["vista_en"] = datetime.now(timezone.utc)
+
     def actualizar_timestamp(self, conversacion_id):
         self.tabla[conversacion_id]["actualizada_en"] = datetime.now(timezone.utc)
 
@@ -414,6 +418,55 @@ class TestReactivar:
         servicio = _servicio(conversaciones=[])
         with pytest.raises(ConversacionNoEncontradaError):
             servicio.reactivar(999)
+
+
+def _con_ventana_abierta(estado):
+    mensajes = {1: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=2)}]}
+    return _servicio(conversaciones=[_conversacion(estado=estado)], mensajes=mensajes, whatsapp=MagicMock())
+
+
+class TestTomarLaConversacion:
+    """El dueño saca a Victoria de la conversación: con el botón, o solo por escribirle al cliente desde el panel."""
+
+    def test_tomar_pasa_la_conversacion_a_manual_y_la_marca_vista(self):
+        servicio = _servicio(conversaciones=[_conversacion(estado="activa")])
+        servicio.tomar(1)
+        fila = servicio._conversaciones.obtener_por_id(1)
+        assert fila["estado"] == "manual"
+        assert fila["vista_en"] is not None
+
+    def test_tomar_una_inexistente_lanza_error(self):
+        with pytest.raises(ConversacionNoEncontradaError):
+            _servicio(conversaciones=[]).tomar(999)
+
+    def test_devolver_a_victoria_regresa_una_manual_a_activa(self):
+        servicio = _servicio(conversaciones=[_conversacion(estado="manual")])
+        servicio.reactivar(1)
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "activa"
+
+    def test_escribirle_al_cliente_desde_el_panel_toma_la_conversacion(self):
+        servicio = _con_ventana_abierta("activa")
+        servicio.enviar_mensaje_manual(1, "Hola, soy Freddy")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "manual"
+
+    def test_escribir_estando_esperando_pago_tambien_la_toma(self):
+        servicio = _con_ventana_abierta("esperando_pago")
+        servicio.enviar_mensaje_manual(1, "Ya te confirmo el pago")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "manual"
+
+    def test_si_ya_estaba_escalada_o_en_gestion_no_cambia_de_estado(self):
+        for estado in ("escalada", "en_gestion"):
+            servicio = _con_ventana_abierta(estado)
+            servicio.enviar_mensaje_manual(1, "Hola")
+            assert servicio._conversaciones.obtener_por_id(1)["estado"] == estado
+
+    def test_si_la_ventana_esta_cerrada_no_se_toma_la_conversacion(self):
+        vieja = AHORA - timedelta(hours=30)
+        servicio = _servicio(conversaciones=[_conversacion(estado="activa", actualizada_en=vieja)], mensajes={1: [
+            {"id": 1, "conversacion_id": 1, "rol": "cliente", "contenido": "hola", "tipo": "texto", "wamid": "w", "creado_en": vieja}]})
+        with pytest.raises(VentanaMensajeriaCerradaError):
+            servicio.enviar_mensaje_manual(1, "hola")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "activa"
 
 
 class TestArchivosDeLosMensajes:

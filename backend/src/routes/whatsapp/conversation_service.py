@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 # Lo que la IA puede ver (docs/PLAN_IMAGENES_AUDIO.md, F2). Un archivo más pesado se rechaza antes de pedirlo a Meta.
 _MIMES_DE_IMAGEN = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 _MIME_PDF = "application/pdf"
+_AUDIO_NO_ENTENDIDO = (
+    "[audio {motivo}: dile con amabilidad que no lograste entender el audio y que, por favor, lo envíe de nuevo donde se "
+    "escuche mejor o que te escriba su mensaje; no adivines ni inventes lo que dijo]"
+)
 _MAXIMO_BYTES_DE_ARCHIVO = 7_000_000  # la API acepta 10 MB en base64 (~7,5 MB reales)
 
 _ZONA_ECUADOR = timezone(timedelta(hours=-5))
@@ -328,10 +332,10 @@ class VictoriaConversationService:
             texto = transcriptor.transcribir(datos, fila.get("media_mime") or mime or "")
         except Exception:
             logger.warning("No se pudo transcribir el audio del cliente", extra={"conversacion_id": conversacion.get("id"), "mensaje_id": fila.get("id")}, exc_info=True)
-            return "[audio que no se pudo escuchar: pídele con amabilidad que lo escriba o lo vuelva a enviar]"
+            return _AUDIO_NO_ENTENDIDO.format(motivo="no se pudo escuchar")
         # Sin voz clara (silencio, ruido) estos servicios a veces inventan frases sueltas: un texto casi vacío no cuenta.
         if len(texto.strip()) < 3:
-            return "[audio sin voz clara: pídele con amabilidad que lo escriba o lo vuelva a enviar]"
+            return _AUDIO_NO_ENTENDIDO.format(motivo="sin voz clara")
         try:
             if fila.get("id") is not None:
                 self._mensajes.guardar_analisis(fila["id"], texto)
