@@ -68,12 +68,16 @@ class WebhookService:
             self._conversaciones.actualizar_timestamp(conversacion["id"])
 
         # 4. Guardar el mensaje del cliente.
+        extras = {}
+        if dto.media_id:  # solo si trae un archivo (así los repositorios de prueba sin esos campos siguen sirviendo)
+            extras = {"media_id": dto.media_id, "media_mime": dto.media_mime, "media_nombre": dto.media_nombre}
         mensaje = self._mensajes.crear(
             conversacion_id=conversacion["id"],
             rol="cliente",
             contenido=dto.contenido,
             tipo=dto.tipo,
             wamid=dto.wamid,
+            **extras,
         )
 
         # 4 bis. Si el mensaje llegó desde un anuncio (Click-to-WhatsApp), se guarda TODO lo que Meta manda del anuncio
@@ -98,6 +102,10 @@ class WebhookService:
 
     def _encolar_respuesta(self, conversacion: dict, mensaje: dict, dto: MensajeEntranteDTO) -> None:
         conversacion_id = conversacion["id"]
+
+        # Regla 0: una reacción (👍 sobre un mensaje) queda guardada en la conversación, pero no es una pregunta: no se contesta.
+        if dto.tipo == "reaccion":
+            return
 
         # Regla 1: la conversación ya está en manos del dueño -- escalada, o en gestión (ADR-012:
         # intención de compra de un producto propio) --, no se genera ninguna respuesta automática más.
@@ -125,11 +133,16 @@ class WebhookService:
             )
             return
 
-        # Regla 3: posible comprobante de pago -- Victoria no tiene visión
-        # de imágenes todavía, así que no puede verificarlo por su cuenta;
-        # la regla es determinista en código, no una decisión del LLM.
+        # Regla 3: posible comprobante de pago. Con «Que Victoria vea las fotos» encendido (lo normal), la foto pasa a Victoria: ella la
+        # ve, la registra como comprobante y el código avisa a una persona SIN dar el pago por confirmado (herramienta
+        # registrar_imagen_recibida). Apagado, vuelve a la regla de siempre: se escala directo sin que la IA la mire.
         lead = self._leads.obtener_por_conversacion(conversacion_id)
-        if dto.tipo == "imagen" and lead is not None and lead["estado"] == "esperando_pago":
+        if (
+            dto.tipo in ("imagen", "documento")
+            and lead is not None
+            and lead["estado"] == "esperando_pago"
+            and not parametros.valor("bot.entender_imagenes")
+        ):
             self._escalar(conversacion, motivo="Cliente envió posible comprobante de pago")
             self._bot_worker.encolar(
                 conversacion_id=conversacion_id,

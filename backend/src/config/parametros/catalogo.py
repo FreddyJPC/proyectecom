@@ -284,6 +284,37 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="bot.entender_imagenes",
+        grupo="victoria",
+        nombre="Que Victoria vea las fotos del cliente",
+        para_que_sirve=(
+            "Si está encendido, cuando el cliente manda una foto (o un PDF) Victoria la ve: reconoce si es un comprobante de pago, "
+            "un producto que quiere o algo ilegible, y responde en consecuencia. Un comprobante NUNCA se da por pagado: Victoria "
+            "registra el monto, la fecha, el banco y la referencia, te avisa por Telegram con las diferencias contra el pedido y la "
+            "conversación pasa a una persona, que lo confirma. Cada foto suma un costo pequeño de IA (centavos). "
+            "Apagado, vuelve a lo de antes: Victoria no ve la foto y, si el cliente debía pagar, la conversación pasa a una persona."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="bot.max_imagenes_por_mensaje",
+        grupo="victoria",
+        nombre="Fotos máximas que Victoria mira por mensaje",
+        para_que_sirve=(
+            "Si el cliente manda varias fotos seguidas, Victoria mira como máximo este número en cada respuesta (las más recientes); "
+            "las demás quedan en la conversación para que tú las veas. Pone un tope al costo de IA. "
+            "Subir el tope sirve si tus clientes suelen mandar muchas fotos juntas; bajarlo, para gastar menos."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=6,
+        unidad="fotos",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
         clave="bot.enviar_fotos",
         grupo="victoria",
         nombre="Enviar fotos del producto",

@@ -65,6 +65,44 @@ class WhatsAppClient:
 
         return data
 
+    def descargar_media(self, media_id: str, max_bytes: int = 8 * 1024 * 1024):
+        """Baja un archivo que mandó el cliente (foto, audio, documento). Son dos pasos de Meta: (1) preguntar la URL temporal del
+        archivo (vale unos 5 minutos) y su tipo, (2) bajarlo con el mismo token. Devuelve (bytes, tipo_mime). Nunca baja más de
+        `max_bytes` (protege la memoria y el costo). Lanza WhatsAppRequestError / WhatsAppBusinessError si Meta no lo entrega."""
+        base = self._url.rsplit("/", 2)[0]  # https://graph.facebook.com/v21.0
+        cabeceras = {"Authorization": f"Bearer {self._api_token}"}
+        try:
+            info = self._session.get(f"{base}/{media_id}", headers=cabeceras, timeout=self._timeout)
+        except requests.RequestException as exc:
+            raise WhatsAppRequestError(f"Error de red pidiendo la URL del archivo: {exc}") from exc
+        if info.status_code == 401:
+            raise WhatsAppAuthError("Acceso denegado (401) pidiendo un archivo a WhatsApp")
+        if info.status_code >= 400:
+            raise WhatsAppBusinessError(message=f"Meta no entregó el archivo (HTTP {info.status_code})", code=info.status_code, raw={})
+        try:
+            datos = info.json()
+        except ValueError as exc:
+            raise WhatsAppRequestError("Respuesta no-JSON al pedir la URL del archivo") from exc
+        url, mime = datos.get("url"), datos.get("mime_type")
+        if not url or not str(url).lower().startswith("https://"):
+            raise WhatsAppRequestError("Meta no devolvió una URL https para el archivo")
+        if datos.get("file_size") and int(datos["file_size"]) > max_bytes:
+            raise WhatsAppRequestError(f"El archivo pesa {datos['file_size']} bytes y el máximo permitido es {max_bytes}")
+        try:
+            archivo = self._session.get(url, headers=cabeceras, timeout=self._timeout, stream=True)
+            if archivo.status_code >= 400:
+                raise WhatsAppRequestError(f"No se pudo bajar el archivo (HTTP {archivo.status_code})")
+            trozos, total = [], 0
+            for trozo in archivo.iter_content(chunk_size=65536):
+                total += len(trozo)
+                if total > max_bytes:
+                    archivo.close()
+                    raise WhatsAppRequestError(f"El archivo supera el máximo permitido de {max_bytes} bytes")
+                trozos.append(trozo)
+        except requests.RequestException as exc:
+            raise WhatsAppRequestError(f"Error de red bajando el archivo: {exc}") from exc
+        return b"".join(trozos), mime or archivo.headers.get("Content-Type")
+
     def enviar_texto(self, telefono: str, mensaje: str) -> dict:
         """POST .../messages, type=text. La respuesta exitosa trae
         messages[0]['id'] -- el wamid que WhatsApp asigna a ESTE envío

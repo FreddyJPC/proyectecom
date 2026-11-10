@@ -179,6 +179,6 @@ class TestDePuntaAPunta:
         mock_login_ok()
         grupos = _client().get("/parametros", headers=AUTH_HEADER).get_json()["grupos"]
         todos = [p for g in grupos for p in g["parametros"]]
-        assert len(todos) == 36 and all(p["paraQueSirve"] and p["aplica"] for p in todos)
+        assert len(todos) == 38 and all(p["paraQueSirve"] and p["aplica"] for p in todos)
         modelo = next(p for p in todos if p["clave"] == "llm.modelo")
         assert modelo["sensible"] and {o["valor"] for o in modelo["opciones"]} >= {"claude-sonnet-5"}

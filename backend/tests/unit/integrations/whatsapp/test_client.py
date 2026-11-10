@@ -193,3 +193,49 @@ class TestEnviarImagen:
         with pytest.raises(WhatsAppRequestError):
             client.enviar_imagen(telefono="593987654321", url="https://cdn.ejemplo.com/reloj.png")
         assert len(responses.calls) == 1
+
+
+class TestDescargarMedia:
+    BASE = "https://graph.facebook.com/v21.0"
+
+    @responses.activate
+    def test_baja_el_archivo_en_dos_pasos_con_el_token(self, client):
+        responses.add(responses.GET, f"{self.BASE}/MEDIA1", json={"url": "https://lookaside.fbsbx.com/x", "mime_type": "image/jpeg", "file_size": 5}, status=200)
+        responses.add(responses.GET, "https://lookaside.fbsbx.com/x", body=b"\xff\xd8abc", status=200)
+
+        datos, mime = client.descargar_media("MEDIA1")
+
+        assert datos == b"\xff\xd8abc" and mime == "image/jpeg"
+        assert all(c.request.headers["Authorization"] == f"Bearer {TOKEN}" for c in responses.calls)
+
+    @responses.activate
+    def test_no_baja_un_archivo_mas_grande_que_el_maximo(self, client):
+        responses.add(responses.GET, f"{self.BASE}/M", json={"url": "https://x.example/f", "mime_type": "audio/ogg", "file_size": 999}, status=200)
+        with pytest.raises(WhatsAppRequestError, match="máximo"):
+            client.descargar_media("M", max_bytes=100)
+        assert len(responses.calls) == 1  # ni siquiera pidió el archivo
+
+    @responses.activate
+    def test_corta_si_el_archivo_real_supera_el_maximo(self, client):
+        responses.add(responses.GET, f"{self.BASE}/M", json={"url": "https://x.example/f", "mime_type": "audio/ogg"}, status=200)
+        responses.add(responses.GET, "https://x.example/f", body=b"x" * 500, status=200)
+        with pytest.raises(WhatsAppRequestError, match="supera"):
+            client.descargar_media("M", max_bytes=100)
+
+    @responses.activate
+    def test_una_url_que_no_es_https_se_rechaza(self, client):
+        responses.add(responses.GET, f"{self.BASE}/M", json={"url": "http://x.example/f", "mime_type": "image/png"}, status=200)
+        with pytest.raises(WhatsAppRequestError, match="https"):
+            client.descargar_media("M")
+
+    @responses.activate
+    def test_un_archivo_que_ya_no_existe_es_un_error_claro(self, client):
+        responses.add(responses.GET, f"{self.BASE}/M", json={"error": {"message": "x"}}, status=404)
+        with pytest.raises(WhatsAppBusinessError):
+            client.descargar_media("M")
+
+    @responses.activate
+    def test_sin_red_es_un_error_de_request(self, client):
+        responses.add(responses.GET, f"{self.BASE}/M", body=RequestsConnectionError("sin red"))
+        with pytest.raises(WhatsAppRequestError):
+            client.descargar_media("M")

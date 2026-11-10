@@ -13,12 +13,13 @@ dentro de sí misma. Quien la llama (BotWorker en producción, o
 tools/chat_con_victoria.py en pruebas) decide qué hacer con el texto
 devuelto.
 """
+import base64
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.config.parametros import parametros
-from src.integrations.llm.contratos import LLMProvider, MensajeLLM
+from src.integrations.llm.contratos import AdjuntoLLM, LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
 from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
@@ -31,6 +32,11 @@ from .repository import ConversacionRepository, LeadRepository, MensajeRepositor
 from .tools import HerramientasVictoria, herramientas_de_victoria
 
 logger = logging.getLogger(__name__)
+
+# Lo que la IA puede ver (docs/PLAN_IMAGENES_AUDIO.md, F2). Un archivo más pesado se rechaza antes de pedirlo a Meta.
+_MIMES_DE_IMAGEN = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_MIME_PDF = "application/pdf"
+_MAXIMO_BYTES_DE_ARCHIVO = 7_000_000  # la API acepta 10 MB en base64 (~7,5 MB reales)
 
 _ZONA_ECUADOR = timezone(timedelta(hours=-5))
 _MESES_ES = [
@@ -58,6 +64,7 @@ class VictoriaConversationService:
         enviar_fotos: Optional[bool] = None,
         plantilla: Optional[str] = None,
         entrega_repo: Optional[EntregaRepository] = None,
+        canales=None,
     ):
         # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
         # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
@@ -77,6 +84,8 @@ class VictoriaConversationService:
         # Las instrucciones de Victoria: por defecto las que rigen hoy (la versión publicada desde la app o,
         # si no hay, el archivo del código); «Probar con Victoria» puede pasar las del borrador.
         self._plantilla_fija = plantilla
+        # Perezoso: el registro de canales (para bajar las fotos del cliente) solo se arma si llega una foto.
+        self._canales_fijo = canales
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: Optional[str] = None) -> str:
         """Responde lo que el cliente escribió y Victoria todavía no contestó.
@@ -87,14 +96,14 @@ class VictoriaConversationService:
         `mensaje_cliente` solo sirve de respaldo cuando la conversación aún no tiene mensajes guardados."""
         filas = self._mensajes.obtener_por_conversacion(conversacion_id)
         historial_filas, pendientes = self._separar_sin_responder(filas)
+        adjuntos: List[AdjuntoLLM] = []
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         if pendientes:
-            texto_cliente = "\n".join(f["contenido"] for f in pendientes)
+            texto_cliente, adjuntos = self._preparar_mensaje_del_cliente(conversacion, pendientes)
         elif not filas and mensaje_cliente:
             texto_cliente = mensaje_cliente
         else:
             return ""
-
-        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         lead = self._leads.obtener_o_crear(
             conversacion_id,
             contacto_id=conversacion["contacto_id"],
@@ -124,7 +133,7 @@ class VictoriaConversationService:
         herramientas = herramientas_de_victoria(enviar_fotos)
 
         mensajes: List[MensajeLLM] = self._construir_historial(historial_filas, max_historial)
-        mensajes.append(MensajeLLM(rol="user", texto=texto_cliente))
+        mensajes.append(MensajeLLM(rol="user", texto=texto_cliente, adjuntos=adjuntos))
 
         partes_de_texto: List[str] = []
         ya_escalo = False
@@ -244,9 +253,74 @@ class VictoriaConversationService:
         if max_historial:
             anteriores = anteriores[-max_historial:]
         return [
-            MensajeLLM(rol="user" if fila["rol"] == "cliente" else "assistant", texto=fila["contenido"])
+            MensajeLLM(rol="user" if fila["rol"] == "cliente" else "assistant", texto=VictoriaConversationService._texto_del_historial(fila))
             for fila in anteriores
         ]
+
+    @staticmethod
+    def _texto_del_historial(fila: dict) -> str:
+        """Un archivo viejo del cliente no se vuelve a mandar a la IA: en su lugar va lo que se entendió de él (la descripción de
+        la foto, la transcripción del audio), si ya se guardó."""
+        analisis = fila.get("analisis")
+        if fila["rol"] == "cliente" and analisis and fila.get("tipo") in ("imagen", "documento", "audio"):
+            etiqueta = {"imagen": "imagen del cliente", "documento": "documento del cliente", "audio": "audio del cliente (transcrito)"}[fila["tipo"]]
+            leyenda = f" — pie de foto: {fila['contenido']}" if fila.get("tipo") != "audio" and not fila["contenido"].startswith("[") else ""
+            return f"[{etiqueta}: {analisis}]{leyenda}"
+        return fila["contenido"]
+
+    def _preparar_mensaje_del_cliente(self, conversacion: dict, pendientes: List[dict]) -> Tuple[str, List[AdjuntoLLM]]:
+        """Junta lo que el cliente escribió (y mandó) desde la última respuesta en UN mensaje para la IA. Las fotos y PDF del turno se
+        bajan de Meta y se le entregan para que los VEA, hasta `bot.max_imagenes_por_mensaje`; lo demás va como texto. Si algo no se
+        puede ver (apagado, tope, descarga fallida, formato no soportado) se le dice a Victoria con una nota, nunca se calla: así sabe
+        qué pedirle al cliente."""
+        entender = parametros.valor("bot.entender_imagenes")
+        maximo = parametros.valor("bot.max_imagenes_por_mensaje")
+        con_archivo = [f for f in pendientes if f.get("tipo") in ("imagen", "documento") and f.get("media_id")]
+        # Si hay más que el tope, se miran las más recientes.
+        a_ver = {id(f) for f in con_archivo[-maximo:]} if entender else set()
+
+        lineas: List[str] = []
+        adjuntos: List[AdjuntoLLM] = []
+        for fila in pendientes:
+            if id(fila) in a_ver:
+                adjunto, nota = self._bajar_para_ver(conversacion, fila)
+                if adjunto is not None:
+                    adjuntos.append(adjunto)
+                    lineas.append(self._etiqueta_adjunta(fila))
+                else:
+                    lineas.append(f"{fila['contenido']} {nota}".strip())
+            elif fila.get("tipo") in ("imagen", "documento"):
+                motivo = "(foto que no pudiste ver: la función está apagada)" if not entender else "(foto anterior, no se analizó: pasó el tope de fotos por mensaje)"
+                lineas.append(f"{fila['contenido']} {motivo}".strip())
+            else:
+                lineas.append(fila["contenido"])
+        return "\n".join(lineas), adjuntos
+
+    @staticmethod
+    def _etiqueta_adjunta(fila: dict) -> str:
+        """El texto que acompaña a un archivo que la IA SÍ recibe (su pie de foto, si lo tiene)."""
+        contenido = fila["contenido"]
+        if fila.get("tipo") == "documento":
+            return f"[documento adjunto: {fila.get('media_nombre') or 'sin nombre'}]" if contenido.startswith("[") else f"[documento adjunto] {contenido}"
+        return "[imagen adjunta]" if contenido.startswith("[") else f"[imagen adjunta] {contenido}"
+
+    def _bajar_para_ver(self, conversacion: dict, fila: dict) -> Tuple[Optional[AdjuntoLLM], str]:
+        """(adjunto, nota). Si no se puede, adjunto es None y la nota le explica a Victoria por qué."""
+        mime = (fila.get("media_mime") or "").split(";")[0].strip().lower()
+        es_pdf = fila.get("tipo") == "documento" and mime == _MIME_PDF
+        if mime not in _MIMES_DE_IMAGEN and not es_pdf:
+            return None, f"(archivo que no puedes abrir: tipo {mime or 'desconocido'}; pídele al cliente una foto o que lo escriba)"
+        try:
+            registro = self._canales_fijo
+            if registro is None:
+                from src.integrations.canales import get_registro_canales  # perezoso: evita armar WhatsApp si no hace falta
+
+                registro = self._canales_fijo = get_registro_canales()
+            datos, _ = registro.para(conversacion["canal"]).descargar_media(fila["media_id"], max_bytes=_MAXIMO_BYTES_DE_ARCHIVO)
+        except Exception:
+            logger.warning("No se pudo bajar el archivo del cliente", extra={"conversacion_id": conversacion.get("id"), "mensaje_id": fila.get("id")}, exc_info=True)
+            return None, "(archivo que no se pudo abrir: pídele con amabilidad que lo vuelva a enviar o que escriba lo que necesita)"
+        return AdjuntoLLM(tipo="documento" if es_pdf else "imagen", mime=mime, datos_base64=base64.b64encode(datos).decode("ascii")), ""
 
     def _resolver_producto_contexto(self, lead: dict, conversacion: dict) -> Optional[dict]:
         """Producto cuya ficha completa se le muestra a Victoria. Solo cuenta

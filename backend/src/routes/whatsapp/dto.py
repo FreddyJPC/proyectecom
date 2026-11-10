@@ -7,9 +7,14 @@ class MensajeEntranteDTO:
     wamid: str          # ID único del mensaje asignado por el canal (en WhatsApp: wamid.xxx)
     id_externo: str     # identificador del cliente EN ESE CANAL (WhatsApp: su teléfono, ej: 593987654321)
     contenido: str      # texto del mensaje (o descripción si es imagen/audio)
-    tipo: str           # 'texto' | 'imagen' | 'audio'
+    tipo: str           # texto | imagen | audio | documento | video | ubicacion | sticker | reaccion | contacto
     canal: str = "whatsapp"          # whatsapp | instagram | messenger (ADR-014)
     nombre_perfil: Optional[str] = None   # nombre público del cliente en el canal, si el canal lo manda
+    # Archivo adjunto (foto, audio, documento…): identificador en Meta y tipo. El archivo se baja de Meta cuando hace falta
+    # (ver WhatsAppClient.descargar_media); no se copia a ningún otro lado.
+    media_id: Optional[str] = None
+    media_mime: Optional[str] = None
+    media_nombre: Optional[str] = None
     referral: Optional[dict] = None
     # Objeto referral completo si vino de anuncio Click-to-WhatsApp (FEP), None si no.
     # Cuando está presente, contiene: source_id (id_anuncio), ctwa_clid, headline, body, etc.
