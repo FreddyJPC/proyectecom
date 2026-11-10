@@ -56,3 +56,24 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   return res.json() as Promise<T>;
 }
+
+
+/** Baja un archivo (foto, audio, PDF) del backend con la sesión del usuario y lo devuelve como Blob. Para mostrarlo se usa
+ * `URL.createObjectURL(blob)`: un `<img src>` directo no puede llevar el token. */
+export async function apiBlob(path: string): Promise<Blob> {
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL no está configurada (ver .env.example)");
+  }
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.error ?? `Error ${res.status} llamando a ${path}`, res.status);
+  }
+  return res.blob();
+}

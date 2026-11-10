@@ -30,7 +30,7 @@ from .dto import (
     UltimoMensajeDTO,
     VentanaGratuitaDTO,
 )
-from .exceptions import ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
+from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, VentanaMensajeriaCerradaError
 
 # Cuántas llegadas por anuncio se listan en la pantalla de una conversación (la más reciente primero).
 MAXIMO_LLEGADAS_LISTADAS = 20
@@ -154,7 +154,10 @@ class ConversacionesService:
             )
 
         mensajes = [
-            MensajeDTO(id=m["id"], rol=m["rol"], contenido=m["contenido"], tipo=m["tipo"], creado_en=_iso(m["creado_en"]))
+            MensajeDTO(
+                id=m["id"], rol=m["rol"], contenido=m["contenido"], tipo=m["tipo"], creado_en=_iso(m["creado_en"]),
+                tiene_archivo=bool(m.get("media_id")), analisis=m.get("analisis"),
+            )
             for m in mensajes_crudos
         ]
 
@@ -236,6 +239,22 @@ class ConversacionesService:
             id=mensaje["id"], rol=mensaje["rol"], contenido=mensaje["contenido"], tipo=mensaje["tipo"],
             creado_en=_iso(mensaje["creado_en"]),
         )
+
+    def obtener_archivo(self, conversacion_id: int, mensaje_id: int):
+        """La foto, el audio o el PDF de un mensaje, traído de Meta en este momento (no se guarda en ningún otro lado; Meta lo
+        conserva unos 30 días). Devuelve (bytes, tipo_mime). Solo si el mensaje es de ESA conversación y trae un archivo."""
+        if self._conversaciones.obtener_por_id(conversacion_id) is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        mensaje = self._mensajes.obtener_por_id(mensaje_id)
+        if mensaje is None or mensaje["conversacion_id"] != conversacion_id or not mensaje.get("media_id"):
+            raise ArchivoNoDisponibleError("Ese mensaje no tiene un archivo.")
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        try:
+            datos, mime = self._canales.para(conversacion["canal"]).descargar_media(mensaje["media_id"])
+        except Exception as exc:
+            # Lo más común: Meta ya no lo guarda (pasaron ~30 días) o el enlace venció.
+            raise ArchivoNoDisponibleError(f"Meta ya no entrega este archivo ({exc}).") from exc
+        return datos, (mensaje.get("media_mime") or mime or "application/octet-stream")
 
     def reactivar(self, conversacion_id: int) -> None:
         if self._conversaciones.obtener_por_id(conversacion_id) is None:

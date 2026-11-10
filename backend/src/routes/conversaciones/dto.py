@@ -132,6 +132,9 @@ class MensajeDTO:
     contenido: str
     tipo: str
     creado_en: Optional[str]
+    # Si el mensaje trae un archivo (foto, audio, PDF) y lo que se entendió de él (descripción o transcripción).
+    tiene_archivo: bool = False
+    analisis: Optional[str] = None
 
 
 @dataclass

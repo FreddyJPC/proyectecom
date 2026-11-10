@@ -12,7 +12,7 @@ _SELECT_CONVERSACION = (
     "c.origen, c.id_anuncio, c.ctwa_clid, c.estado, c.vista_en, c.notas_internas, c.creada_en, c.actualizada_en "
     "from conversaciones c join contactos ct on ct.id = c.contacto_id"
 )
-_COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en"
+_COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre, analisis"
 # Lo que Victoria necesita saber de un producto. Además de la ficha, el proveedor (ADR-012: de él depende CÓMO
 # se cierra la venta), el costo, el stock propio y el envío.
 _COLUMNAS_PRODUCTO_BOT = (
@@ -327,6 +327,9 @@ class MensajeRepository:
         tipo: str = "texto",
         wamid: Optional[str] = None,
         creado_en: Optional[datetime] = None,
+        media_id: Optional[str] = None,
+        media_mime: Optional[str] = None,
+        media_nombre: Optional[str] = None,
     ) -> dict:
         """`creado_en` solo se pasa para ubicar la respuesta del bot ANTES de un mensaje del cliente que llegó
         mientras Victoria la redactaba (ver `VictoriaConversationService.procesar_turno`): así ese mensaje sigue
@@ -335,15 +338,33 @@ class MensajeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid, creado_en)
-                    values (%s, %s, %s, %s, %s, coalesce(%s, now()))
+                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre)
+                    values (%s, %s, %s, %s, %s, coalesce(%s, now()), %s, %s, %s)
                     returning {_COLUMNAS_MENSAJE}
                     """,
-                    (conversacion_id, rol, contenido, tipo, wamid, creado_en),
+                    (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
                 return dict(zip(cols, row))
+
+    @staticmethod
+    def guardar_analisis(mensaje_id: int, analisis: str) -> None:
+        """Lo que se entendió de un archivo (la descripción de una foto, la transcripción de un audio). Es lo que se le muestra a
+        Victoria en el historial en lugar de volver a mandarle el archivo en cada turno."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("update mensajes set analisis = %s where id = %s", (analisis, mensaje_id))
+
+    @staticmethod
+    def obtener_por_id(mensaje_id: int) -> Optional[dict]:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"select {_COLUMNAS_MENSAJE} from mensajes where id = %s", (mensaje_id,))
+                fila = cur.fetchone()
+                if fila is None:
+                    return None
+                return dict(zip([d[0] for d in cur.description], fila))
 
     @staticmethod
     def obtener_por_conversacion(conversacion_id: int) -> List[dict]:

@@ -10,6 +10,7 @@ import pytest
 
 from src.integrations.whatsapp import WhatsAppBusinessError
 from src.routes.conversaciones.exceptions import (
+    ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
     VentanaMensajeriaCerradaError,
@@ -80,6 +81,9 @@ class FakeMensajeRepository:
 
     def obtener_por_conversacion(self, conversacion_id):
         return list(self._mensajes.get(conversacion_id, []))
+
+    def obtener_por_id(self, mensaje_id):
+        return next((dict(m) for ms in self._mensajes.values() for m in ms if m["id"] == mensaje_id), None)
 
     def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
         mensaje = {
@@ -410,3 +414,47 @@ class TestReactivar:
         servicio = _servicio(conversaciones=[])
         with pytest.raises(ConversacionNoEncontradaError):
             servicio.reactivar(999)
+
+
+class TestArchivosDeLosMensajes:
+    """El panel puede ver la foto o escuchar el audio del cliente (el servidor lo trae de Meta al momento)."""
+
+    def _con_foto(self, whatsapp):
+        mensajes = {1: [
+            {"id": 10, "conversacion_id": 1, "rol": "cliente", "contenido": "[imagen]", "tipo": "imagen", "wamid": "w1", "creado_en": AHORA,
+             "media_id": "M1", "media_mime": "image/jpeg", "analisis": "Comprobante de pago: $24.99"},
+            {"id": 11, "conversacion_id": 1, "rol": "cliente", "contenido": "hola", "tipo": "texto", "wamid": "w2", "creado_en": AHORA},
+            {"id": 12, "conversacion_id": 2, "rol": "cliente", "contenido": "[imagen]", "tipo": "imagen", "wamid": "w3", "creado_en": AHORA, "media_id": "M9"},
+        ]}
+        return _servicio(conversaciones=[_conversacion(id=1), _conversacion(id=2, telefono="593911111111")], mensajes=mensajes, whatsapp=whatsapp)
+
+    def test_el_detalle_dice_que_mensajes_traen_archivo_y_lo_que_se_entendio(self):
+        detalle = self._con_foto(MagicMock()).obtener_detalle(1)
+        foto, texto = detalle.mensajes[0], detalle.mensajes[1]
+        assert foto.tiene_archivo is True and foto.analisis == "Comprobante de pago: $24.99"
+        assert texto.tiene_archivo is False and texto.analisis is None
+
+    def test_trae_el_archivo_de_meta(self):
+        whatsapp = MagicMock()
+        whatsapp.descargar_media.return_value = (b"JPG", "image/jpeg")
+        datos, mime = self._con_foto(whatsapp).obtener_archivo(1, 10)
+        assert (datos, mime) == (b"JPG", "image/jpeg")
+        assert whatsapp.descargar_media.call_args.args[0] == "M1"
+
+    def test_un_mensaje_de_texto_no_tiene_archivo(self):
+        with pytest.raises(ArchivoNoDisponibleError):
+            self._con_foto(MagicMock()).obtener_archivo(1, 11)
+
+    def test_no_se_puede_pedir_el_archivo_de_otra_conversacion(self):
+        with pytest.raises(ArchivoNoDisponibleError):
+            self._con_foto(MagicMock()).obtener_archivo(1, 12)
+
+    def test_si_la_conversacion_no_existe(self):
+        with pytest.raises(ConversacionNoEncontradaError):
+            self._con_foto(MagicMock()).obtener_archivo(99, 10)
+
+    def test_si_meta_ya_no_lo_entrega_es_un_error_claro(self):
+        whatsapp = MagicMock()
+        whatsapp.descargar_media.side_effect = RuntimeError("404")
+        with pytest.raises(ArchivoNoDisponibleError, match="ya no entrega"):
+            self._con_foto(whatsapp).obtener_archivo(1, 10)

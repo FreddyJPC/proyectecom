@@ -284,6 +284,82 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="bot.entender_imagenes",
+        grupo="victoria",
+        nombre="Que Victoria vea las fotos del cliente",
+        para_que_sirve=(
+            "Si está encendido, cuando el cliente manda una foto (o un PDF) Victoria la ve: reconoce si es un comprobante de pago, "
+            "un producto que quiere o algo ilegible, y responde en consecuencia. Un comprobante NUNCA se da por pagado: Victoria "
+            "registra el monto, la fecha, el banco y la referencia, te avisa por Telegram con las diferencias contra el pedido y la "
+            "conversación pasa a una persona, que lo confirma. Cada foto suma un costo pequeño de IA (centavos). "
+            "Apagado, vuelve a lo de antes: Victoria no ve la foto y, si el cliente debía pagar, la conversación pasa a una persona."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="bot.max_imagenes_por_mensaje",
+        grupo="victoria",
+        nombre="Fotos máximas que Victoria mira por mensaje",
+        para_que_sirve=(
+            "Si el cliente manda varias fotos seguidas, Victoria mira como máximo este número en cada respuesta (las más recientes); "
+            "las demás quedan en la conversación para que tú las veas. Pone un tope al costo de IA. "
+            "Subir el tope sirve si tus clientes suelen mandar muchas fotos juntas; bajarlo, para gastar menos."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=6,
+        unidad="fotos",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="bot.entender_audios",
+        grupo="victoria",
+        nombre="Que Victoria escuche los audios del cliente",
+        para_que_sirve=(
+            "Si está encendido, cuando el cliente manda una nota de voz el sistema la pasa a texto con un servicio de transcripción "
+            "(OpenAI; necesita la clave OPENAI_API_KEY en el servidor) y Victoria responde como si el cliente lo hubiera escrito. "
+            "Cada minuto de audio cuesta unos centavos. Apagado, o sin la clave, Victoria no escucha el audio: le dice al cliente, con "
+            "amabilidad, que por ahora no puede y le pide que lo escriba."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="bot.max_mb_audio",
+        grupo="victoria",
+        nombre="Tamaño máximo de un audio",
+        para_que_sirve=(
+            "Los audios más pesados que esto no se transcriben (Victoria le pide al cliente que escriba). Es la forma de poner un tope al "
+            "costo y a los audios larguísimos: unos 3 MB son varios minutos de nota de voz de WhatsApp."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=15,
+        unidad="MB",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="bot.modelo_transcripcion",
+        grupo="victoria",
+        nombre="Modelo de transcripción de audios",
+        para_que_sirve=(
+            "Qué modelo del servicio de transcripción pasa la voz a texto. El económico basta para notas de voz normales; el clásico "
+            "(whisper-1) es la alternativa si un audio sale mal transcrito."
+        ),
+        tipo=TIPO_OPCION,
+        defecto="gpt-4o-mini-transcribe",
+        opciones=(
+            Opcion("gpt-4o-mini-transcribe", "Económico (recomendado)", "Unos US$0,003 por minuto."),
+            Opcion("whisper-1", "Clásico", "Unos US$0,006 por minuto."),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
         clave="bot.enviar_fotos",
         grupo="victoria",
         nombre="Enviar fotos del producto",

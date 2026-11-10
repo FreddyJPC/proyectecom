@@ -102,26 +102,75 @@ def _extraer_mensajes(payload: dict) -> List[MensajeEntranteDTO]:
                     if isinstance(c, dict)
                 }
                 for msg in valor.get("messages", []):
-                    mensajes.append(_parsear_mensaje(msg, nombres.get(msg.get("from"))))
+                    dto = _parsear_mensaje(msg, nombres.get(msg.get("from")))
+                    if dto is not None:
+                        mensajes.append(dto)
     except Exception:
         logger.exception("Payload de webhook de WhatsApp con forma inesperada -- se ignora")
         return []
     return mensajes
 
 
-def _parsear_mensaje(msg: dict, nombre_perfil: Optional[str] = None) -> MensajeEntranteDTO:
+def _enlace_al_mapa(latitud, longitud) -> str:
+    return f"https://maps.google.com/?q={latitud},{longitud}"
+
+
+def _parsear_mensaje(msg: dict, nombre_perfil: Optional[str] = None) -> Optional[MensajeEntranteDTO]:
+    """Convierte un mensaje de Meta en nuestro formato. Devuelve None para lo que no hay que procesar (p. ej. una reacción que el
+    cliente quitó). Los archivos (foto, audio, documento) quedan con su `media_id` para bajarlos después; ver el plan en
+    docs/PLAN_IMAGENES_AUDIO.md."""
     tipo_meta = msg.get("type", "text")
+    media_id = media_mime = media_nombre = None
+
     if tipo_meta == "text":
         contenido = msg.get("text", {}).get("body", "")
         tipo = "texto"
     elif tipo_meta == "image":
-        # Fase 3.1: sin transcripción/descripción real todavía -- se usa
-        # el caption si viene, si no un placeholder. Revisar en Fase 3.2.
-        contenido = msg.get("image", {}).get("caption") or "[imagen]"
-        tipo = "imagen"
+        imagen = msg.get("image", {})
+        contenido = imagen.get("caption") or "[imagen]"
+        tipo, media_id, media_mime = "imagen", imagen.get("id"), imagen.get("mime_type")
     elif tipo_meta == "audio":
+        audio = msg.get("audio", {})
         contenido = "[audio]"
-        tipo = "audio"
+        tipo, media_id, media_mime = "audio", audio.get("id"), audio.get("mime_type")
+    elif tipo_meta == "document":
+        documento = msg.get("document", {})
+        media_nombre = documento.get("filename")
+        contenido = documento.get("caption") or f"[documento{': ' + media_nombre if media_nombre else ''}]"
+        tipo, media_id, media_mime = "documento", documento.get("id"), documento.get("mime_type")
+    elif tipo_meta == "video":
+        video = msg.get("video", {})
+        contenido = video.get("caption") or "[video]"
+        tipo, media_id, media_mime = "video", video.get("id"), video.get("mime_type")
+    elif tipo_meta == "sticker":
+        contenido = "[sticker]"
+        tipo = "sticker"
+    elif tipo_meta == "location":
+        ubicacion = msg.get("location", {})
+        if ubicacion.get("latitude") is None or ubicacion.get("longitude") is None:
+            contenido = "[ubicación compartida sin coordenadas]"
+        else:
+            nombre = ", ".join(p for p in (ubicacion.get("name"), ubicacion.get("address")) if p)
+            contenido = f"[Ubicación compartida{': ' + nombre if nombre else ''} — {_enlace_al_mapa(ubicacion['latitude'], ubicacion['longitude'])}]"
+        tipo = "ubicacion"
+    elif tipo_meta == "reaction":
+        emoji = (msg.get("reaction") or {}).get("emoji")
+        if not emoji:  # el cliente quitó su reacción: no hay nada que procesar
+            return None
+        contenido = f"[reaccionó con {emoji} a un mensaje]"
+        tipo = "reaccion"
+    elif tipo_meta == "contacts":
+        contenido = "[contacto compartido]"
+        tipo = "contacto"
+    elif tipo_meta == "interactive":
+        # Respuesta a un botón o a una lista: lo que el cliente tocó es su respuesta, como si la hubiera escrito.
+        interactivo = msg.get("interactive", {})
+        elegido = interactivo.get("button_reply") or interactivo.get("list_reply") or {}
+        contenido = elegido.get("title") or "[respuesta de botón]"
+        tipo = "texto"
+    elif tipo_meta == "button":
+        contenido = (msg.get("button") or {}).get("text") or "[respuesta de botón]"
+        tipo = "texto"
     else:
         contenido = f"[mensaje tipo '{tipo_meta}' no soportado todavía]"
         tipo = "texto"
@@ -133,5 +182,8 @@ def _parsear_mensaje(msg: dict, nombre_perfil: Optional[str] = None) -> MensajeE
         tipo=tipo,
         canal="whatsapp",
         nombre_perfil=nombre_perfil or None,
+        media_id=media_id,
+        media_mime=media_mime,
+        media_nombre=media_nombre,
         referral=msg.get("referral"),
     )

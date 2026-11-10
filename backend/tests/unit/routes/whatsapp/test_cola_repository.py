@@ -67,3 +67,21 @@ class TestOrdenDeMensajes:
         antes = datetime.now(timezone.utc) - timedelta(seconds=5)
         fila = MensajeRepository.crear(conversacion, "bot", "Hola")
         assert fila["creado_en"] >= antes
+
+
+class TestMensajesConArchivos:
+    def test_guarda_el_archivo_y_despues_lo_que_se_entendio_de_el(self, conversacion):
+        creado = MensajeRepository.crear(
+            conversacion, "cliente", "[imagen]", tipo="imagen", wamid="wamid.IMG", media_id="M1", media_mime="image/jpeg"
+        )
+        assert (creado["media_id"], creado["media_mime"], creado["analisis"]) == ("M1", "image/jpeg", None)
+
+        MensajeRepository.guardar_analisis(creado["id"], "Comprobante de pago: $24.99")
+
+        leido = MensajeRepository.obtener_por_id(creado["id"])
+        assert leido["analisis"] == "Comprobante de pago: $24.99" and leido["tipo"] == "imagen"
+        assert MensajeRepository.obtener_por_conversacion(conversacion)[0]["media_id"] == "M1"
+
+    def test_un_mensaje_de_texto_no_tiene_archivo(self, conversacion):
+        creado = MensajeRepository.crear(conversacion, "cliente", "hola")
+        assert creado["media_id"] is None and MensajeRepository.obtener_por_id(999999999) is None

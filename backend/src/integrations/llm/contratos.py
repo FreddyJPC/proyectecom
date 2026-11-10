@@ -50,6 +50,16 @@ class ResultadoHerramienta:
 
 
 @dataclass
+class AdjuntoLLM:
+    """Un archivo que acompaña el mensaje del cliente (foto o PDF) para que la IA lo VEA. `datos_base64` es el archivo ya codificado.
+    Solo se manda en el turno en que llegó: en el historial queda un texto con lo que se entendió (ver mensajes.analisis)."""
+
+    tipo: Literal["imagen", "documento"]
+    mime: str
+    datos_base64: str
+
+
+@dataclass
 class MensajeLLM:
     """Un turno de la conversación, en formato neutral. Por construcción
     (ver VictoriaConversationService) es siempre una de tres formas:
@@ -60,6 +70,7 @@ class MensajeLLM:
     texto: Optional[str] = None
     llamadas_herramientas: List[LlamadaHerramienta] = field(default_factory=list)
     resultados_herramientas: List[ResultadoHerramienta] = field(default_factory=list)
+    adjuntos: List[AdjuntoLLM] = field(default_factory=list)
 
 
 @dataclass

@@ -121,6 +121,16 @@ class AnthropicProvider(LLMProvider):
                         "input": llamada.entrada,
                     })
                 traducidos.append({"role": "assistant", "content": contenido})
+            elif m.adjuntos:
+                # Primero los archivos y después el texto (así lo recomienda Anthropic para imágenes y PDF).
+                contenido = [
+                    {"type": "image", "source": {"type": "base64", "media_type": a.mime, "data": a.datos_base64}}
+                    if a.tipo == "imagen"
+                    else {"type": "document", "source": {"type": "base64", "media_type": a.mime, "data": a.datos_base64}}
+                    for a in m.adjuntos
+                ]
+                contenido.append({"type": "text", "text": m.texto or "(el cliente envió el archivo sin texto)"})
+                traducidos.append({"role": m.rol, "content": contenido})
             else:
                 traducidos.append({"role": m.rol, "content": m.texto or ""})
         return traducidos

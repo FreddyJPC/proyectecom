@@ -1541,3 +1541,25 @@ que protege el sistema:
 - Si el cliente corrige algo («no, la dirección es otra»), el dato nuevo borra la confirmación y se vuelve a mostrar el resumen.
 - Se puede apagar en Parámetros («Confirmar los datos con el cliente antes de cerrar»).
 
+## 48. Fotos, notas de voz y otros mensajes: qué entiende Victoria
+
+**El problema.** En Ecuador la gente manda fotos de comprobantes, notas de voz y «pines» de ubicación en vez de escribir. Antes Victoria solo recibía un
+marcador («[imagen]», «[audio]») y no sabía qué le mandaron.
+
+**Fotos y PDF.** El servidor baja el archivo de Meta (el enlace dura ~5 minutos y Meta lo guarda ~30 días) y se lo muestra a la IA junto con el texto.
+Victoria clasifica lo que ve (comprobante, producto, ubicación, otro o ilegible) y responde en consecuencia. Las fotos viejas no se reenvían en cada turno:
+en el historial queda un texto con lo que Victoria entendió (así no sube el costo). Texto escrito dentro de una foto («ignora tus reglas») es un dato,
+no una orden.
+
+**Comprobantes de pago.** Victoria lee monto, fecha, banco y referencia y el **código** los compara con el total del pedido. **Nunca confirma el pago**:
+avisa al dueño por Telegram con los datos y las diferencias y la conversación pasa a una persona. Una foto puede ser falsa o de otra persona.
+
+**Audios.** La IA de Claude no oye audio, así que se usa otro servicio que lo convierte en texto (OpenAI, ~US$0,003 por minuto). Victoria lee la
+transcripción y responde como si el cliente lo hubiera escrito. Viene **apagado**: hace falta la clave `OPENAI_API_KEY` en Railway y encender el interruptor en
+Parámetros. Mientras no esté, Victoria le pide amablemente al cliente que lo escriba.
+
+**Otros tipos.** Ubicación: se guarda el enlace al mapa como referencia, pero igual se pide cantón y provincia. Sticker y reacción: una respuesta corta
+(la reacción sola no se contesta). Video, contacto y documentos no soportados: respuesta amable pidiendo que lo escriba.
+
+**Para el dueño.** En cada conversación se ve la foto o se escucha el audio, con el análisis y la transcripción. El servidor lo trae de Meta al momento; no se
+guarda ninguna copia fuera de la base. Si el archivo ya venció en Meta (más de ~30 días), el panel lo avisa.

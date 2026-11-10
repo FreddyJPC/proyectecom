@@ -65,6 +65,10 @@ export type MensajeConversacion = {
   contenido: string;
   tipo: string;
   creadoEn: string | null;
+  /** El mensaje trae una foto, un audio o un PDF (se baja de Meta al pedirlo). */
+  tieneArchivo?: boolean;
+  /** Lo que se entendió del archivo: la descripción de la foto o la transcripción del audio. */
+  analisis?: string | null;
 };
 
 /** La ventana gratuita de Meta para clientes que llegan por anuncio. Es informativa: solo la de 24 h permite texto libre. */

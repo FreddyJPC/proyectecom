@@ -21,6 +21,7 @@ import { etiquetaDia, formatFechaHora, formatHora, formatMoney, formatPhone, tie
 import { cn } from "@/lib/utils";
 import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion } from "@/types/conversacion";
 
+import { ArchivoDelMensaje } from "./archivo-del-mensaje";
 import { OrigenCliente } from "./origen-cliente";
 
 const REFRESCO_MS = 15_000;
@@ -35,7 +36,7 @@ function Dato({ label, children }: { label: string; children?: ReactNode }) {
   );
 }
 
-function Burbuja({ m, mostrarAutor }: { m: MensajeConversacion; mostrarAutor: boolean }) {
+function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string }) {
   const esCliente = m.rol === "cliente";
   const esBot = m.rol === "bot";
   const esMedia = m.tipo !== "texto" || /^\[.*\]$/.test(m.contenido);
@@ -58,6 +59,13 @@ function Burbuja({ m, mostrarAutor }: { m: MensajeConversacion; mostrarAutor: bo
         )}
       >
         {m.contenido}
+        {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} />}
+        {m.analisis && (
+          <span className="mt-1.5 block text-xs not-italic leading-snug text-muted-foreground">
+            {m.tipo === "audio" ? "Lo que dice: " : "Lo que se entendió: "}
+            {m.analisis}
+          </span>
+        )}
         <span
           className={cn(
             "tabular mt-0.5 block text-right text-[0.65rem] leading-none",
@@ -434,7 +442,7 @@ export default function ConversacionDetallePage() {
                     </span>
                   </div>
                 )}
-                <Burbuja m={m} mostrarAutor={mostrarAutor} />
+                <Burbuja m={m} mostrarAutor={mostrarAutor} conversacionId={id} />
               </div>
             );
           })}

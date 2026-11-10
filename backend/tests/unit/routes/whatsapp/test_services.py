@@ -337,7 +337,12 @@ class TestReglasDeterministasDeEscalado:
         assert kwargs["modo"] == "fijo"
         assert "conecto" in kwargs["texto_fijo"].lower()
 
-    def test_imagen_con_lead_esperando_pago_escala_sin_invocar_al_llm(self):
+    def test_imagen_con_lead_esperando_pago_escala_sin_invocar_al_llm(self, monkeypatch):
+        # Con «Que Victoria vea las fotos» APAGADO se mantiene la regla de siempre.
+        from src.config.parametros import parametros
+
+        real = parametros.valor
+        monkeypatch.setattr(parametros, "valor", lambda clave: False if clave == "bot.entender_imagenes" else real(clave))
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
         )
@@ -362,7 +367,7 @@ class TestReglasDeterministasDeEscalado:
         real = parametros.valor
         editados = {
             "bot.texto_postventa": "Texto de postventa editado", "bot.texto_comprobante_recibido": "Comprobante editado",
-            "bot.atender_clientes_recurrentes": False,
+            "bot.atender_clientes_recurrentes": False, "bot.entender_imagenes": False,
         }
         monkeypatch.setattr(parametros, "valor", lambda clave: editados[clave] if clave in editados else real(clave))
 
@@ -468,3 +473,31 @@ class TestConversacionEnGestion:
         _service(conv_repo=conv_repo, lead_repo=lead_repo, bot_worker=bot_worker).procesar_mensaje_entrante(_dto())
 
         assert bot_worker.encolar.call_args.kwargs["modo"] == "fijo"
+
+
+class TestImagenesConLaFuncionEncendida:
+    """Con «Que Victoria vea las fotos» encendido (lo normal), una foto de un cliente que debe pagar la ve Victoria."""
+
+    def _correr(self, tipo):
+        conv_repo = FakeConversacionRepository(
+            existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
+        )
+        bot_worker = MagicMock()
+        _service(
+            conv_repo=conv_repo, lead_repo=FakeLeadRepository(leads_por_conversacion={1: {"estado": "esperando_pago"}}),
+            bot_worker=bot_worker,
+        ).procesar_mensaje_entrante(_dto(tipo=tipo, contenido="[imagen]"))
+        return conv_repo, bot_worker
+
+    def test_la_foto_pasa_a_victoria_en_vez_de_escalarse_directo(self):
+        conv_repo, bot_worker = self._correr("imagen")
+        assert bot_worker.encolar.call_args.kwargs["modo"] == "ia"
+        assert conv_repo.tabla["593987654321"]["estado"] == "activa"  # el que escala, si es un comprobante, es la herramienta
+
+    def test_un_pdf_igual(self):
+        _, bot_worker = self._correr("documento")
+        assert bot_worker.encolar.call_args.kwargs["modo"] == "ia"
+
+    def test_una_reaccion_no_se_contesta(self):
+        _, bot_worker = self._correr("reaccion")
+        bot_worker.encolar.assert_not_called()
