@@ -1622,3 +1622,28 @@ de madrugada, sale a las 8:00). Solo te escribe a ti, nunca al cliente. Todo se 
 **Cómo sabe que lo atendiste.** El sistema considera atendido un chat cuando **lo abres en el panel**. También se detiene si el chat deja de estar en tus manos: se lo devuelves a Victoria,
 lo tomas con «Atiendes tú» o se cierra. Mirarlo solo en la lista de chats no cuenta: hay que abrirlo. Si lo escalan de nuevo más tarde, la cuenta empieza desde cero.
 
+## 53. Avisarle a Meta cuando un anuncio termina en venta
+
+**Qué es.** Cuando alguien toca un anuncio de «Click-to-WhatsApp» y te escribe, WhatsApp le entrega a tu sistema un código del clic
+(`ctwa_clid`). Si después esa persona compra, tu sistema puede devolverle ese código a Meta diciendo «este clic terminó en compra»
+(es el evento `Purchase` de la *API de Conversiones para mensajería*). Con eso Meta aprende qué anuncios traen **compradores** y no
+solo conversaciones.
+
+**Cuándo se avisa.** Solo cuando la venta está **confirmada**: un pedido de Rocketfy (que ya sale confirmado, y una transferencia solo
+cierra cuando tú confirmas el pago) o un producto propio que marcas como **cobrado**. Se espera un rato (60 min por defecto) antes de
+avisar, porque Meta **no deja borrar** una compra ya avisada: si la venta se cancela dentro de esa espera, no se avisa.
+
+**Cómo funciona por dentro.** Una tabla `eventos_meta` es la «bandeja de salida»: una fila por venta, con clave única (así una venta no se avisa dos veces,
+porque Meta no deduplica). Un trabajo automático (`jobs/eventos_meta`, cada 15 min) anota las ventas de anuncio confirmadas y las envía.
+Va aparte de «cerrar la venta»: si Meta falla, la venta ya está guardada y el evento espera.
+
+**Qué pasa si algo falla.** Si Meta *rechaza* el evento, se reintenta (hasta 3 veces, esperando cada vez más). Si **no se sabe** si Meta lo
+recibió (tardó demasiado, error de su servidor), **no se reintenta solo** —podría duplicar la compra— y te avisa por Telegram. Una venta de anuncio
+sin código de clic se anota como «descartada» con su motivo, para poder medir cuántas ventas no se pueden avisar.
+
+**Qué se envía.** Solo el valor de la venta (precio, no ganancia), la moneda, la hora y el código del clic. Ningún dato del cliente.
+
+**Qué necesita.** Un conjunto de datos de Meta asociado a tu cuenta de WhatsApp y un token de un usuario de sistema, que viven **solo en Railway**
+(`META_CAPI_TOKEN`, `META_DATASET_ID`; se usa también `WHATSAPP_WABA_ID`). Está **apagado de fábrica**: el interruptor «Avisar a Meta cuando vendo por un
+anuncio» está en Control → Parámetros. Plan completo: `docs/PLAN_META_ADS.md`.
+

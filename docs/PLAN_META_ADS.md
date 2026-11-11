@@ -73,7 +73,7 @@ Los conectores solo listan los que la cuenta de Freddy puede ver, y solo aparece
 5. Confirmar el **identificador de la cuenta de WhatsApp (WABA)**: los conectores devolvieron identificadores distintos según la herramienta;
    hay que usar el mismo que usa nuestro backend (`WHATSAPP_WABA_ID`).
 
-### Fase 1 — Enviar el evento (Claude; sin cambios visibles)
+### Fase 1 — Enviar el evento (Claude; sin cambios visibles) — CONSTRUIDA 2026-11-11, sin desplegar y apagada
 - Migración **031**: tabla `eventos_meta` (bandeja de salida): tipo, venta, lead, `ctwa_clid`, valor y moneda, estado
   (`pendiente`/`enviado`/`fallido`/`descartado`), intentos, respuesta de Meta, clave única por (tipo, venta) para no duplicar.
 - Servicio `integrations/meta_conversiones.py` (único lugar que habla con Meta; fuera de `integrations/llm/`).
@@ -126,5 +126,5 @@ y si los clics del Estado de WhatsApp traen `ctwa_clid`.
 - **#77** Medir si el Estado de WhatsApp trae `ctwa_clid` (doc de Meta + primer anuncio real). No se quita por ahora.
 - **#78** Fase 0 en Meta (cuenta publicitaria nueva, dataset, usuario de sistema, `META_CAPI_TOKEN` en Railway).
 - **#79** Verificar con datos reales: ventana del evento, mínimo de eventos y formato de respuesta.
-- **#68** Fase 1 (código) — en curso.
+- **#68** Fase 1 (código) — construida y probada; falta desplegar (migración 031 primero).
 - **#66** Primer anuncio real de punta a punta — sigue pendiente.
