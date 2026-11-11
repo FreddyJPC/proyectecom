@@ -108,7 +108,13 @@ Fuente: *Conversions API for Business Messaging: Onboarding Guide* (developers.f
 
 **La documentación NO dice** (hay que probarlo con datos reales): la ventana máxima entre el clic y el evento cuando se envía `ctwa_clid`,
 la antigüedad aceptada de `event_time`, el formato de la respuesta, el máximo de eventos por petición, el mínimo de eventos para optimizar
-y si los clics del Estado de WhatsApp traen `ctwa_clid`.
+(la guía de la API de Conversiones no lo dice).
+
+**Confirmado después en la referencia del webhook de mensajes (2026-11-11):** los mensajes que vienen de un anuncio en **Estado de WhatsApp no traen `ctwa_clid`** (Meta lo omite por completo). Esas ventas no se pueden avisar y quedan «descartadas». Sigue sin quitarse el Estado (decisión de Freddy); se mide cuánto pesa (#77).
+
+**Permisos de la app (revisado con el conector devtools, 2026-11-11):** `whatsapp_business_management` y `whatsapp_business_manage_events` tienen acceso estándar y no avanzado; el avanzado exige verificación de empresa (AzoShop no la tiene). Se espera que el estándar baste para las cuentas del propio negocio; se confirma en la primera prueba real.
+
+**Token:** el usuario de sistema debe tener asignadas la cuenta de WhatsApp **y** la cuenta de mensajería, además de la app.
 
 ## 7. Riesgos
 
