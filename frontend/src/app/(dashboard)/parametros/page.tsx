@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Landmark, MessageSquareText, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Calculator, Landmark, MessageSquareText, Plug, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -117,6 +117,18 @@ export default function ParametrosPage() {
           </div>
           <Button asChild variant="outline">
             <Link href="/parametros/cuentas">Abrir cuentas</Link>
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-status-neutral-soft text-status-neutral-ink">
+            <Plug className="size-[1.1rem]" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-semibold">Conexión con Meta</p>
+            <p className="text-sm text-muted-foreground">Preparar el aviso de ventas a Meta y ver su estado.</p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href="/parametros/meta">Abrir conexión</Link>
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">

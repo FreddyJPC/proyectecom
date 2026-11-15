@@ -1647,3 +1647,5 @@ sin código de clic se anota como «descartada» con su motivo, para poder medir
 (`META_CAPI_TOKEN`, `META_DATASET_ID`; se usa también `WHATSAPP_WABA_ID`). Está **apagado de fábrica**: el interruptor «Avisar a Meta cuando vendo por un
 anuncio» está en Control → Parámetros. Plan completo: `docs/PLAN_META_ADS.md`.
 
+**El botón «Preparar Meta» (Parámetros → Conexión con Meta).** Para recibir las ventas, Meta necesita un *dataset* (un buzón asociado a tu cuenta de WhatsApp). Se pide con el token, que vive solo en el servidor. En lugar de que alguien copie el token, el botón le pide a Meta el dataset desde el propio servidor y guarda su número. Es seguro repetirlo: según la documentación de Meta, si el dataset ya existe devuelve el mismo. Si algo falla, la pantalla muestra el motivo que dio Meta (sin el token).
+

@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -63,6 +63,22 @@ def _cuerpo_json(whatsapp_business_account_id: str, ctwa_clid: str, valor: Decim
     return texto.replace(f'"{_MARCADOR_VALOR}"', f"{Decimal(valor).quantize(Decimal('0.01'))}")
 
 
+def _extraer_id(datos: Any) -> Optional[str]:
+    """Saca el identificador del dataset de la respuesta de Meta (la documentación solo dice que devuelve «un ID»: se aceptan las
+    formas habituales). Devuelve None si no se reconoce ninguna."""
+    if isinstance(datos, (str, int)) and str(datos).strip().isdigit():
+        return str(datos).strip()
+    if isinstance(datos, dict):
+        for clave in ("id", "dataset_id"):
+            valor = datos.get(clave)
+            if valor is not None and str(valor).strip().isdigit():
+                return str(valor).strip()
+        lista = datos.get("data")
+        if isinstance(lista, list) and lista:
+            return _extraer_id(lista[0])
+    return None
+
+
 def _recortar(texto: str) -> str:
     return texto if len(texto) <= _MAXIMO_RESPUESTA else texto[: _MAXIMO_RESPUESTA - 1] + "…"
 
@@ -71,17 +87,18 @@ class MetaConversionesClient:
     def __init__(self, access_token: str, dataset_id: str, whatsapp_business_account_id: str, timeout: int = 20):
         self._access_token = access_token
         self._whatsapp_business_account_id = whatsapp_business_account_id
+        self._dataset_id = dataset_id
         self._url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{dataset_id}/events"
         self._timeout = timeout
         self._session = requests.Session()
 
-    def enviar_compra(self, ctwa_clid: str, valor: Decimal, moneda: str, ocurrido_en: datetime) -> str:
-        """Envía un evento `Purchase`. Devuelve la respuesta de Meta (recortada) si lo aceptó."""
-        cuerpo = _cuerpo_json(self._whatsapp_business_account_id, ctwa_clid, valor, moneda, ocurrido_en)
+    def _post(self, url: str, cuerpo: Optional[bytes]) -> Any:
+        """POST a Meta con el token en el encabezado. Devuelve el JSON si Meta aceptó; si no, `MetaRechazoError` (seguro de reintentar)
+        o `MetaRespuestaDudosaError` (no se sabe si lo recibió)."""
         try:
             resp = self._session.post(
-                self._url,
-                data=cuerpo.encode("utf-8"),
+                url,
+                data=cuerpo,
                 headers={"Authorization": f"Bearer {self._access_token}", "Content-Type": "application/json"},
                 timeout=self._timeout,
             )
@@ -94,13 +111,30 @@ class MetaConversionesClient:
         if resp.status_code >= 500:
             raise MetaRespuestaDudosaError(f"Meta respondió con un error de su servidor (HTTP {resp.status_code})")
         try:
-            datos: Dict[str, Any] = resp.json()
+            datos: Any = resp.json()
         except ValueError:
             raise MetaRespuestaDudosaError(f"Respuesta ilegible de Meta (HTTP {resp.status_code})") from None
 
         if resp.status_code >= 400 or (isinstance(datos, dict) and "error" in datos):
             error = datos.get("error", {}) if isinstance(datos, dict) else {}
             detalle = f"{error.get('message', 'sin detalle')} (código {error.get('code', resp.status_code)})"
-            raise MetaRechazoError(_recortar(f"Meta rechazó el evento: {detalle}"))
+            raise MetaRechazoError(_recortar(f"Meta rechazó la petición: {detalle}"))
+        return datos
 
+    def obtener_o_crear_dataset(self) -> str:
+        """Pide a Meta el dataset de la cuenta de WhatsApp (`POST /{cuenta}/dataset`). Según su documentación, si ya existe uno devuelve ese
+        mismo, así que repetirlo no crea otro. Devuelve el identificador."""
+        url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{self._whatsapp_business_account_id}/dataset"
+        datos = self._post(url, None)
+        dataset_id = _extraer_id(datos)
+        if dataset_id is None:
+            raise MetaRechazoError("Meta respondió, pero no se reconoció el identificador del dataset en la respuesta")
+        return dataset_id
+
+    def enviar_compra(self, ctwa_clid: str, valor: Decimal, moneda: str, ocurrido_en: datetime) -> str:
+        """Envía un evento `Purchase`. Devuelve la respuesta de Meta (recortada) si lo aceptó."""
+        if not self._dataset_id:
+            raise MetaRechazoError("Falta el dataset: usa «Preparar Meta» en el panel")
+        cuerpo = _cuerpo_json(self._whatsapp_business_account_id, ctwa_clid, valor, moneda, ocurrido_en)
+        datos = self._post(self._url, cuerpo.encode("utf-8"))
         return _recortar(json.dumps(datos, ensure_ascii=False))

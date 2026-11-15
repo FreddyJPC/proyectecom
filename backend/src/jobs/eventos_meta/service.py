@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional
 
 from src.config.parametros import parametros
 from src.integrations.meta import MetaConversionesClient, MetaRechazoError, MetaRespuestaDudosaError, get_meta_client
-from src.integrations.meta.factory import faltantes
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
 
 from .reglas import minutos_para_reintentar, venta_confirmada

@@ -111,3 +111,33 @@ class TestElEnvio:
             with pytest.raises((MetaRechazoError, MetaRespuestaDudosaError)) as excinfo:
                 _cliente(error=error).enviar_compra("c", Decimal("1"), "USD", MOMENTO)
             assert TOKEN not in str(excinfo.value)
+
+
+class TestElDataset:
+    def test_pide_el_dataset_a_la_cuenta_de_whatsapp_con_el_token_en_el_encabezado(self):
+        c = _cliente(_respuesta(200, {"id": "445566"}))
+        assert c.obtener_o_crear_dataset() == "445566"
+        args, kwargs = c._session.post.call_args
+        assert args[0] == f"https://graph.facebook.com/{GRAPH_API_VERSION}/555666777/dataset"
+        assert TOKEN not in args[0] and kwargs["headers"]["Authorization"] == f"Bearer {TOKEN}"
+
+    @pytest.mark.parametrize("cuerpo", [{"id": 123}, {"dataset_id": "123"}, {"data": [{"id": "123"}]}, 123, "123"])
+    def test_acepta_las_formas_habituales_de_la_respuesta(self, cuerpo):
+        assert _cliente(_respuesta(200, cuerpo)).obtener_o_crear_dataset() == "123"
+
+    def test_una_respuesta_sin_identificador_reconocible_es_rechazo(self):
+        with pytest.raises(MetaRechazoError, match="identificador"):
+            _cliente(_respuesta(200, {"ok": True})).obtener_o_crear_dataset()
+
+    def test_un_error_de_permisos_es_rechazo_y_no_muestra_el_token(self):
+        c = _cliente(_respuesta(403, {"error": {"message": "(#200) Permissions error", "code": 200}}))
+        with pytest.raises(MetaRechazoError) as excinfo:
+            c.obtener_o_crear_dataset()
+        assert "Permissions error" in str(excinfo.value) and TOKEN not in str(excinfo.value)
+
+    def test_sin_dataset_no_se_envia_ninguna_compra(self):
+        c = MetaConversionesClient(TOKEN, "", "555666777")
+        c._session = MagicMock()
+        with pytest.raises(MetaRechazoError, match="dataset"):
+            c.enviar_compra("clic", Decimal("1"), "USD", MOMENTO)
+        c._session.post.assert_not_called()

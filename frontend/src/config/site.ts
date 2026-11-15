@@ -86,6 +86,9 @@ export function migasDe(pathname: string): Miga[] {
   if (seccion.url === "/parametros" && resto === "cuentas") {
     return [{ label: seccion.title, href: seccion.url }, { label: "Cuentas para transferir" }];
   }
+  if (seccion.url === "/parametros" && resto === "meta") {
+    return [{ label: seccion.title, href: seccion.url }, { label: "Conexión con Meta" }];
+  }
   if (seccion.url === "/catalogo" && resto.startsWith("producto/")) {
     return [{ label: seccion.title, href: `${seccion.url}?tab=mis-productos` }, { label: "Ficha del producto" }];
   }
