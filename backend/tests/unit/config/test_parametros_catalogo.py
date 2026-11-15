@@ -24,8 +24,14 @@ class TestInvariantesDelCatalogo:
 
     def test_estan_todos_los_parametros(self):
         # 15 del plan de parametrización + «Fotos por envío» (ADR-012) + 8 de leads (enfriamiento, atribución y cliente
-        # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea).
-        assert len(CATALOGO) == 49
+        # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea) + 7 de recordatorios y
+        # 4 del aviso de ventas a Meta (interruptor, espera, antigüedad, intentos) + la tarea que los envía.
+        assert len(CATALOGO) == 54
+
+    def test_el_aviso_de_ventas_a_meta_viene_apagado_de_fabrica(self):
+        """Lo que se envía a Meta no se puede borrar: hay que encenderlo a propósito."""
+        assert definicion("meta.activo").defecto is False
+        assert definicion("meta.activo").sensible is True
 
     def test_el_seguimiento_automatico_viene_apagado_de_fabrica(self):
         """Escribirle a un cliente por iniciativa propia nunca debe empezar solo: hay que encenderlo a propósito."""
@@ -66,7 +72,8 @@ class TestInvariantesDelCatalogo:
 
     def test_las_tareas_automaticas_tienen_un_minimo_que_protege_a_rocketfy(self):
         # Los recordatorios al dueño solo miran la base propia (no llaman a Rocketfy): pueden revisarse cada pocos minutos.
-        solo_base_propia = {"jobs.minutos_recordatorios"}
+        # El aviso a Meta llama a Meta (no a Rocketfy) y solo trabaja con el interruptor encendido.
+        solo_base_propia = {"jobs.minutos_recordatorios", "jobs.minutos_eventos_meta"}
         for p in CATALOGO:
             if p.clave.startswith("jobs.minutos_") and p.clave not in solo_base_propia:
                 assert p.minimo >= 15

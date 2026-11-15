@@ -1187,6 +1187,27 @@ function manejarCuentas(req, res, p, send) {
   });
 }
 
+// Conexión con Meta (ficticia): GET /meta/estado y POST /meta/preparar. Nunca lleva el token.
+const estadoMeta = {
+  tokenConfigurado: true, cuentaWhatsappConfigurada: true, datasetId: null, avisosActivos: false,
+  eventos: { pendiente: 1, enviando: 0, enviado: 3, fallido: 0, dudoso: 1, descartado: 2 },
+  ultimosEventos: [
+    { id: 6, ventaId: 41, estado: "dudoso", motivo: "Se cortó la comunicación con Meta (ReadTimeout)", valor: "29.99", moneda: "USD", intentos: 1, creadoEn: "2026-11-14T15:20:00Z", enviadoEn: null },
+    { id: 5, ventaId: 40, estado: "pendiente", motivo: null, valor: "59.99", moneda: "USD", intentos: 0, creadoEn: "2026-11-14T14:05:00Z", enviadoEn: null },
+    { id: 4, ventaId: 39, estado: "descartado", motivo: "La venta no tiene el identificador del clic del anuncio", valor: "29.99", moneda: "USD", intentos: 0, creadoEn: "2026-11-13T18:00:00Z", enviadoEn: null },
+    { id: 3, ventaId: 38, estado: "enviado", motivo: null, valor: "29.99", moneda: "USD", intentos: 1, creadoEn: "2026-11-13T12:10:00Z", enviadoEn: "2026-11-13T13:15:00Z" },
+  ],
+};
+function manejarMeta(req, res, p, send) {
+  const listo = () => estadoMeta.tokenConfigurado && estadoMeta.cuentaWhatsappConfigurada && !!estadoMeta.datasetId;
+  if (req.method === "GET" && p === "/meta/estado") return send({ ...estadoMeta, listo: listo() });
+  if (req.method === "POST" && p === "/meta/preparar") {
+    estadoMeta.datasetId = "1234567890123456";
+    return send({ datasetId: estadoMeta.datasetId });
+  }
+  send({ error: "mock: método no implementado" }, 405);
+}
+
 // ---------- servidor ----------
 function paginar(arr, q) {
   const page = Number(q.get("page") || 1), pageSize = Number(q.get("pageSize") || 20);
@@ -1264,6 +1285,7 @@ const server = http.createServer((req, res) => {
     if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
+    if (p.startsWith("/meta/")) return manejarMeta(req, res, p, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
     if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }

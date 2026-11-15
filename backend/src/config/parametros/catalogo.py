@@ -176,6 +176,11 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Recordatorios para ti",
         "Avisos por Telegram cuando un chat que Victoria te pasó sigue sin atender: cuándo, cada cuánto y cuántas veces.",
     ),
+    Grupo(
+        "meta",
+        "Avisar a Meta de las ventas",
+        "Decirle a Meta qué clics de anuncio terminaron en una compra, para que optimice los anuncios hacia quien compra.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -894,6 +899,79 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=30,
         minimo=15,
         maximo=240,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
+    ),
+    Parametro(
+        clave="meta.activo",
+        grupo="meta",
+        nombre="Avisar a Meta cuando vendo por un anuncio",
+        para_que_sirve=(
+            "Cuando una venta que vino de un anuncio se confirma (pedido de Rocketfy, o producto propio marcado como cobrado), el sistema le avisa a "
+            "Meta que ese clic terminó en compra. Así Meta aprende qué anuncios traen compradores y no solo conversaciones. Solo envía el valor de la "
+            "venta y el identificador del clic: ningún dato del cliente. Necesita el token y el conjunto de datos de Meta en el servidor; sin ellos no "
+            "envía nada. Viene apagado: enciéndelo cuando Meta esté listo."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+        sensible=True,
+        aviso="Los eventos que se envían a Meta no se pueden borrar después. Enciéndelo solo cuando hayas revisado que Meta está configurado.",
+    ),
+    Parametro(
+        clave="meta.minutos_espera",
+        grupo="meta",
+        nombre="Espera antes de avisar a Meta",
+        para_que_sirve=(
+            "Cuántos minutos se espera, desde que la venta se confirma, antes de avisarle a Meta. Da tiempo a que la venta se cancele: Meta no deja "
+            "borrar una compra ya avisada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=60,
+        minimo=0,
+        maximo=1440,
+        unidad="minutos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.dias_maximos",
+        grupo="meta",
+        nombre="Antigüedad máxima de una venta para avisarla",
+        para_que_sirve=(
+            "Una venta confirmada hace más días que esto ya no se avisa a Meta (no se atribuiría bien). También evita avisar ventas viejas al "
+            "encender el interruptor por primera vez."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=7,
+        minimo=1,
+        maximo=28,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.maximo_intentos",
+        grupo="meta",
+        nombre="Intentos de envío a Meta",
+        para_que_sirve=(
+            "Cuántas veces se intenta enviar un evento que Meta rechazó (con espera creciente entre intentos). Si Meta no contesta o la respuesta es "
+            "dudosa, no se reintenta solo: podría duplicar la compra, y te avisa por Telegram."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=6,
+        unidad="intentos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="jobs.minutos_eventos_meta",
+        grupo="tareas",
+        nombre="Aviso de ventas a Meta",
+        para_que_sirve="Cada cuántos minutos el sistema revisa si hay ventas de anuncios por avisar a Meta (solo trabaja si el aviso está encendido).",
+        tipo=TIPO_ENTERO,
+        defecto=15,
+        minimo=5,
+        maximo=120,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),
