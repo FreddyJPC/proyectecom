@@ -10,6 +10,7 @@ import { InfoButton } from "@/components/app/info-button";
 import { ListSkeleton } from "@/components/app/list-skeleton";
 import { PageHeader } from "@/components/app/page-header";
 import { SectionCard } from "@/components/app/section-card";
+import { CuentaPublicitariaCard } from "./cuenta-publicitaria";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
@@ -153,6 +154,8 @@ export default function ConexionMetaPage() {
               />
             </ul>
           </SectionCard>
+
+          <CuentaPublicitariaCard />
 
           <SectionCard
             titulo="Ventas avisadas"

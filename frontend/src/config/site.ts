@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BarChart3, Boxes, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Target } from "lucide-react";
+import { AlertTriangle, BarChart3, Boxes, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Tag, Target } from "lucide-react";
 
 /** Metadata y navegación del sitio. Única fuente de verdad: cualquier
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
@@ -37,6 +37,7 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
       { title: "Incidencias y alertas", short: "Alertas", url: "/incidencias", icon: AlertTriangle },
       { title: "Catálogo y stock", short: "Catálogo", url: "/catalogo", icon: Boxes },
       { title: "Anuncios", short: "Anuncios", url: "/anuncios", icon: Megaphone },
+      { title: "Ofertas y combos", short: "Ofertas", url: "/ofertas", icon: Tag },
       { title: "Métricas", short: "Métricas", url: "/metricas", icon: BarChart3 },
       { title: "Parámetros", short: "Ajustes", url: "/parametros", icon: SlidersHorizontal },
     ],
@@ -88,6 +89,9 @@ export function migasDe(pathname: string): Miga[] {
   }
   if (seccion.url === "/parametros" && resto === "meta") {
     return [{ label: seccion.title, href: seccion.url }, { label: "Conexión con Meta" }];
+  }
+  if (seccion.url === "/ofertas") {
+    return [{ label: seccion.title, href: seccion.url }, { label: resto === "nueva" ? "Nueva oferta" : "Editar oferta" }];
   }
   if (seccion.url === "/catalogo" && resto.startsWith("producto/")) {
     return [{ label: seccion.title, href: `${seccion.url}?tab=mis-productos` }, { label: "Ficha del producto" }];

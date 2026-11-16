@@ -109,6 +109,7 @@ const anunciosMeta = {
   "120210000123": { titulo: "Audífonos Bluetooth Pro · 30 h de batería", texto: "Cancelación de ruido, estuche de carga y envío a todo el Ecuador. Escríbenos y pregunta por tu color.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000123", tipoOrigen: "ad", tipoMedia: "image", imagenUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-1.svg`, miniaturaUrl: null },
   "120210000456": { titulo: "Lámpara LED recargable", texto: "Luz cálida, 3 intensidades y hasta 20 horas de uso.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000456", tipoOrigen: "ad", tipoMedia: "video", imagenUrl: null, miniaturaUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-2.svg` },
   "120210000789": { titulo: "Zapatos de cuero hechos a mano · 2x1", texto: null, urlAnuncio: null, tipoOrigen: "ad", tipoMedia: "image", imagenUrl: null, miniaturaUrl: null },
+  "120210000555": { titulo: "Zapatos 2x1 · solo este fin de semana", texto: "Dos pares del mismo modelo por $60.", urlAnuncio: null, tipoOrigen: "ad", tipoMedia: "image", imagenUrl: null, miniaturaUrl: null },
 };
 const vinculosAnuncio = { "120210000123": { sku: "AUD-BT-001", nombre: "Video principal" }, "120210000456": { sku: "LMP-LED-220", nombre: null } };
 const nombreProductoBot = (sku) => (productosBot.find((f) => f.sku === sku) || {}).nombre || sku;
@@ -153,6 +154,7 @@ const estadoAnuncios = [
   { id: "120210000789", llegadas: 5, conversaciones: 5, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: ago(60 * 3), primera: ago(60 * 24 * 2) },
   { id: "120210000123", llegadas: 14, conversaciones: 12, ventas: 3, ingresos: 104.7, ganancia: 38.4, sinCosto: 0, ultima: ago(25), primera: ago(60 * 24 * 20) },
   { id: "120210000456", llegadas: 6, conversaciones: 5, ventas: 1, ingresos: 29.9, ganancia: 12.8, sinCosto: 1, ultima: ago(60 * 30), primera: ago(60 * 24 * 9) },
+  { id: "120210000555", llegadas: 3, conversaciones: 3, ventas: 2, ingresos: 120, ganancia: 31.4, sinCosto: 0, ultima: ago(60 * 26), primera: ago(60 * 24 * 4) },
   { id: "120210000999", llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true },
 ];
 const nombresVinculo = { "120210000999": "Anuncio de prueba (zapatos)" };
@@ -161,17 +163,19 @@ const anuncioFila = (e) => {
   const meta = anunciosMeta[e.id] || {};
   const v = vinculosAnuncio[e.id];
   return {
-    idAnuncio: e.id, productoSku: v ? v.sku : null, productoNombre: v ? nombreProductoBot(v.sku) : null, nombreVinculo: v ? v.nombre : null,
+    idAnuncio: e.id, productoSku: v ? v.sku : null, productoNombre: v ? nombreProductoBot(v.sku) : null, nombreVinculo: v ? v.nombre : (vinculosOferta[e.id] ? vinculosOferta[e.id].nombre : null),
+    ofertaId: vinculosOferta[e.id] ? vinculosOferta[e.id].ofertaId : null,
+    ofertaNombre: vinculosOferta[e.id] ? (ofertas.find((o) => o.id === vinculosOferta[e.id].ofertaId) || {}).nombre || null : null,
     titulo: meta.titulo || null, texto: meta.texto || null, urlAnuncio: meta.urlAnuncio || null, tipoOrigen: meta.tipoOrigen || null, tipoMedia: meta.tipoMedia || null,
     imagenUrl: meta.imagenUrl || null, miniaturaUrl: meta.miniaturaUrl || null, primeraLlegada: e.primera, ultimaLlegada: e.ultima,
     llegadas: e.llegadas, conversaciones: e.conversaciones, ventas: e.ventas, ingresos: dosDecimales(e.ingresos), ganancia: dosDecimales(e.ganancia), ventasSinCosto: e.sinCosto,
   };
 };
-const listaAnuncios = () => estadoAnuncios.map(anuncioFila).sort((a, b) => Number(a.productoSku !== null) - Number(b.productoSku !== null));
+const listaAnuncios = () => estadoAnuncios.map(anuncioFila).sort((a, b) => Number(a.productoSku !== null || a.ofertaId !== null) - Number(b.productoSku !== null || b.ofertaId !== null));
 const resumenAnuncios = () => ({
   anuncio: { conversaciones: 17, ventas: 4, ingresos: "134.60", ganancia: "51.20" },
   directo: { conversaciones: 9, ventas: 2, ingresos: "69.80", ganancia: "24.00" },
-  llegadas: 25, anunciosActivos: 3, anunciosSinVincular: estadoAnuncios.filter((e) => !e.soloVinculo && !vinculosAnuncio[e.id]).length,
+  llegadas: 25, anunciosActivos: 3, anunciosSinVincular: estadoAnuncios.filter((e) => !e.soloVinculo && !vinculosAnuncio[e.id] && !vinculosOferta[e.id]).length,
 });
 const manejarAnuncios = (req, res, p, send) => {
   if (p === "/anuncios" && req.method === "GET") return send(listaAnuncios());
@@ -180,8 +184,9 @@ const manejarAnuncios = (req, res, p, send) => {
   if (m) {
     const id = decodeURIComponent(m[1]);
     if (req.method === "DELETE") {
-      if (!vinculosAnuncio[id]) return send({ error: `El anuncio ${id} no está vinculado a ningún producto.` }, 404);
+      if (!vinculosAnuncio[id] && !vinculosOferta[id]) return send({ error: `El anuncio ${id} no está vinculado a nada.` }, 404);
       delete vinculosAnuncio[id];
+      quitarDeOfertas(id);
       return send({ ok: true });
     }
     if (req.method === "PUT") {
@@ -193,7 +198,10 @@ const manejarAnuncios = (req, res, p, send) => {
         if (!producto) return send({ error: `No existe el producto ${dato.sku}.` }, 404);
         const actual = vinculosAnuncio[id];
         if (actual && actual.sku !== dato.sku && !dato.reasignar) return send({ error: `El anuncio ${id} ya está vinculado a ${nombreProductoBot(actual.sku)}.`, vinculadoA: { sku: actual.sku, nombre: nombreProductoBot(actual.sku) } }, 409);
-        vinculosAnuncio[id] = { sku: dato.sku, nombre: dato.nombre || (actual && actual.nombre) || null };
+        const deOferta = vinculosOferta[id];
+        if (deOferta && !dato.reasignar) return send({ error: `El anuncio ${id} ya está vinculado a la oferta «${(ofertas.find((o) => o.id === deOferta.ofertaId) || {}).nombre}».` }, 409);
+        quitarDeOfertas(id);
+        vinculosAnuncio[id] = { sku: dato.sku, nombre: dato.nombre || (actual && actual.nombre) || (deOferta && deOferta.nombre) || null };
         if (!estadoAnuncios.find((e) => e.id === id)) estadoAnuncios.push({ id, llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true });
         return send({ idAnuncio: id, productoSku: dato.sku, productoNombre: producto.nombre });
       });
@@ -1187,6 +1195,111 @@ function manejarCuentas(req, res, p, send) {
   });
 }
 
+
+// ---------- Precios y ofertas (ADR-017) ----------
+const vinculosOferta = { "120210000555": { ofertaId: 2, nombre: "Zapatos 2x1" } };
+const reglasPrecio = {};
+const transferenciaNegocio = { transferenciaTipo: "monto", transferenciaValor: "2.00" };
+const isoEn = (dias) => new Date(now + dias * 86400000).toISOString();
+const ofertas = [
+  { id: 1, nombre: "Audífonos + cargador", descripcion: "Incluye funda de regalo.", textoAnuncio: "Audífonos Bluetooth Pro + cargador rápido por solo $39.90", precio: "39.90", precioLista: "49.80", ahorro: "9.90", envioIncluido: true, desde: null, hasta: isoEn(10), cupo: 30, maximoPorCliente: 2, visibilidad: "anuncio", regateoTipo: null, regateoValor: null, transferenciaTipo: "monto", transferenciaValor: "3.00", bajoMargenAutorizado: false, estado: "activa", situacion: "vigente", vigente: true,
+    items: [{ productoSku: "AUD-BT-001", productoNombre: "Audífonos Bluetooth Pro", cantidad: 1, variante: null, precio: "34.90", productoActivo: true }, { productoSku: "CRG-RAP-33", productoNombre: "Cargador Rápido 33W", cantidad: 1, variante: null, precio: "14.90", productoActivo: true }],
+    anuncios: [], ventas: 4, ingreso: "159.60", creadaEn: isoEn(-6) },
+  { id: 2, nombre: "Zapatos 2x1", descripcion: "Dos pares del mismo modelo; tallas 38 a 42.", textoAnuncio: "Zapatos de cuero hechos a mano · 2x1", precio: "60.00", precioLista: "120.00", ahorro: "60.00", envioIncluido: false, desde: null, hasta: isoEn(-1), cupo: null, maximoPorCliente: 1, visibilidad: "anuncio", regateoTipo: null, regateoValor: null, transferenciaTipo: null, transferenciaValor: null, bajoMargenAutorizado: true, estado: "activa", situacion: "vencida", vigente: false,
+    items: [{ productoSku: "PROP-0001", productoNombre: "Zapatos de cuero", cantidad: 2, variante: null, precio: "60.00", productoActivo: true }],
+    anuncios: ["120210000555"], ventas: 2, ingreso: "120.00", creadaEn: isoEn(-20) },
+  { id: 3, nombre: "Lámpara: 2 por $35", descripcion: null, textoAnuncio: null, precio: "35.00", precioLista: "39.80", ahorro: "4.80", envioIncluido: true, desde: isoEn(2), hasta: isoEn(9), cupo: 20, maximoPorCliente: 1, visibilidad: "publica", regateoTipo: "monto", regateoValor: "1.00", transferenciaTipo: null, transferenciaValor: null, bajoMargenAutorizado: false, estado: "activa", situacion: "programada", vigente: false,
+    items: [{ productoSku: "LMP-LED-220", productoNombre: "Lámpara LED Recargable", cantidad: 2, variante: null, precio: "19.90", productoActivo: true }],
+    anuncios: [], ventas: 0, ingreso: "0.00", creadaEn: isoEn(-1) },
+];
+function quitarDeOfertas(id) {
+  delete vinculosOferta[id];
+  for (const o of ofertas) o.anuncios = o.anuncios.filter((x) => x !== id);
+}
+function reglasDe(sku) {
+  const prod = productosBot.find((f) => f.sku === sku);
+  if (!prod) return null;
+  const base = { sku, nombre: prod.nombre, precio: prod.precio, costo: prod.costo || "12.00", precioMinimo: "18.67", margenConfirmado: true, envioIncluido: prod.envioIncluido !== false, maxUnidades: prod.maxUnidadesPorPedido || 3,
+    transferenciaTipo: null, transferenciaValor: null, regateoTipo: null, regateoValor: null, envioGratisDesdeUnidades: null, envioGratisDesdeMonto: null, escalas: [] };
+  // Datos de ejemplo coherentes: AUD-BT-001 se vende de a 1 (sin precio por cantidad); los zapatos, hasta 3.
+  if (sku === "AUD-BT-001" && !reglasPrecio[sku]) Object.assign(base, { transferenciaTipo: "precio", transferenciaValor: "29.90", regateoTipo: "monto", regateoValor: "3.00" });
+  if (sku === "PROP-0001" && !reglasPrecio[sku]) Object.assign(base, { escalas: [{ cantidad: 2, precioTotal: "80.00" }], envioGratisDesdeUnidades: 2 });
+  return { ...base, ...(reglasPrecio[sku] || {}) };
+}
+function manejarPrecios(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const cuerpo = raw ? JSON.parse(raw) : {};
+    let m;
+    if ((m = p.match(/^\/precios\/productos\/(.+)$/))) {
+      const sku = decodeURIComponent(m[1]);
+      const r = reglasDe(sku);
+      if (!r) return send({ error: "Ese producto no existe." }, 404);
+      if (req.method === "GET") return send(r);
+      if (cuerpo.transferenciaTipo === "precio" && Number(cuerpo.transferenciaValor) < 15 && !cuerpo.confirmarBajoMargen) {
+        return send({ error: "Algún precio queda bajo tu margen mínimo.", bloqueos: [`El precio por transferencia ($${cuerpo.transferenciaValor}) queda bajo tu margen mínimo (mínimo $18.67).`] }, 409);
+      }
+      const { confirmarBajoMargen, ...resto } = cuerpo;
+      reglasPrecio[sku] = { ...resto, envioGratisDesdeUnidades: resto.envioGratisDesdeUnidades ?? null };
+      return send(reglasDe(sku));
+    }
+    if (p === "/precios/negocio") {
+      if (req.method === "PUT") Object.assign(transferenciaNegocio, { transferenciaTipo: cuerpo.transferenciaTipo ?? null, transferenciaValor: cuerpo.transferenciaTipo ? cuerpo.transferenciaValor : null });
+      return send(transferenciaNegocio);
+    }
+    if (p === "/precios/ofertas" && req.method === "GET") return send({ ofertas: ofertas.filter((o) => q.get("archivadas") ? true : o.estado !== "archivada") });
+    if (p === "/precios/ofertas" && req.method === "POST") {
+      const id = Math.max(...ofertas.map((o) => o.id)) + 1;
+      const items = (cuerpo.items || []).map((i) => ({ productoSku: i.productoSku, productoNombre: nombreProductoBot(i.productoSku), cantidad: i.cantidad, variante: i.variante, precio: (productosBot.find((f) => f.sku === i.productoSku) || {}).precio || "0.00", productoActivo: true }));
+      const nueva = { id, ...cuerpo, items, precioLista: cuerpo.precio, ahorro: "0.00", estado: "activa", situacion: "vigente", vigente: true, anuncios: [], ventas: 0, ingreso: "0.00", creadaEn: new Date().toISOString() };
+      ofertas.unshift(nueva);
+      return send(nueva, 201);
+    }
+    if ((m = p.match(/^\/precios\/ofertas\/(\d+)\/anuncios\/(.+)$/))) {
+      const oferta = ofertas.find((o) => o.id === Number(m[1]));
+      const idAnuncio = decodeURIComponent(m[2]);
+      if (!oferta) return send({ error: "Esa oferta no existe." }, 404);
+      if ((vinculosAnuncio[idAnuncio] || (vinculosOferta[idAnuncio] && vinculosOferta[idAnuncio].ofertaId !== oferta.id)) && !cuerpo.reasignar) return send({ error: "Ese anuncio ya está vinculado a otro producto u oferta." }, 409);
+      delete vinculosAnuncio[idAnuncio];
+      quitarDeOfertas(idAnuncio);
+      vinculosOferta[idAnuncio] = { ofertaId: oferta.id, nombre: cuerpo.nombre || null };
+      if (!estadoAnuncios.find((e) => e.id === idAnuncio)) estadoAnuncios.push({ id: idAnuncio, llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true });
+      if (!oferta.anuncios.includes(idAnuncio)) oferta.anuncios.push(idAnuncio);
+      return send({ idAnuncio, ofertaId: oferta.id, ofertaNombre: oferta.nombre });
+    }
+    if ((m = p.match(/^\/precios\/ofertas\/(\d+)$/))) {
+      const oferta = ofertas.find((o) => o.id === Number(m[1]));
+      if (!oferta) return send({ error: "Esa oferta no existe." }, 404);
+      if (req.method === "PUT") {
+        Object.assign(oferta, cuerpo);
+        if (cuerpo.estado && cuerpo.estado !== "activa") oferta.situacion = cuerpo.estado;
+      }
+      return send(oferta);
+    }
+    send({ error: "mock: ruta no implementada " + p }, 404);
+  });
+}
+
+// ---------- Tablero de anuncios de Meta (ADR-017) ----------
+const cuentaMeta = { cuentaPublicitaria: "1445728047079452" };
+const tableroMeta = () => ({
+  dias: 7, lecturaActiva: true, ultimaLectura: ago(35),
+  totales: { gasto: "86.40", ingreso: "264.30", ventas: 7, conversacionesMeta: 61, costoPorVenta: "12.34", gananciaNeta: "21.60" },
+  anuncios: [
+    { idAnuncio: "120210000123", nombre: "Audífonos · video principal", estado: "ACTIVE", estadoEfectivo: "ACTIVE", campana: "Audífonos noviembre", conjunto: "Ecuador 25-45", presupuestoDiario: "10.00", titulo: "Audífonos Bluetooth Pro", miniaturaUrl: null, productoSku: "AUD-BT-001", productoNombre: "Audífonos Bluetooth Pro", ofertaId: null, ofertaNombre: null, gasto: "52.10", conversacionesMeta: 38, conversaciones: 12, impresiones: 9400, clics: 310, ventas: 5, entregadas: 3, devueltas: 1, ingreso: "174.50", descuentos: "6.00", costoPorConversacion: "1.37", costoPorVenta: "10.42", gananciaNeta: "13.70", roas: "3.35" },
+    { idAnuncio: "120210000555", nombre: "Zapatos 2x1", estado: "ACTIVE", estadoEfectivo: "ACTIVE", campana: "Zapatos", conjunto: "Cuenca", presupuestoDiario: "5.00", titulo: "Zapatos de cuero · 2x1", miniaturaUrl: null, productoSku: null, productoNombre: null, ofertaId: 2, ofertaNombre: "Zapatos 2x1", gasto: "21.30", conversacionesMeta: 15, conversaciones: 5, impresiones: 4100, clics: 120, ventas: 2, entregadas: 2, devueltas: 0, ingreso: "89.80", descuentos: "60.00", costoPorConversacion: "1.42", costoPorVenta: "10.65", gananciaNeta: "7.90", roas: "4.22" },
+    { idAnuncio: "120210000456", nombre: "Lámpara LED", estado: "PAUSED", estadoEfectivo: "PAUSED", campana: "Hogar", conjunto: "Quito", presupuestoDiario: "5.00", titulo: null, miniaturaUrl: null, productoSku: "LMP-LED-220", productoNombre: "Lámpara LED Recargable", ofertaId: null, ofertaNombre: null, gasto: "13.00", conversacionesMeta: 8, conversaciones: 5, impresiones: 2600, clics: 60, ventas: 0, entregadas: 0, devueltas: 0, ingreso: "0.00", descuentos: "0.00", costoPorConversacion: "1.63", costoPorVenta: null, gananciaNeta: "-13.00", roas: null },
+  ],
+  alertas: [
+    { id: 3, regla: "R2", idAnuncio: "120210000555", mensaje: "El anuncio «Zapatos 2x1» promociona «Zapatos 2x1», que ya terminó o está pausada.", creadaEn: ago(40) },
+    { id: 2, regla: "R4", idAnuncio: "120210000456", mensaje: "El anuncio «Lámpara LED» gastó $13.00 y no trajo ninguna venta.", creadaEn: ago(60 * 20) },
+  ],
+  acciones: [
+    { id: 1, idAnuncio: "120210000456", regla: "manual", motivo: "Pausado desde el panel", resultado: "hecho", detalle: null, creadaPor: "dueño", creadaEn: ago(60 * 19) },
+  ],
+});
+
 // Conexión con Meta (ficticia): GET /meta/estado y POST /meta/preparar. Nunca lleva el token.
 const estadoMeta = {
   tokenConfigurado: true, cuentaWhatsappConfigurada: true, datasetId: null, avisosActivos: false,
@@ -1201,6 +1314,15 @@ const estadoMeta = {
 function manejarMeta(req, res, p, send) {
   const listo = () => estadoMeta.tokenConfigurado && estadoMeta.cuentaWhatsappConfigurada && !!estadoMeta.datasetId;
   if (req.method === "GET" && p === "/meta/estado") return send({ ...estadoMeta, listo: listo() });
+  if (p === "/meta/cuenta") {
+    if (req.method === "GET") return send({ ...cuentaMeta, lecturaActiva: true });
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    return req.on("end", () => { const c = raw ? JSON.parse(raw) : {}; cuentaMeta.cuentaPublicitaria = (c.cuentaPublicitaria || "").replace(/^act_/, "") || null; send(cuentaMeta); });
+  }
+  if (req.method === "GET" && p === "/meta/anuncios") return send(tableroMeta());
+  if (req.method === "POST" && p === "/meta/anuncios/leer") return send({ estado: "ok", anuncios: 3, alertas: 0, pausados: 0 });
+  if (req.method === "POST" && /^\/meta\/anuncios\/\d+\/pausar$/.test(p)) return send({ mensaje: "Se pausó el anuncio. Para reactivarlo, hazlo tú en el Administrador de anuncios." });
   if (req.method === "POST" && p === "/meta/preparar") {
     estadoMeta.datasetId = "1234567890123456";
     return send({ datasetId: estadoMeta.datasetId });
@@ -1286,6 +1408,7 @@ const server = http.createServer((req, res) => {
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
     if (p.startsWith("/meta/")) return manejarMeta(req, res, p, send);
+    if (p.startsWith("/precios/")) return manejarPrecios(req, res, p, q, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
     if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }

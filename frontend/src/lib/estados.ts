@@ -202,3 +202,17 @@ export function rocketfyStatusInfo(statusId: number | null | undefined): EstadoI
   if (statusId == null) return null;
   return ROCKETFY_STATUS[statusId] ?? { label: `Estado ${statusId}`, variant: "neutral" };
 }
+
+/** Situación de una oferta (ADR-017): si Victoria la puede vender hoy. */
+export const SITUACION_OFERTA: Record<string, EstadoInfo> = {
+  vigente: { label: "A la venta", variant: "success" },
+  programada: { label: "Programada", variant: "info" },
+  vencida: { label: "Terminó", variant: "neutral" },
+  sin_cupo: { label: "Sin cupo", variant: "warning" },
+  pausada: { label: "Pausada", variant: "warning" },
+  archivada: { label: "Archivada", variant: "neutral" },
+};
+
+export function situacionOfertaInfo(situacion: string): EstadoInfo {
+  return SITUACION_OFERTA[situacion] ?? { label: situacion, variant: "neutral" };
+}

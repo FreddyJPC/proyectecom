@@ -6,7 +6,7 @@ const axeSrc = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const BASE = "http://localhost:3100";
 const exe = process.env.CHROMIUM_PATH || undefined;
 const SOLO = (process.env.ONLY || "").split(",").filter(Boolean);
-const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/conversaciones/291", "/leads", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/anuncios", "/metricas", "/parametros", "/parametros/instrucciones", "/parametros/cuentas", "/parametros/meta"];
+const rutas = ["/login", "/", "/conversaciones", "/conversaciones/301", "/conversaciones/291", "/leads", "/pedidos", "/pedidos/1040", "/pedidos/nuevo", "/incidencias", "/catalogo", "/catalogo?tab=mis-productos", "/catalogo?tab=monitoreados", "/catalogo/producto/AUD-BT-001", "/catalogo/producto/LMP-LED-220", "/catalogo/producto/CAM-SEG-360", "/catalogo/producto/PROP-0001", "/catalogo/producto/PROP-0002", "/catalogo/propio/nuevo", "/gestion", "/anuncios", "/ofertas", "/ofertas/nueva", "/ofertas/1", "/ofertas/2", "/metricas", "/parametros", "/parametros/instrucciones", "/parametros/cuentas", "/parametros/meta"];
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const resumen = new Map();
 const SIN_INFOS = process.env.SIN_INFOS === "1"; // SIN_INFOS=1 salta los cuadros ⓘ (más rápido)
@@ -240,19 +240,19 @@ for (const theme of ["light", "dark"]) {
         await auditar(r + " [vincular uno nuevo]");
         await page.keyboard.press("Escape");
 
-        await page.getByRole("button", { name: "Vincular con un producto" }).first().click();
+        await page.getByRole("button", { name: "Vincular", exact: true }).first().click();
         await page.getByRole("dialog").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [vincular uno de la lista]");
         await page.keyboard.press("Escape");
 
         // Cambiar el producto de un anuncio ya vinculado: el servidor pide confirmar. Se audita el aviso y se cancela (no cambia datos).
-        await page.getByRole("button", { name: "Cambiar producto" }).first().click();
+        await page.getByRole("button", { name: "Cambiar lo que vende" }).first().click();
         await page.getByRole("dialog").waitFor();
         await page.getByRole("combobox", { name: "Producto" }).click();
         await page.getByRole("option", { name: /Cargador|Lámpara|Reloj|Camiseta/ }).first().click();
         await page.getByRole("button", { name: "Vincular", exact: true }).click();
-        await page.getByText("Sí, cambiar el producto").waitFor();
+        await page.getByText("Sí, cambiarlo").waitFor();
         await page.waitForTimeout(300);
         await auditar(r + " [confirmar cambio de producto]");
         await page.keyboard.press("Escape");

@@ -27,6 +27,7 @@ import { ProbarConVictoria } from "./probar-victoria";
 import { InfoCategoria, InfoControlaStock, InfoCostoPropio, InfoDescripcion, InfoMaxUnidades, InfoMetodosPago, InfoPreguntasFrecuentes, InfoTemasNoResponder, InfoTiempoEntrega, InfoVariantes } from "./info-campos";
 import { RedactarIADialog } from "./redactar-ia-dialog";
 import { DatosProductoPropio, DatosRocketfy, HistorialCard, RevisionPanel } from "./secciones";
+import { SeccionDescuentos } from "./seccion-descuentos";
 import { SeccionEnvio, firmaDelEnvio } from "./seccion-envio";
 import { SeccionPrecio } from "./seccion-precio";
 
@@ -659,6 +660,7 @@ export function Ficha({ detalle, onCambio }: { detalle: ProductoBotDetalle; onCa
         </form>
 
         <SeccionEnvio key={firmaDelEnvio(detalle)} detalle={detalle} sinCambiosPendientes={!hayCambios} onCambio={onCambio} />
+        <SeccionDescuentos key={`${detalle.sku}-${detalle.precio}-${detalle.envioIncluido}-${detalle.maxUnidadesPorPedido}`} sku={detalle.sku} soloLectura={detalle.estado === "archivado"} />
         <GaleriaFotos detalle={detalle} onCambio={onCambio} />
         </div>
 

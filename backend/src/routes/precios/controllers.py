@@ -102,9 +102,9 @@ def guardar_reglas_de_producto(sku: str):
     ajustes = _ajustes()
     resultado = validar_reglas_producto(entrada, producto, costo_unitario(producto), ajustes)
     if not resultado.valido:
-        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores), 422
+        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores, detalle=resultado.errores), 422
     if resultado.bajo_margen and not entrada.get("confirmarBajoMargen"):
-        return jsonify(error="Algún precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen), 409
+        return jsonify(error="Algún precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen, bloqueos=resultado.bajo_margen), 409
     PreciosRepository.guardar_reglas_de_producto(sku, resultado.datos, resultado.escalas)
     logger.info("Reglas de precio de %s guardadas por %s", sku, _usuario())
     producto = _producto_completo(sku)
@@ -240,9 +240,9 @@ def crear_oferta():
     entrada = _cuerpo()
     resultado = _validar(entrada, es_nueva=True)
     if not resultado.valido:
-        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores), 422
+        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores, detalle=resultado.errores), 422
     if resultado.bajo_margen:
-        return jsonify(error="El precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen), 409
+        return jsonify(error="El precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen, bloqueos=resultado.bajo_margen), 409
     oferta_id = PreciosRepository.crear_oferta(resultado.datos, resultado.items, _usuario())
     logger.info("Oferta %s creada por %s", oferta_id, _usuario())
     return ver_oferta(oferta_id)[0], 201
@@ -256,9 +256,9 @@ def actualizar_oferta(oferta_id: int):
     entrada = _cuerpo()
     resultado = _validar(entrada, es_nueva=False, actual=actual)
     if not resultado.valido:
-        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores), 422
+        return jsonify(error="Revisa los datos marcados.", errores=resultado.errores, detalle=resultado.errores), 422
     if resultado.bajo_margen:
-        return jsonify(error="El precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen), 409
+        return jsonify(error="El precio queda bajo tu margen mínimo.", bajoMargen=resultado.bajo_margen, bloqueos=resultado.bajo_margen), 409
     datos = {k: v for k, v in resultado.datos.items()}
     PreciosRepository.actualizar_oferta(oferta_id, datos, resultado.items if "items" in entrada else None)
     logger.info("Oferta %s actualizada por %s", oferta_id, _usuario())
