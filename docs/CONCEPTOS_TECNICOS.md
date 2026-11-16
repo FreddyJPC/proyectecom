@@ -1703,3 +1703,50 @@ de intentar otra cosa.
 **Qué necesita.** El mismo token del aviso de ventas (`META_CAPI_TOKEN`, regla D5: un solo usuario del sistema) con los permisos `ads_read` y
 `ads_management`, el caso de uso de Marketing en la app de Meta y la cuenta publicitaria asignada al usuario del sistema. La cuenta se escribe en
 Parámetros → Conexión con Meta (respaldo: `META_AD_ACCOUNT_ID` en Railway).
+
+## 56. Entrega en agencia de Servientrega (versión 1): Victoria la ofrece, tú la defines
+
+**Para qué sirve.** Muchas entregas a domicilio fallan (dirección difícil, nadie en casa) y el paquete vuelve. Si llega a una agencia de
+Servientrega, el cliente lo retira con su cédula cuando puede. Reglas completas: **ADR-018** en `PROGRESS.md`.
+
+**Cómo fluye.**
+1. Cuando Victoria ya sabe la ciudad, recomienda **una sola vez** el retiro en agencia (solo si encendiste «Recomendar el retiro en agencia»
+   en Parámetros → Entregas; viene apagado). Si el cliente prefiere su casa, se respeta y Victoria pide la dirección y una **referencia**.
+2. Si quiere agencia, Victoria anota **lo que dijo tal cual** («una por el centro», un enlace, una foto…) y sigue pidiendo lo demás. **Nunca**
+   nombra ni confirma una agencia: no tiene una lista confiable y podría inventarla.
+3. Con todos los demás datos, el **sistema** (no la IA) te pasa la conversación y te avisa por Telegram: «Falta definir la agencia».
+4. En la conversación ves el aviso y el botón **«Definir la agencia»**: escribes la dirección de la agencia (y, si quieres, referencia e
+   indicaciones; viene propuesta «el cliente retira con su cédula»). Se revisa que la ciudad exista.
+5. Pulsas **«Que Victoria continúe»**: ella le muestra el resumen («Retiro en agencia Servientrega: …», «lleve su cédula»), el cliente
+   confirma y se crea el pedido en Rocketfy con la dirección de la agencia.
+
+**«Datos de envío».** Desde cualquier conversación con un pedido en curso puedes corregir nombre, dirección, referencia, ciudad, provincia,
+tipo de entrega e indicaciones. Si cambias algo que el cliente ya había confirmado, Victoria se lo vuelve a mostrar. Lo que no se corrige
+ahí: el producto, la cantidad y la forma de pago (los maneja Victoria con sus herramientas, que calculan el precio).
+
+**Lo que ahora recibe Rocketfy.** La referencia (`address_2`), las indicaciones al repartidor (`carrier_observations`) y, si el cliente
+compartió su ubicación 📍 y recibe en casa, sus coordenadas.
+
+**«Recogida en Agencia».** Es un estado que **Rocketfy nos avisa** (no lo pedimos nosotros): el paquete ya espera en una oficina de
+Servientrega. Te llega un aviso por Telegram para que le recuerdes al cliente retirarlo. El aviso automático al cliente es el pendiente #84.
+
+## 57. «Aprendizaje de Victoria»: guardar cada vez que se traba, para mejorarla
+
+**Para qué sirve.** Saber **en qué** falla Victoria con clientes reales (qué no entiende, qué preguntas no tiene en su información, qué
+piden que no se puede dar) y corregirlo: completar la ficha, ajustar sus instrucciones o un parámetro.
+
+**Qué se guarda** (tabla `victoria_aprendizaje`, pantalla Control → Aprendizaje de Victoria): el **tipo** (no entendió, no tenía la
+respuesta, fuera de las reglas, pidió un asesor, cliente molesto, problema de pago o de entrega, falta la agencia, cierre frenado, fallos,
+el dueño intervino…), el **motivo** en una frase, el **mensaje exacto del cliente**, en qué **etapa** de la venta iba, el producto y los
+**últimos 8 mensajes**. Se copian a propósito: los mensajes se pueden depurar y el caso tiene que entenderse meses después.
+
+**Cuándo se guarda.** Cada vez que Victoria pasa la conversación a un asesor (ella elige el tipo y explica el motivo), cada vez que una regla
+del código frena la venta o algo falla, y cuando **tú** tienes que tomar o escribir en una conversación que ella atendía (señal de que algo
+no iba bien). No se guardan las rutinas (verificar un pago) ni las pruebas de «Probar con Victoria».
+
+**Cómo se usa.** En la pantalla revisas cada caso, anotas el resultado (mejorado, revisado, descartado), qué se hizo y una nota. «Lo más
+frecuente» te dice qué conviene mejorar primero. Más adelante esta tabla sirve para armar pruebas con los mensajes reales que la marearon.
+
+**Victoria y los temas ajenos.** Solo habla del negocio: si le preguntan el clima o le piden traducir algo, no lo responde y vuelve con
+amabilidad a la compra. Nunca dice que es un bot ni que «le pasa con un humano»: dice que le comunica con un asesor. Si le preguntan en
+serio si es una persona o un sistema, no lo niega (breve) y sigue ayudando (ADR-018, regla 1).

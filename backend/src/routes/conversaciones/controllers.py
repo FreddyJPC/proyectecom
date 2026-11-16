@@ -125,7 +125,7 @@ def actualizar_datos_envio(conversacion_id: int):
     except (SinPedidoEnCursoError, PedidoYaCerradoError) as exc:
         return jsonify(error=str(exc)), 409
     except DatosEnvioInvalidosError as exc:
-        return jsonify(error=str(exc), sugerencias=exc.sugerencias), 422
+        return jsonify(error=str(exc), sugerencias=exc.sugerencias, bloqueos=exc.sugerencias), 422
     return jsonify(status="ok"), 200
 
 

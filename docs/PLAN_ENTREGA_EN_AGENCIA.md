@@ -3,7 +3,7 @@
 > Versión 1.0 — 2026-11-16. Pedido de Freddy: que Victoria recomiende enviar el pedido a una **agencia de Servientrega** donde el
 > cliente retire con seguridad y a su hora, en vez de a su casa (direcciones difíciles, nadie en casa). Si el cliente prefiere su casa,
 > se sigue el flujo de siempre. Regla de oro: **Victoria no inventa agencias ni datos; si algo no lo puede controlar, pasa a GESTIÓN.**
-> **Nada construido todavía.** Pendiente #83.
+> **Versión 1 construida el 2026-11-16 (entrada 0.0.140, ADR-018), sin desplegar.** Pendientes #83, #84 y #85.
 >
 > **Decisión de Freddy (2026-11-16):** se hace primero la **versión 1** (§0): Victoria ofrece la agencia, y si el cliente la quiere,
 > el dueño define la agencia en GESTIÓN. El catálogo automático de agencias (§3 en adelante) queda como **versión 2**, para el futuro.

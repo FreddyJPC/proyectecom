@@ -74,6 +74,10 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   manda sobre los hechos y estos sobre Victoria; «ganado» lo pone la venta, nunca la IA. **Nunca escribirle a un cliente por
   iniciativa propia sin pasar por el seguimiento (`jobs/seguimiento`)**: respeta «no contactar», un envío de cada tipo por
   contacto de por vida, tope y horario, y viene apagado. No crear ni cambiar plantillas de Meta sin el visto bueno de Freddy al texto.
+- **Victoria (ADR-018):** es parte del equipo; nunca dice que es un bot ni «le paso con un humano»: dice «un asesor» (si el cliente pregunta en
+  serio si es una persona o un sistema, no lo niega). Solo habla del negocio. Toda salida a un asesor va por `pasar_a_asesor` (con `tipo` y
+  `motivo`) y queda en `victoria_aprendizaje`; anotar nunca frena una venta. Victoria **nunca nombra ni confirma una agencia de Servientrega**:
+  la define el dueño en «Datos de envío».
 
 **Código**
 - Cambios con tests. Seguir el patrón de capas existente
@@ -114,7 +118,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2518 tests pasando**.
+   desde `backend/`. Estado actual: **2570 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -286,6 +290,10 @@ posible y rotarlos.
   prepagada (`not_COD=1`); **hasta desplegarlo, en producción sigue yendo como contra entrega**. Pantallas: ficha → «Precios y descuentos», «Ofertas y
   combos», tablero en Anuncios. Para leer anuncios falta F0b en Meta (permisos `ads_read`/`ads_management`, caso de uso de Marketing). Pendientes #81
   (desplegar) y #82 (pruebas reales, lista en `docs/PLAN_MODULO_ANUNCIOS.md` §12).
+- **Entrega en agencia (versión 1), «Aprendizaje de Victoria» y trato como parte del equipo (ADR-018, entrada 0.0.140) — CONSTRUIDO 2026-11-16,
+  SIN DESPLEGAR:** migración **035** (datos de entrega en `leads`, tabla `victoria_aprendizaje`) solo en la base local; **76 parámetros**
+  (grupo «Entregas», el interruptor de agencia viene apagado); pantalla **Aprendizaje de Victoria** y «Datos de envío» en cada conversación.
+  Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla) y #85 (pruebas).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

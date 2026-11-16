@@ -56,3 +56,7 @@ Notas:
   el descuento del negocio (`/precios/negocio`), tres ofertas (a la venta, terminada y programada) con `POST/PUT /precios/ofertas[/<id>]` y
   `PUT /precios/ofertas/<id>/anuncios/<id>` (409 si el anuncio ya vende otra cosa), la cuenta publicitaria (`/meta/cuenta`) y el tablero
   (`GET /meta/anuncios`, con un anuncio sin vincular, alertas y pausas; `POST /meta/anuncios/leer` y `/meta/anuncios/<id>/pausar`). Todo en memoria.
+- Entrega en agencia y Aprendizaje (ADR-018): la conversación 294 (Santiago) tiene la agencia por definir (aviso y botón «Definir la agencia»;
+  `PUT /conversaciones/<id>/datos-envio`, con un 422 y sugerencia si la ciudad contiene «inventad»); las demás muestran entrega a domicilio
+  con referencia, y la 301 una ubicación compartida. `/aprendizaje` trae 6 casos de ejemplo (3 por revisar), `/aprendizaje/resumen` y
+  `PATCH /aprendizaje/<id>` (en memoria).
