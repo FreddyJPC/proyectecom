@@ -59,6 +59,6 @@ def formatear_historial(
         lineas.append("Lo que se habló antes: " + "; ".join(detalle) + ".")
     lineas.append(
         "Atiéndelo como a un cliente conocido (agradécele que vuelva y ayúdalo con lo de ahora); lo que sea de un pedido "
-        "anterior (envío, reclamos, garantía, devoluciones) lo resuelve una persona: usa escalar_a_humano."
+        "anterior (envío, reclamos, garantía, devoluciones) lo resuelve una persona: usa pasar_a_asesor."
     )
     return "Historial de este cliente: " + " ".join(lineas)

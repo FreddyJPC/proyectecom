@@ -138,12 +138,12 @@ class TestLoopDeHerramientas:
         assert mensajes.guardados[-1]["rol"] == "bot"
         assert mensajes.guardados[-1]["contenido"] == resultado
 
-    def test_escalar_a_humano_permite_una_iteracion_mas_para_la_despedida(self):
+    def test_pasar_a_asesor_permite_una_iteracion_mas_para_la_despedida(self):
         llm = LLMProviderFalso([
             RespuestaLLM(
                 texto="Ya te conecto con un asesor.",
                 llamadas_herramientas=[
-                    LlamadaHerramienta(id="toolu_1", nombre="escalar_a_humano", entrada={"motivo": "pidió hablar con alguien"})
+                    LlamadaHerramienta(id="toolu_1", nombre="pasar_a_asesor", entrada={"motivo": "pidió hablar con alguien"})
                 ],
                 razon_de_parada="necesita_herramientas",
             ),
@@ -157,14 +157,14 @@ class TestLoopDeHerramientas:
         assert resultado == "Ya te conecto con un asesor.\n\n¡Que tengas un buen día!"
         assert len(llm.llamadas) == 2
         assert len(ejecutor.llamadas) == 1
-        assert ejecutor.llamadas[0]["nombre"] == "escalar_a_humano"
+        assert ejecutor.llamadas[0]["nombre"] == "pasar_a_asesor"
 
-    def test_escalar_a_humano_no_permite_mas_de_una_iteracion_extra(self):
+    def test_pasar_a_asesor_no_permite_mas_de_una_iteracion_extra(self):
         llm = LLMProviderFalso([
             RespuestaLLM(
                 texto="",
                 llamadas_herramientas=[
-                    LlamadaHerramienta(id="toolu_1", nombre="escalar_a_humano", entrada={"motivo": "x"})
+                    LlamadaHerramienta(id="toolu_1", nombre="pasar_a_asesor", entrada={"motivo": "x"})
                 ],
                 razon_de_parada="necesita_herramientas",
             ),
@@ -204,7 +204,7 @@ class TestLoopDeHerramientas:
 
         assert "asesor" in resultado.lower()
         assert len(llm.llamadas) == 3
-        assert any(l["nombre"] == "escalar_a_humano" for l in ejecutor.llamadas)
+        assert any(l["nombre"] == "pasar_a_asesor" for l in ejecutor.llamadas)
 
 
 class CatalogoFalso:
@@ -335,7 +335,7 @@ class TestHerramientasOfrecidasAlModelo:
 
     def test_por_defecto_esta_apagada_y_el_resto_de_herramientas_sigue_igual(self, monkeypatch):
         nombres = self._nombres_ofrecidos(monkeypatch, None)
-        assert "enviar_foto_producto" not in nombres and "cerrar_venta" in nombres and "escalar_a_humano" in nombres
+        assert "enviar_foto_producto" not in nombres and "cerrar_venta" in nombres and "pasar_a_asesor" in nombres
 
     def test_encendida_se_ofrece_al_final_de_la_lista(self, monkeypatch):
         nombres = self._nombres_ofrecidos(monkeypatch, "true")
@@ -481,7 +481,7 @@ class TestInstruccionesDeVictoria:
         system = self._system_del_turno()
         assert system.startswith("Eres Victoria, asesora de ventas de AzoShop")
         # las secciones editables y las bloqueadas del archivo original llegan completas y sin huecos sin rellenar
-        assert "Hablas como una persona real" in system and cuerpo_fijo("herramientas") in system and "{" not in system
+        assert "Eres parte del equipo de AzoShop" in system and cuerpo_fijo("herramientas") in system and "{" not in system
 
     def test_una_plantilla_fija_manda_sobre_la_vigente(self):
         system = self._system_del_turno(plantilla="Solo prueba. Producto: {contexto_producto}. Fecha: {fecha_actual}. Lead: {contexto_lead_actual}")
@@ -705,7 +705,7 @@ class TestRespuestaVacia:
         resultado = servicio.procesar_turno(1, "Hola")
 
         assert resultado.strip() != ""
-        assert [l["nombre"] for l in ejecutor.llamadas] == ["escalar_a_humano"]
+        assert [l["nombre"] for l in ejecutor.llamadas] == ["pasar_a_asesor"]
         # Lo que se guarda y se envía es el aviso, no un mensaje vacío.
         assert mensajes.filas[-1]["rol"] == "bot" and mensajes.filas[-1]["contenido"] == resultado
 

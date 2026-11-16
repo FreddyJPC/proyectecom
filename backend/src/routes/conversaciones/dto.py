@@ -64,6 +64,14 @@ class LeadDTO:
     estado: Optional[str]
     id_pedido_local: Optional[int]
     id_pedido_rocketfy: Optional[int]
+    # Entrega en agencia y datos para el repartidor (entrada 0.0.140).
+    id: Optional[int] = None
+    tipo_entrega: Optional[str] = None
+    agencia_indicada: Optional[str] = None
+    agencia_definida_en: Optional[str] = None
+    referencia: Optional[str] = None
+    indicaciones_entrega: Optional[str] = None
+    ubicacion_compartida: Optional[str] = None
 
 
 @dataclass

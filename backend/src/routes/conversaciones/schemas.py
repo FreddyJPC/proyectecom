@@ -57,6 +57,25 @@ class LeadSchema(Schema):
     estado = fields.Str(allow_none=True)
     id_pedido_local = fields.Int(data_key="idPedidoLocal", allow_none=True)
     id_pedido_rocketfy = fields.Int(data_key="idPedidoRocketfy", allow_none=True)
+    id = fields.Int(allow_none=True)
+    tipo_entrega = fields.Str(data_key="tipoEntrega", allow_none=True)
+    agencia_indicada = fields.Str(data_key="agenciaIndicada", allow_none=True)
+    agencia_definida_en = fields.Str(data_key="agenciaDefinidaEn", allow_none=True)
+    referencia = fields.Str(allow_none=True)
+    indicaciones_entrega = fields.Str(data_key="indicacionesEntrega", allow_none=True)
+    ubicacion_compartida = fields.Str(data_key="ubicacionCompartida", allow_none=True)
+
+
+class DatosEnvioInputSchema(Schema):
+    """Lo que el dueño corrige en «Datos de envío» (entrada 0.0.140). Solo se cambian los campos que vienen."""
+
+    nombre_cliente = fields.Str(data_key="nombreCliente", allow_none=True, validate=validate.Length(max=120))
+    direccion = fields.Str(allow_none=True, validate=validate.Length(max=300))
+    referencia = fields.Str(allow_none=True, validate=validate.Length(max=300))
+    indicaciones_entrega = fields.Str(data_key="indicacionesEntrega", allow_none=True, validate=validate.Length(max=500))
+    canton = fields.Str(allow_none=True, validate=validate.Length(max=80))
+    provincia = fields.Str(allow_none=True, validate=validate.Length(max=80))
+    tipo_entrega = fields.Str(data_key="tipoEntrega", allow_none=True, validate=validate.OneOf(["domicilio", "agencia"]))
 
 
 class VentanaGratuitaSchema(Schema):
@@ -153,3 +172,4 @@ mensaje_schema = MensajeSchema()
 enviar_mensaje_input_schema = EnviarMensajeInputSchema()
 notas_input_schema = NotasInputSchema()
 continuar_input_schema = ContinuarInputSchema()
+datos_envio_input_schema = DatosEnvioInputSchema(unknown=EXCLUDE)

@@ -293,7 +293,7 @@ class TestOfertas:
     def test_oferta_vencida_puede_pasar_al_dueno(self, con_parametros):
         con_parametros["precios.oferta_terminada"] = "dueno"
         e = self._escena(hasta=AHORA - timedelta(days=1))
-        assert "se avisó al dueño" in e.usar("aplicar_oferta", oferta_id=7) and e.conversaciones.escalada
+        assert "se avisó a un asesor" in e.usar("aplicar_oferta", oferta_id=7) and e.conversaciones.escalada
 
     def test_p6_una_oferta_de_otro_anuncio_no_se_puede_pedir(self):
         e = Escena(precios=PreciosEnMemoria(ofertas={7: _oferta()}))

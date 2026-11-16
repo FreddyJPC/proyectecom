@@ -110,7 +110,7 @@ class TestTextos:
         assert "clientes de Cuenca" in texto and "el resto del país" in texto
 
     def test_ficha_con_envio_aparte_y_sin_opciones_manda_a_escalar(self):
-        assert "escalar_a_humano" in texto_para_la_ficha(False, [])
+        assert "pasar_a_asesor" in texto_para_la_ficha(False, [])
 
 
 class TestValidar:

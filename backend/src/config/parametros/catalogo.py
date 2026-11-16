@@ -186,6 +186,11 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Precios, regateo y ofertas",
         "Cómo vende Victoria cuando hay descuentos: regateo, precio por transferencia, precio por cantidad, combos y pedidos con varios productos.",
     ),
+    Grupo(
+        "entrega",
+        "Entregas",
+        "Cómo recibe el cliente su pedido: en su domicilio o retirándolo en una agencia de Servientrega.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -475,7 +480,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "con herramientas») y la conversación se pasa a una persona."
         ),
         tipo=TIPO_TEXTO,
-        defecto="Disculpa la demora — ya te conecto con un asesor humano que te ayuda enseguida 🙋",
+        defecto="Disculpe la demora — ya le comunico con un asesor que le ayuda enseguida 🙋",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
@@ -906,6 +911,64 @@ CATALOGO: Tuple[Parametro, ...] = (
         maximo=240,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
+    ),
+    # ------------------------------------------------------------ Entregas (entrada 0.0.140)
+    Parametro(
+        clave="entrega.ofrecer_agencia",
+        grupo="entrega",
+        nombre="Recomendar el retiro en agencia de Servientrega",
+        para_que_sirve=(
+            "Cuando Victoria ya sabe la ciudad del cliente, le recomienda UNA vez que el pedido llegue a una agencia de Servientrega "
+            "(lo retira con su cédula, a su hora). Si prefiere su casa, se respeta. Si acepta, Victoria anota lo que dijo y, cuando "
+            "tiene los demás datos, te pasa la conversación: tú escribes la agencia en «Datos de envío» y pulsas «Que Victoria "
+            "continúe». Victoria nunca elige ni nombra una agencia. Solo para productos que van por Rocketfy."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+        sensible=True,
+        aviso="Antes de encenderlo, haz un pedido de prueba con la dirección de una agencia y pregunta a Rocketfy si así basta.",
+    ),
+    Parametro(
+        clave="entrega.texto_ofrecer_agencia",
+        grupo="entrega",
+        nombre="Idea para recomendar la agencia",
+        para_que_sirve=(
+            "Lo que Victoria transmite al recomendar el retiro en agencia. Es una guía: ella lo dice con sus palabras, en el "
+            "momento natural de la conversación."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto=(
+            "Le recomiendo que el envío llegue a una agencia de Servientrega: así lo retira con seguridad y a la hora que le quede "
+            "mejor, sin depender de que el repartidor lo encuentre en casa. ¿Le parece bien, o prefiere que se lo llevemos a su domicilio?"
+        ),
+        largo_maximo=400,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="entrega.indicaciones_agencia",
+        grupo="entrega",
+        nombre="Indicación para el repartidor en un retiro en agencia",
+        para_que_sirve=(
+            "Lo que se manda a Rocketfy como indicación para el repartidor cuando el pedido es de retiro en agencia y tú no "
+            "escribiste otra en «Datos de envío». La dirección del pedido es la de la agencia."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="RETIRO EN AGENCIA SERVIENTREGA: el cliente retira con su cédula.",
+        largo_maximo=300,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="entrega.avisar_paquete_en_agencia",
+        grupo="entrega",
+        nombre="Avisarme cuando un paquete espera en la agencia",
+        para_que_sirve=(
+            "Cuando Rocketfy marca un pedido como «Recogida en Agencia» (el paquete espera en una oficina de Servientrega), te "
+            "avisa por Telegram con el cliente y su teléfono, para que le recuerdes retirarlo antes de que lo devuelvan."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     # ------------------------------------------------------------ Precios (ADR-017)
     Parametro(

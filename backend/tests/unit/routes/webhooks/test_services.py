@@ -108,3 +108,30 @@ class TestNotificacion:
         notificador = MagicMock()
         WebhookService(repo=repo, notificador=notificador).procesar_evento(_payload(status_id=8))
         notificador.send.assert_not_called()
+
+
+class TestPaqueteEnAgencia:
+    """Estado 23 «Recogida en Agencia» (entrada 0.0.140): el dueño se entera por Telegram para recordarle al cliente."""
+
+    def test_avisa_al_dueno_con_el_cliente_y_el_telefono(self):
+        repo = FakeWebhookRepository({9315702: {"nombre_cliente": "Ana Ruiz", "telefono": "0991112223", "direccion": "Servientrega Centro", "canton": "GUAYAQUIL"}})
+        telegram = MagicMock()
+        WebhookService(repo=repo, notificador=MagicMock(), telegram=telegram).procesar_evento(_payload(status_id=23))
+        titulo, detalle = telegram.notificar_aviso.call_args.args
+        assert "agencia" in titulo.lower() and "Ana Ruiz" in detalle and "0991112223" in detalle and "Servientrega Centro" in detalle
+
+    def test_apagado_no_avisa(self, monkeypatch):
+        from src.config.parametros import parametros
+
+        real = parametros.valor
+        monkeypatch.setattr(parametros, "valor", lambda c: False if c == "entrega.avisar_paquete_en_agencia" else real(c))
+        telegram = MagicMock()
+        WebhookService(repo=FakeWebhookRepository(), notificador=MagicMock(), telegram=telegram).procesar_evento(_payload(status_id=23))
+        telegram.notificar_aviso.assert_not_called()
+
+    def test_si_telegram_falla_el_webhook_no_se_rompe(self):
+        telegram = MagicMock()
+        telegram.notificar_aviso.side_effect = RuntimeError("sin red")
+        repo = FakeWebhookRepository()
+        WebhookService(repo=repo, notificador=MagicMock(), telegram=telegram).procesar_evento(_payload(status_id=23))
+        assert repo.estados_actualizados == [(9315702, 23)]

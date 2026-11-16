@@ -25,7 +25,9 @@ _PAGO = {"contraentrega": "Contra entrega (paga al recibir)", "transferencia": "
 
 def datos_que_faltan(lead: Dict[str, Any], producto: Optional[Dict[str, Any]]) -> List[str]:
     """Lo que todavía hay que pedirle al cliente antes de poder mostrarle el resumen."""
-    faltan = [texto for campo, texto in _ETIQUETAS_QUE_FALTAN if not lead.get(campo)]
+    agencia = lead.get("tipo_entrega") == "agencia"
+    # Con retiro en agencia la dirección la escribe el asesor (la de la agencia): no se le pide al cliente.
+    faltan = [texto for campo, texto in _ETIQUETAS_QUE_FALTAN if not lead.get(campo) and not (agencia and campo == "direccion")]
     if producto is not None and not producto.get("envio_incluido", True) and lead.get("entrega_opcion_id") is None:
         faltan.append("la opción de entrega")
     return faltan
@@ -52,11 +54,17 @@ def texto_de_confirmacion(lead: Dict[str, Any]) -> str:
         producto = f"{producto} ({lead['producto_variante']})"
     ubicacion = ", ".join(p for p in (nombre_para_mostrar(lead.get("canton")), nombre_para_mostrar(lead.get("provincia"))) if p)
 
+    if lead.get("tipo_entrega") == "agencia":
+        lugar = [f"• Retiro en agencia Servientrega: {lead.get('direccion')} — {ubicacion}"]
+    else:
+        lugar = [f"• Dirección: {lead.get('direccion')} — {ubicacion}"]
+    if lead.get("referencia"):
+        lugar.append(f"• Referencia: {lead['referencia']}")
     lineas = [
         "Para dejar listo su pedido, ¿me confirma por favor que estos datos están correctos para el envío?",
         "",
         f"• Nombre: {lead.get('nombre_cliente')}",
-        f"• Dirección: {lead.get('direccion')} — {ubicacion}",
+        *lugar,
         f"• Teléfono: {_telefono(str(lead.get('telefono') or ''))}",
         f"• Producto: {cantidad} × {producto}",
     ]
@@ -66,6 +74,10 @@ def texto_de_confirmacion(lead: Dict[str, Any]) -> str:
     lineas += [
         f"• Total a pagar: {_dinero(lead.get('total'))}",
         f"• Forma de pago: {_PAGO.get(str(lead.get('metodo_pago')), lead.get('metodo_pago'))}",
+    ]
+    if lead.get("tipo_entrega") == "agencia":
+        lineas.append("Para retirarlo en la agencia lleve su cédula.")
+    lineas += [
         "",
         "Si todo está bien, respóndame «sí»; si hay algo que corregir, dígame qué.",
     ]

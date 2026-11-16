@@ -11,6 +11,7 @@ autenticación fue válida.
 import logging
 from typing import Optional
 
+from src.config.parametros import parametros
 from src.integrations.rocketfy.constants import RocketfyStatus
 from src.notifications import LoggingNotificationChannel, NotificationMessage, NotificationService
 
@@ -26,9 +27,17 @@ EVENTOS_PARA_EQUIPO = {RocketfyStatus.NOVEDAD, RocketfyStatus.DEVUELTO_EN_TRANSI
 
 
 class WebhookService:
-    def __init__(self, repo: Optional[WebhookRepository] = None, notificador: Optional[NotificationService] = None):
+    def __init__(self, repo: Optional[WebhookRepository] = None, notificador: Optional[NotificationService] = None, telegram=None):
         self._repo = repo or WebhookRepository()
         self._notificador = notificador or NotificationService(LoggingNotificationChannel())
+        self._telegram_fijo = telegram
+
+    def _telegram(self):
+        if self._telegram_fijo is None:
+            from src.integrations.telegram import get_telegram_notifier  # perezoso: solo si hay algo que avisar
+
+            self._telegram_fijo = get_telegram_notifier()
+        return self._telegram_fijo
 
     def procesar_evento(self, payload: dict) -> None:
         order_id = payload.get("order_id")
@@ -76,6 +85,10 @@ class WebhookService:
             )
             return
 
+        if estado == RocketfyStatus.RECOGIDA_EN_AGENCIA:
+            self._avisar_paquete_en_agencia(order_id)
+            return
+
         if estado in EVENTOS_PARA_EQUIPO:
             logger.warning(
                 "Incidencia en pedido: %s", payload.get("details", ""),
@@ -102,3 +115,22 @@ class WebhookService:
                 components=[{"tipo": "status_name", "valor": payload.get("status_name", "")}],
             )
         )
+
+    def _avisar_paquete_en_agencia(self, order_id: int) -> None:
+        """El paquete espera en una oficina de Servientrega (estado 23): se avisa al dueño por Telegram para que le recuerde al
+        cliente retirarlo antes de que lo devuelvan (entrada 0.0.140). El aviso automático al cliente queda pendiente (#84)."""
+        if not parametros.valor("entrega.avisar_paquete_en_agencia"):
+            return
+        datos = self._repo.obtener_datos_pedido(order_id) or {}
+        cliente = datos.get("nombre_cliente") or "cliente sin nombre"
+        telefono = datos.get("telefono") or "sin teléfono"
+        lugar = ", ".join(p for p in (datos.get("direccion"), datos.get("canton")) if p)
+        try:
+            self._telegram().notificar_aviso(
+                "📦 Paquete esperando en agencia",
+                f"El pedido {order_id} de {cliente} ({telefono}) ya está en la agencia de Servientrega"
+                + (f" ({lugar})" if lugar else "")
+                + ". Recuérdale retirarlo con su cédula antes de que lo devuelvan.",
+            )
+        except Exception:  # noqa: BLE001 — un aviso que falla no puede romper el webhook (siempre responde 200)
+            logger.warning("No se pudo avisar por Telegram el paquete en agencia", exc_info=True, extra={"order_id": order_id})

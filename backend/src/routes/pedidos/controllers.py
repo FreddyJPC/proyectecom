@@ -1,3 +1,4 @@
+import logging
 from dataclasses import asdict
 
 from flask import jsonify, request
@@ -28,6 +29,8 @@ from .schemas import (
     pedido_response_schema,
 )
 from .services import PedidoService
+
+logger = logging.getLogger(__name__)
 
 _ERRORES_ROCKETFY = (RocketfyAuthError, RocketfyBusinessError, RocketfyRequestError)
 
@@ -78,10 +81,28 @@ def crear_pedido():
         return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
 
     lineas = [LineaPedidoDTO(**linea) for linea in data.pop("lineas")]
+    conversacion_id = data.pop("conversacion_id", None)
     dto = CrearPedidoInputDTO(lineas=lineas, **data)
+
+    lead = None
+    if conversacion_id is not None:
+        # Perezoso: pedidos no depende de WhatsApp al arrancar (evita un ciclo de importación).
+        from src.routes.whatsapp.repository import LeadRepository
+        from src.routes.whatsapp.tools import ESTADOS_DE_LEAD_CERRADO
+
+        lead = LeadRepository.obtener_por_conversacion(conversacion_id)
+        if lead is not None and lead.get("estado") in ESTADOS_DE_LEAD_CERRADO:
+            # Nunca dos pedidos reales para la misma venta (ADR-007): el de Victoria o uno anterior ya existe.
+            return jsonify(error="Esta conversación ya tiene un pedido creado: no se crea otro."), 409
 
     try:
         resultado = _build_service().crear_y_confirmar(dto)
+        if lead is not None:
+            try:
+                # El pedido manual queda unido a la venta: el lead pasa a «despachado» y Victoria no puede cerrar otro.
+                LeadRepository.actualizar_despacho(lead["id"], id_pedido_local=resultado.id_local, id_pedido_rocketfy=resultado.id_rocketfy)
+            except Exception:  # noqa: BLE001 — el pedido YA existe en Rocketfy: no se responde error (se reintentaría y duplicaría)
+                logger.exception("Pedido creado pero no se pudo unir a su venta", extra={"conversacion_id": conversacion_id})
         return jsonify(pedido_response_schema.dump(asdict(resultado))), 200
     except UbicacionNoResueltaError as exc:
         return jsonify(error=str(exc)), 422

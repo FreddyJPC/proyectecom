@@ -47,6 +47,7 @@ from src.routes.leads.temperaturas import GANADO, TEMPERATURAS
 from src.routes.pedidos.services import PedidoService
 from src.routes.ventas.snapshot import armar_venta, armar_venta_cotizada, ganancia_de
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
+from src.routes.aprendizaje.servicio import RegistroQueNoGuarda
 from src.routes.whatsapp.tools import HerramientasVictoria
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,8 @@ ID_PEDIDO_SIMULADO_INICIAL = 9_000_001
 CAMPOS_TEXTO = (
     "nombre_cliente", "direccion", "canton", "provincia", "producto_sku", "producto_nombre", "producto_variante",
     "entrega_nombre", "entrega_tipo",
+    # Entrega en agencia (entrada 0.0.140).
+    "tipo_entrega", "agencia_indicada", "referencia",
 )
 METODOS_DE_PAGO = ("contraentrega", "transferencia")
 ESTADOS_DEL_LEAD = ("recopilando_datos", "esperando_pago", "despachado", "por_gestionar")
@@ -259,6 +262,20 @@ class LeadsEnMemoria:
 
     def actualizar_despacho(self, lead_id, id_pedido_local, id_pedido_rocketfy) -> None:
         self.lead.update(estado="despachado", id_pedido_local=id_pedido_local, id_pedido_rocketfy=id_pedido_rocketfy)
+
+    def actualizar_referencia(self, lead_id, referencia) -> None:
+        if self.lead.get("referencia") != referencia:
+            self._reiniciar_confirmacion()
+            self.lead["referencia"] = referencia
+
+    def actualizar_tipo_entrega(self, lead_id, tipo, agencia_indicada) -> None:
+        # Igual que el UPDATE real: cambiar de opción obliga a confirmar otra vez y borra la agencia definida.
+        if self.lead.get("tipo_entrega") != tipo:
+            self._reiniciar_confirmacion()
+            self.lead.update(tipo_entrega=tipo, agencia_definida_en=None, agencia_definida_por=None)
+            self.lead["agencia_indicada"] = agencia_indicada if tipo == "agencia" else None
+        elif tipo == "agencia" and agencia_indicada:
+            self.lead["agencia_indicada"] = agencia_indicada
 
     def guardar_precios(self, lead_id, campos) -> None:
         # Igual que el UPDATE real (ADR-017): si cambia el total, el cliente tiene que volver a confirmar el resumen.
@@ -634,6 +651,8 @@ def simular_turno(
         gestion_service=gestion,
         ventas_service=ventas,
         imagen_repo=ImagenesEnEnsayo(imagenes),
+        # Una conversación de ensayo no deja casos en «Aprendizaje de Victoria».
+        aprendizaje=RegistroQueNoGuarda(),
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,

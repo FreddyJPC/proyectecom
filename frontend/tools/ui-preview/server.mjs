@@ -794,7 +794,7 @@ function turnoVictoria(f, b) {
     return true;
   };
   const escalar = (motivo) => {
-    escalada = true; usar("escalar_a_humano", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
+    escalada = true; usar("pasar_a_asesor", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
     avisos.push({ canal: "telegram", texto: `Victoria escaló la conversación. Motivo: ${motivo}` });
   };
   // --- Productos propios: el pedido no se crea solo; pasa al dueño (ADR-012) ---

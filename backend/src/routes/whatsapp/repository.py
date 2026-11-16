@@ -42,7 +42,9 @@ _COLUMNAS_LEAD = (
     "temperatura, temperatura_motivo, temperatura_origen, temperatura_en, temperatura_fijada_hasta, motivo_perdida, "
     "cerrado_en, origen, id_anuncio, ctwa_clid, datos_confirmacion_pedida_en, datos_confirmados_en, "
     # ADR-017: líneas del pedido, la cotización del código y el estado del regateo.
-    "lineas, cotizacion, total_transferencia, regateo"
+    "lineas, cotizacion, total_transferencia, regateo, "
+    # Entrega en agencia y datos de envío para el repartidor (migración 035).
+    "tipo_entrega, agencia_indicada, agencia_definida_en, agencia_definida_por, referencia, indicaciones_entrega"
 )
 
 # Si cambia cualquier dato que aparece en el resumen de confirmación, el cliente tiene que volver a confirmar.
@@ -753,6 +755,77 @@ class LeadRepository:
                     where id = %s
                     """,
                     (nombre_cliente, direccion, canton, provincia, lead_id),
+                )
+
+    @staticmethod
+    def actualizar_referencia(lead_id: int, referencia: str) -> None:
+        """La referencia de la dirección («frente al parque»): sale en el resumen, así que si cambia hay que volver a confirmar."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    update leads set
+                        {_BORRAR_CONFIRMACION},
+                        referencia = %s, actualizado_en = now()
+                    where id = %s and referencia is distinct from %s
+                    """,
+                    (referencia, lead_id, referencia),
+                )
+
+    @staticmethod
+    def actualizar_tipo_entrega(lead_id: int, tipo: str, agencia_indicada: Optional[str]) -> None:
+        """Agencia o domicilio. Cambiar de opción borra la confirmación del cliente y, si pasa a agencia, la agencia que el dueño
+        hubiera definido antes (otra conversación de lo mismo). Repetir lo mismo solo actualiza lo que dijo el cliente."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select tipo_entrega from leads where id = %s for update", (lead_id,))
+                fila = cur.fetchone()
+                cambia = fila is not None and fila[0] != tipo
+                cur.execute(
+                    f"""
+                    update leads set
+                        tipo_entrega = %s,
+                        agencia_indicada = case when %s = 'agencia' then coalesce(%s, agencia_indicada) else null end,
+                        agencia_definida_en  = case when %s then null else agencia_definida_en end,
+                        agencia_definida_por = case when %s then null else agencia_definida_por end,
+                        {_BORRAR_CONFIRMACION},
+                        actualizado_en = now()
+                    where id = %s
+                    """ if cambia else
+                    """
+                    update leads set
+                        agencia_indicada = case when %s = 'agencia' then coalesce(%s, agencia_indicada) else agencia_indicada end,
+                        actualizado_en = now()
+                    where id = %s
+                    """,
+                    (tipo, tipo, agencia_indicada, cambia, cambia, lead_id) if cambia else (tipo, agencia_indicada, lead_id),
+                )
+
+    @staticmethod
+    def actualizar_envio_por_dueno(lead_id: int, datos: dict, usuario: Optional[str]) -> None:
+        """El dueño corrige los datos de envío desde el panel (p. ej. escribe la agencia que acordó con el cliente). Si algo
+        cambia, el cliente debe volver a confirmar el resumen. Con retiro en agencia y dirección, la agencia queda DEFINIDA."""
+        campos = ("nombre_cliente", "direccion", "referencia", "indicaciones_entrega", "canton", "provincia", "tipo_entrega")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"select {', '.join(campos)} from leads where id = %s for update", (lead_id,))
+                actual = dict(zip(campos, cur.fetchone() or [None] * len(campos)))
+                nuevos = {c: datos[c] for c in campos if c in datos}
+                cambio = any(nuevos[c] != actual.get(c) for c in nuevos)
+                asignaciones = ", ".join(f"{c} = %s" for c in nuevos) or "actualizado_en = actualizado_en"
+                tipo_final = nuevos.get("tipo_entrega", actual.get("tipo_entrega"))
+                direccion_final = nuevos.get("direccion", actual.get("direccion"))
+                define = tipo_final == "agencia" and bool(direccion_final)
+                cur.execute(
+                    f"""
+                    update leads set {asignaciones},
+                        agencia_definida_en  = case when %s then now() when %s then agencia_definida_en else null end,
+                        agencia_definida_por = case when %s then %s when %s then agencia_definida_por else null end,
+                        {_BORRAR_CONFIRMACION if cambio else "datos_confirmados_en = datos_confirmados_en"},
+                        actualizado_en = now()
+                    where id = %s
+                    """,
+                    (*nuevos.values(), define, tipo_final == "agencia", define, usuario, tipo_final == "agencia", lead_id),
                 )
 
     @staticmethod

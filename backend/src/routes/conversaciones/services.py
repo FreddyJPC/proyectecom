@@ -30,7 +30,16 @@ from .dto import (
     UltimoMensajeDTO,
     VentanaGratuitaDTO,
 )
-from .exceptions import ArchivoNoDisponibleError, ConversacionNoEncontradaError, EnvioWhatsAppFallidoError, SinPedidoEnCursoError, VentanaMensajeriaCerradaError
+from .exceptions import (
+    ArchivoNoDisponibleError,
+    ConversacionNoEncontradaError,
+    DatosEnvioInvalidosError,
+    EnvioWhatsAppFallidoError,
+    PedidoYaCerradoError,
+    SinPedidoEnCursoError,
+    VentanaMensajeriaCerradaError,
+)
+from src.routes.whatsapp.ubicacion_compartida import coordenadas_compartidas
 
 # Cuántas llegadas por anuncio se listan en la pantalla de una conversación (la más reciente primero).
 MAXIMO_LLEGADAS_LISTADAS = 20
@@ -38,6 +47,16 @@ MAXIMO_LLEGADAS_LISTADAS = 20
 
 def _iso(valor) -> Optional[str]:
     return valor.isoformat() if valor else None
+
+
+def _enlace_ubicacion(mensajes) -> Optional[str]:
+    """Si el cliente compartió su ubicación 📍, el enlace al mapa (para que el dueño la vea al definir la entrega)."""
+    coordenadas = coordenadas_compartidas(mensajes or [])
+    return f"https://maps.google.com/?q={coordenadas[0]},{coordenadas[1]}" if coordenadas else None
+
+
+# Un pedido en estos estados ya salió (Rocketfy) o lo tiene el dueño: cambiar sus datos de envío aquí ya no tiene efecto.
+_ESTADOS_SIN_CAMBIO_DE_ENVIO = ("despachado", "por_gestionar", "cancelado")
 
 
 class ConversacionesService:
@@ -49,6 +68,7 @@ class ConversacionesService:
         mensaje_repo: Optional[MensajeRepository] = None,
         anuncio_servicio: Optional[AnuncioServicio] = None,
         bot_worker=None,
+        aprendizaje=None,
     ):
         self._bot_worker_fijo = bot_worker
         self._anuncios = anuncio_servicio or AnuncioServicio()
@@ -56,6 +76,19 @@ class ConversacionesService:
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._leads = lead_repo or LeadRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
+        # «Aprendizaje de Victoria»: si el dueño tiene que meterse en una conversación que ella atendía, queda anotado.
+        self._aprendizaje_fijo = aprendizaje
+
+    def _anotar_intervencion(self, conversacion: dict, como: str) -> None:
+        if conversacion.get("estado") != "activa":
+            return  # Victoria ya no la atendía (la pasó ella, o ya la tenía el dueño): no es una intervención
+        if self._aprendizaje_fijo is None:
+            from src.routes.aprendizaje.servicio import RegistroAprendizaje  # perezoso: evita ciclos al arrancar
+
+            self._aprendizaje_fijo = RegistroAprendizaje(leads=self._leads, mensajes=self._mensajes, conversaciones=self._conversaciones)
+        self._aprendizaje_fijo.anotar(
+            "dueno_intervino", "dueno", f"El dueño {como} mientras Victoria la atendía.", conversacion["id"]
+        )
 
     def _ventana_abierta(self, conversacion: dict) -> Tuple[bool, Optional[datetime]]:
         """Ventana de SERVICIO de WhatsApp: abierta mientras no hayan pasado 24 horas desde el último mensaje del
@@ -154,6 +187,13 @@ class ConversacionesService:
                 estado=lead_row.get("estado"),
                 id_pedido_local=lead_row.get("id_pedido_local"),
                 id_pedido_rocketfy=lead_row.get("id_pedido_rocketfy"),
+                id=lead_row.get("id"),
+                tipo_entrega=lead_row.get("tipo_entrega"),
+                agencia_indicada=lead_row.get("agencia_indicada"),
+                agencia_definida_en=_iso(lead_row["agencia_definida_en"]) if lead_row.get("agencia_definida_en") else None,
+                referencia=lead_row.get("referencia"),
+                indicaciones_entrega=lead_row.get("indicaciones_entrega"),
+                ubicacion_compartida=_enlace_ubicacion(mensajes_crudos),
             )
 
         mensajes = [
@@ -231,6 +271,7 @@ class ConversacionesService:
         # Si el dueño le escribe al cliente y la conversación sigue en manos de Victoria, la toma él: si no, cuando el cliente
         # responda, Victoria contestaría también y los dos se estorbarían. «Devolver a Victoria» la regresa cuando él quiera.
         if conversacion["estado"] not in ESTADOS_QUE_ESPERAN_AL_DUENO:
+            self._anotar_intervencion(conversacion, "le escribió al cliente")
             self._conversaciones.marcar_manual(conversacion_id)
 
         try:
@@ -265,8 +306,10 @@ class ConversacionesService:
 
     def tomar(self, conversacion_id: int) -> None:
         """El dueño saca a Victoria de esta conversación y la atiende él (estado «manual»)."""
-        if self._conversaciones.obtener_por_id(conversacion_id) is None:
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        if conversacion is None:
             raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        self._anotar_intervencion(conversacion, "tomó la conversación")
         self._conversaciones.marcar_manual(conversacion_id)
 
     def _bot_worker(self):
@@ -300,13 +343,13 @@ class ConversacionesService:
                 "transferencia de este cliente llegó. Avísale con calidez que ya recibimos su pago y sigue con tu objetivo, que es "
                 "cerrar la venta: si falta algún dato (nombre, dirección, cantón, provincia, producto, entrega), pídeselo; si ya "
                 "está todo, muéstrale el resumen para que lo confirme o, si ya lo confirmó, cierra la venta con cerrar_venta. Si en "
-                "algún punto no puedes avanzar, usa escalar_a_humano.]"
+                "algún punto no puedes avanzar, usa pasar_a_asesor.]"
             )
         else:
             aviso = (
                 "[Aviso interno del sistema, no lo escribió el cliente: el dueño te devuelve esta conversación para que continúes "
                 "con tu objetivo, que es cerrar la venta. Revisa qué falta (datos del cliente, producto, entrega, pago) y sigue desde "
-                "ahí; llega hasta donde puedas con tus herramientas y, cuando ya no puedas avanzar, usa escalar_a_humano.]"
+                "ahí; llega hasta donde puedas con tus herramientas y, cuando ya no puedas avanzar, usa pasar_a_asesor.]"
             )
         nota = (nota or "").strip()
         if nota:
@@ -320,6 +363,36 @@ class ConversacionesService:
             return {"victoriaContinua": False}
         self._bot_worker().encolar(conversacion_id=conversacion_id, canal=conversacion["canal"], id_externo=conversacion["id_externo"])
         return {"victoriaContinua": True}
+
+    def actualizar_datos_envio(self, conversacion_id: int, datos: dict, usuario: Optional[str]) -> None:
+        """El dueño corrige o completa los datos de envío del pedido en curso (p. ej. escribe la agencia de Servientrega que
+        acordó con el cliente). La ciudad y la provincia se revisan contra el catálogo de entregas, igual que cuando las guarda
+        Victoria. Después, con «Que Victoria continúe», ella le muestra al cliente el resumen para que confirme."""
+        if self._conversaciones.obtener_por_id(conversacion_id) is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        lead = self._leads.obtener_por_conversacion(conversacion_id)
+        if lead is None:
+            raise SinPedidoEnCursoError("Esta conversación todavía no tiene un pedido en curso.")
+        if lead.get("estado") in _ESTADOS_SIN_CAMBIO_DE_ENVIO:
+            raise PedidoYaCerradoError("Este pedido ya se creó o lo estás gestionando tú: sus datos de envío ya no se cambian aquí.")
+
+        limpios = {k: (v.strip() if isinstance(v, str) else v) or None for k, v in datos.items()}
+        if "canton" in limpios or "provincia" in limpios:
+            from src.catalogs.ecuador_locations import get_catalog  # perezoso: el catálogo se carga solo si hace falta
+            from src.routes.whatsapp.ubicacion import revisar_ubicacion
+
+            revision = revisar_ubicacion(
+                get_catalog(), limpios.get("canton", lead.get("canton")), limpios.get("provincia", lead.get("provincia"))
+            )
+            if revision.hay_problema:
+                raise DatosEnvioInvalidosError(
+                    "La ciudad o la provincia no coinciden con el catálogo de entregas de Rocketfy.", revision.sugerencias
+                )
+            if "canton" in limpios and revision.canton:
+                limpios["canton"] = revision.canton
+            if "provincia" in limpios and revision.provincia:
+                limpios["provincia"] = revision.provincia
+        self._leads.actualizar_envio_por_dueno(lead["id"], limpios, usuario)
 
     def reactivar(self, conversacion_id: int) -> None:
         if self._conversaciones.obtener_por_id(conversacion_id) is None:

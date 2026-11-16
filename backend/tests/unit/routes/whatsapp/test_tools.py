@@ -1041,7 +1041,7 @@ class TestEscalarAHumano:
         herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, telegram=telegram)
 
         resultado = herramientas.ejecutar(
-            "escalar_a_humano",
+            "pasar_a_asesor",
             lead_id=1,
             conversacion_id=3,
             entrada={"motivo": "Cliente pidió hablar con una persona"},
@@ -1065,7 +1065,7 @@ class TestEscalarAHumano:
         herramientas = _herramientas(lead_repo=leads, conv_repo=conversaciones, telegram=MagicMock())
 
         herramientas.ejecutar(
-            "escalar_a_humano", lead_id=1, conversacion_id=3, entrada={"motivo": "de nuevo"}, id_llamada="toolu_8b"
+            "pasar_a_asesor", lead_id=1, conversacion_id=3, entrada={"motivo": "de nuevo"}, id_llamada="toolu_8b"
         )
 
         assert conversaciones.vista_en[3] is None

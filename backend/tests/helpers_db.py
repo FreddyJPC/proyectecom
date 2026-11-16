@@ -23,6 +23,11 @@ def borrar_conversaciones_de_prueba(*ids_externos: str, canal: str = "whatsapp")
             conversaciones = [f[0] for f in filas]
             contactos = sorted({f[1] for f in filas})
             if conversaciones:
+                cur.execute(
+                    "delete from victoria_aprendizaje where conversacion_id = any(%s) or contacto_id = any(%s) "
+                    "or lead_id in (select id from leads where conversacion_id = any(%s))",
+                    (conversaciones, contactos, conversaciones),
+                )
                 cur.execute("delete from seguimientos where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute("delete from solicitudes_gestion where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute(

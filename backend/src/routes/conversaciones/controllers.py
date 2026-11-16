@@ -1,19 +1,22 @@
 from dataclasses import asdict
 
-from flask import Response, jsonify, request
+from flask import Response, g, jsonify, request
 from marshmallow import ValidationError
 
 from . import conversaciones_bp
 from .exceptions import (
     ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
+    DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
+    PedidoYaCerradoError,
     SinPedidoEnCursoError,
     VentanaMensajeriaCerradaError,
 )
 from .schemas import (
     conversacion_detalle_schema,
     continuar_input_schema,
+    datos_envio_input_schema,
     conversacion_lista_schema,
     enviar_mensaje_input_schema,
     mensaje_schema,
@@ -105,6 +108,25 @@ def continuar_venta(conversacion_id: int):
     except SinPedidoEnCursoError as exc:
         return jsonify(error=str(exc)), 409
     return jsonify(status="ok", **resultado), 200
+
+
+@conversaciones_bp.put("/<int:conversacion_id>/datos-envio")
+def actualizar_datos_envio(conversacion_id: int):
+    """El dueño corrige o completa los datos de envío del pedido en curso (p. ej. la agencia de Servientrega para retirar)."""
+    try:
+        datos = datos_envio_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+    usuario = (getattr(g, "usuario", None) or {}).get("email")
+    try:
+        _build_service().actualizar_datos_envio(conversacion_id, datos, usuario)
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except (SinPedidoEnCursoError, PedidoYaCerradoError) as exc:
+        return jsonify(error=str(exc)), 409
+    except DatosEnvioInvalidosError as exc:
+        return jsonify(error=str(exc), sugerencias=exc.sugerencias), 422
+    return jsonify(status="ok"), 200
 
 
 @conversaciones_bp.post("/<int:conversacion_id>/reactivar")

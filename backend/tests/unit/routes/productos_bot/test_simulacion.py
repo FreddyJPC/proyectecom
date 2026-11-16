@@ -169,8 +169,8 @@ class TestReglasRealesDeLasHerramientas:
         assert "No encontré el cantón" in r.herramientas[0]["resultado"]
         assert "Faltan datos" in r.herramientas[-1]["resultado"] and "canton" in r.herramientas[-1]["resultado"]
 
-    def test_escalar_a_humano_avisa_pero_no_manda_nada(self):
-        llm = LLMGuionado(herramientas(("escalar_a_humano", {"motivo": "Pregunta fuera de la ficha"})), texto("Te paso con un asesor."))
+    def test_pasar_a_asesor_avisa_pero_no_manda_nada(self):
+        llm = LLMGuionado(herramientas(("pasar_a_asesor", {"motivo": "Pregunta fuera de la ficha"})), texto("Te paso con un asesor."))
         r = turno(llm)
         assert r.escalada is True
         assert r.avisos == [{"canal": "telegram", "texto": "Victoria escaló la conversación. Motivo: Pregunta fuera de la ficha"}]
@@ -273,7 +273,7 @@ class TestCeroEfectosReales:
     @responses.activate
     def test_escalar_tampoco_avisa_por_telegram(self, monkeypatch):
         monkeypatch.setattr("src.config.database._get_pool", lambda: (_ for _ in ()).throw(AssertionError("base")))
-        llm = LLMGuionado(herramientas(("escalar_a_humano", {"motivo": "prueba"})), texto("Te paso con un asesor."))
+        llm = LLMGuionado(herramientas(("pasar_a_asesor", {"motivo": "prueba"})), texto("Te paso con un asesor."))
         r = turno(llm)
         assert r.escalada is True and len(responses.calls) == 0
 

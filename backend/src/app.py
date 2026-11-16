@@ -22,6 +22,7 @@ from src.routes.categorias import categorias_bp
 from src.routes.cuentas_bancarias import cuentas_bancarias_bp
 from src.routes.meta import meta_bp
 from src.routes.precios import precios_bp
+from src.routes.aprendizaje import aprendizaje_bp
 from src.routes.catalogos import catalogos_bp
 from src.routes.conversaciones import conversaciones_bp
 from src.routes.gestion import gestion_bp
@@ -96,6 +97,7 @@ def create_app() -> Flask:
     app.register_blueprint(metricas_bp)
     app.register_blueprint(meta_bp)
     app.register_blueprint(precios_bp)
+    app.register_blueprint(aprendizaje_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(whatsapp_bp)
 

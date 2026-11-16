@@ -138,7 +138,7 @@ def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]], tr
         por = f" Se despacha por {transportadora}." if transportadora else ""
         return f"Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente.{por}"
     if not activas:
-        return "Envío: este producto todavía no tiene opciones de entrega definidas; si el cliente pregunta, usa escalar_a_humano."
+        return "Envío: este producto todavía no tiene opciones de entrega definidas; si el cliente pregunta, usa pasar_a_asesor."
     lineas = [
         f"- {describir(o)}{f' · se despacha por {transportadora}' if transportadora and o['tipo'] == 'envio' else ''} (para {donde_aplica(o)})"
         for o in activas
