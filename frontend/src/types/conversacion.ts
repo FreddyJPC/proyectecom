@@ -59,6 +59,17 @@ export type LeadConversacion = {
   estado: string | null;
   idPedidoLocal: number | null;
   idPedidoRocketfy: number | null;
+  /** Entrega en agencia de Servientrega y datos para el repartidor (entrada 0.0.140). */
+  id?: number | null;
+  tipoEntrega?: "domicilio" | "agencia" | null;
+  /** Lo que dijo el cliente sobre la agencia, tal cual (no es una dirección validada). */
+  agenciaIndicada?: string | null;
+  /** Cuándo el dueño escribió la agencia exacta; sin esto Victoria no cierra la venta. */
+  agenciaDefinidaEn?: string | null;
+  referencia?: string | null;
+  indicacionesEntrega?: string | null;
+  /** Enlace al mapa si el cliente compartió su ubicación 📍. */
+  ubicacionCompartida?: string | null;
 };
 
 export type MensajeConversacion = {

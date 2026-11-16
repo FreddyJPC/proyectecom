@@ -69,13 +69,13 @@ function NuevoPedidoFormulario() {
   const [telefono, setTelefono] = useState(() => searchParams.get("telefono") ?? "");
   const [email, setEmail] = useState("");
   const [direccion, setDireccion] = useState(() => searchParams.get("direccion") ?? "");
-  const [direccion2, setDireccion2] = useState("");
+  const [direccion2, setDireccion2] = useState(() => searchParams.get("direccion2") ?? "");
   const [provincia, setProvincia] = useState(() => searchParams.get("provincia") ?? "");
   const [canton, setCanton] = useState(() => searchParams.get("canton") ?? "");
   const [codigoPostal, setCodigoPostal] = useState("");
   const [noContraEntrega, setNoContraEntrega] = useState(false);
   const [total, setTotal] = useState(() => searchParams.get("total") ?? "");
-  const [observaciones, setObservaciones] = useState("");
+  const [observaciones, setObservaciones] = useState(() => searchParams.get("observaciones") ?? "");
   const [lineas, setLineas] = useState<LineaPedido[]>(() => {
     const sku = searchParams.get("productoSku");
     const nombre = searchParams.get("productoNombre");
@@ -129,6 +129,8 @@ function NuevoPedidoFormulario() {
       noContraEntrega,
       observacionesTransportista: observaciones,
       lineas,
+      // Si viene de una conversación, el pedido queda unido a su venta y Victoria ya no puede crear otro.
+      conversacionId: searchParams.get("conversacionId") ? Number(searchParams.get("conversacionId")) : null,
     };
 
     try {

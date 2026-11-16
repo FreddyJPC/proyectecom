@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BarChart3, Boxes, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Tag, Target } from "lucide-react";
+import { AlertTriangle, BarChart3, Boxes, ClipboardList, GraduationCap, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Tag, Target } from "lucide-react";
 
 /** Metadata y navegación del sitio. Única fuente de verdad: cualquier
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
@@ -39,6 +39,7 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
       { title: "Anuncios", short: "Anuncios", url: "/anuncios", icon: Megaphone },
       { title: "Ofertas y combos", short: "Ofertas", url: "/ofertas", icon: Tag },
       { title: "Métricas", short: "Métricas", url: "/metricas", icon: BarChart3 },
+      { title: "Aprendizaje de Victoria", short: "Aprendizaje", url: "/aprendizaje", icon: GraduationCap },
       { title: "Parámetros", short: "Ajustes", url: "/parametros", icon: SlidersHorizontal },
     ],
   },

@@ -143,10 +143,82 @@ const convDetalle = (id) => {
       nombreCliente: c.nombreCliente, direccion: "Av. 9 de Octubre 1234 y Boyacá", canton: "Guayaquil", provincia: "Guayas",
       productoSku: "AUD-BT-001", productoNombre: c.productoInteres, productoVariante: "Negro", total: "34.90", metodoPago: c.estado === "esperando_pago" ? "transferencia" : "contraentrega",
       estadoPago: null, estado: c.estado === "cerrada" ? "despachado" : "en_proceso", idPedidoLocal: c.estado === "cerrada" ? 1035 : null, idPedidoRocketfy: c.estado === "cerrada" ? 884035 : null,
+      id: c.id, tipoEntrega: "domicilio", agenciaIndicada: null, agenciaDefinidaEn: null, referencia: "Frente al parque, casa esquinera verde", indicacionesEntrega: null,
+      ubicacionCompartida: c.id === 301 ? "https://maps.google.com/?q=-2.170998,-79.922359" : null,
+      ...(envios[c.id] || {}),
     } : null,
     mensajes: mensajesDe(c),
   };
 };
+
+// ---------- Datos de envío (entrega en agencia, entrada 0.0.140) ----------
+// La conversación 294 (Santiago) quiere retirar en agencia y falta definirla: así se ve el aviso «Falta definir la agencia».
+const envios = {
+  294: { tipoEntrega: "agencia", agenciaIndicada: "Sí, mándeme a una agencia por el centro", agenciaDefinidaEn: null, direccion: null, referencia: null, canton: "Guayaquil", provincia: "Guayas" },
+};
+
+// ---------- Aprendizaje de Victoria ----------
+const casosAprendizaje = [
+  { id: 6, creadoEn: ago(20), conversacionId: 294, leadId: 94, cliente: "Santiago Caicedo", canal: "whatsapp", tipo: "agencia_por_definir", tipoNombre: "Falta definir la agencia", origen: "sistema",
+    motivo: "Falta definir la agencia de Servientrega para retirar el pedido. El cliente dijo: «Sí, mándeme a una agencia por el centro».", mensajeCliente: "Sí, mándeme a una agencia por el centro", etapa: "entrega", productoSku: "LMP-LED-220",
+    mensajes: [{ rol: "bot", texto: "Le recomiendo que el envío llegue a una agencia de Servientrega… ¿Le parece bien?", en: ago(22) }, { rol: "cliente", texto: "Sí, mándeme a una agencia por el centro", en: ago(21) }],
+    estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 5, creadoEn: ago(95), conversacionId: 301, leadId: 101, cliente: "María Fernanda Loor", canal: "whatsapp", tipo: "pidio_asesor", tipoNombre: "El cliente pidió un asesor", origen: "victoria",
+    motivo: "La clienta pidió que la llamen por teléfono.", mensajeCliente: "Mejor prefiero hablar con una persona, ¿pueden llamarme?", etapa: "datos", productoSku: "AUD-BT-001",
+    mensajes: [{ rol: "bot", texto: "¿Me ayuda con su nombre completo para el envío?", en: ago(97) }, { rol: "cliente", texto: "Mejor prefiero hablar con una persona, ¿pueden llamarme?", en: ago(96) }],
+    estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 4, creadoEn: ago(60 * 5), conversacionId: 297, leadId: 97, cliente: "Daniela Vera", canal: "whatsapp", tipo: "sin_respuesta", tipoNombre: "No tenía la respuesta", origen: "victoria",
+    motivo: "Preguntó si el cargador sirve para un Samsung A54 y la ficha no lo dice.", mensajeCliente: "y si sirve pal samsung a54??", etapa: "producto", productoSku: "CRG-RAP-33",
+    mensajes: [{ rol: "cliente", texto: "y si sirve pal samsung a54??", en: ago(60 * 5 + 1) }], estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 3, creadoEn: ago(60 * 26), conversacionId: 298, leadId: 98, cliente: "Lucía Mendoza", canal: "whatsapp", tipo: "no_entendio", tipoNombre: "No entendió al cliente", origen: "victoria",
+    motivo: "No se entendió si quería dos lámparas o la lámpara y el cargador.", mensajeCliente: "kiero la d 2 y lotro", etapa: "producto", productoSku: "LMP-LED-220",
+    mensajes: [{ rol: "cliente", texto: "kiero la d 2 y lotro", en: ago(60 * 26 + 2) }], estado: "resuelto", categoria: "Pedido ambiguo", accion: "instrucciones", nota: "Se agregó un ejemplo a sus instrucciones.", revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 20) },
+  { id: 2, creadoEn: ago(60 * 30), conversacionId: 292, leadId: 92, cliente: "Marcelo Ortiz", canal: "whatsapp", tipo: "dueno_intervino", tipoNombre: "El dueño tuvo que intervenir", origen: "dueno",
+    motivo: "El dueño le escribió al cliente mientras Victoria la atendía.", mensajeCliente: "¿Tienen talla 44?", etapa: "producto", productoSku: "PROP-0001",
+    mensajes: [], estado: "revisado", categoria: null, accion: "ficha", nota: "Falta poner las tallas en la ficha.", revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 29) },
+  { id: 1, creadoEn: ago(60 * 50), conversacionId: 300, leadId: 100, cliente: "Carlos Andrade", canal: "whatsapp", tipo: "fuera_de_reglas", tipoNombre: "Pidió algo fuera de las reglas", origen: "victoria",
+    motivo: "Pidió 50% de descuento.", mensajeCliente: "si me lo deja a la mitad se lo compro ya", etapa: "pago", productoSku: null, mensajes: [], estado: "descartado",
+    categoria: null, accion: "ninguna", nota: null, revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 48) },
+];
+const TIPOS_APRENDIZAJE = [
+  ["no_entendio", "No entendió al cliente"], ["sin_respuesta", "No tenía la respuesta"], ["fuera_de_reglas", "Pidió algo fuera de las reglas"],
+  ["pidio_asesor", "El cliente pidió un asesor"], ["cliente_molesto", "Cliente molesto"], ["problema_pago", "Problema con el pago"],
+  ["problema_entrega", "Problema con la entrega"], ["agencia_por_definir", "Falta definir la agencia"], ["gestion", "Producto de cierre manual"],
+  ["cierre_frenado", "El cierre se frenó"], ["error_proveedor", "Falló el proveedor de envíos"], ["error_sistema", "Falló el sistema"],
+  ["dueno_intervino", "El dueño tuvo que intervenir"], ["otro", "Otro motivo"],
+];
+const ACCIONES_APRENDIZAJE = [
+  ["instrucciones", "Se cambiaron las instrucciones de Victoria"], ["ficha", "Se completó la ficha del producto"], ["parametro", "Se ajustó un parámetro"],
+  ["sistema", "Hace falta un cambio en el sistema"], ["ninguna", "No hacía falta cambiar nada"],
+];
+function manejarAprendizaje(req, res, p, q, send) {
+  if (p === "/aprendizaje/resumen") {
+    const conteo = {};
+    for (const c of casosAprendizaje) conteo[c.tipo] = (conteo[c.tipo] || 0) + 1;
+    const porTipo = Object.entries(conteo).sort((a, b) => b[1] - a[1]).map(([tipo, cantidad]) => ({ tipo, cantidad, tipoNombre: (TIPOS_APRENDIZAJE.find((t) => t[0] === tipo) || [tipo, tipo])[1] }));
+    return send({ pendientes: casosAprendizaje.filter((c) => c.estado === "pendiente").length, total: casosAprendizaje.length, porTipo, porEtapa: [],
+      tipos: TIPOS_APRENDIZAJE.map(([tipo, nombre]) => ({ tipo, nombre })), acciones: ACCIONES_APRENDIZAJE.map(([accion, nombre]) => ({ accion, nombre })) });
+  }
+  if (p === "/aprendizaje" && req.method === "GET") {
+    const filtrados = casosAprendizaje.filter((c) => (!q.get("estado") || c.estado === q.get("estado")) && (!q.get("tipo") || c.tipo === q.get("tipo")));
+    const pagina = Number(q.get("pagina") || 1), porPagina = Number(q.get("porPagina") || 20);
+    return send({ casos: filtrados.slice((pagina - 1) * porPagina, pagina * porPagina), total: filtrados.length, pagina, porPagina });
+  }
+  const m = p.match(/^\/aprendizaje\/(\d+)$/);
+  if (m && req.method === "PATCH") {
+    let raw = "";
+    req.on("data", (d) => (raw += d));
+    return req.on("end", () => {
+      const caso = casosAprendizaje.find((c) => c.id === Number(m[1]));
+      if (!caso) return send({ error: "No existe ese caso." }, 404);
+      const b = raw ? JSON.parse(raw) : {};
+      Object.assign(caso, { estado: b.estado, accion: b.accion ?? null, categoria: b.categoria ?? null, nota: b.nota ?? null,
+        revisadoPor: b.estado === "pendiente" ? null : "freddy@azoshop.ec", revisadoEn: b.estado === "pendiente" ? null : new Date().toISOString() });
+      send(caso);
+    });
+  }
+  send({ error: "mock: ruta no implementada " + p }, 404);
+}
 
 // ---------- Anuncios ----------
 const dosDecimales = (n) => Number(n).toFixed(2);
@@ -1378,6 +1450,19 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    if ((m = p.match(/^\/conversaciones\/(\d+)\/datos-envio$/))) {
+      let raw = "";
+      req.on("data", (d) => (raw += d));
+      return req.on("end", () => {
+        const b = raw ? JSON.parse(raw) : {};
+        if (b.canton && /inventad/i.test(b.canton)) return send({ error: "La ciudad o la provincia no coinciden con el catálogo de entregas de Rocketfy.", sugerencias: ["Guayaquil"], bloqueos: ["Guayaquil"] }, 422);
+        const actual = envios[m[1]] || {};
+        envios[m[1]] = { ...actual, tipoEntrega: b.tipoEntrega ?? null, nombreCliente: b.nombreCliente || null, direccion: b.direccion || null, referencia: b.referencia || null,
+          indicacionesEntrega: b.indicacionesEntrega || null, canton: b.canton || null, provincia: b.provincia || null,
+          agenciaDefinidaEn: b.tipoEntrega === "agencia" && b.direccion ? new Date().toISOString() : null };
+        send({ status: "ok" });
+      });
+    }
     if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|continuar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;
@@ -1410,6 +1495,7 @@ const server = http.createServer((req, res) => {
     if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
     if (p.startsWith("/meta/")) return manejarMeta(req, res, p, send);
     if (p.startsWith("/precios/")) return manejarPrecios(req, res, p, q, send);
+    if (p.startsWith("/aprendizaje")) return manejarAprendizaje(req, res, p, q, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
     if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }
