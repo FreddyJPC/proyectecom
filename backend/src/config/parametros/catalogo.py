@@ -1008,6 +1008,21 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
+        clave="precios.alerta_regateo_pct",
+        grupo="precios",
+        nombre="Alerta: el regateo se está volviendo costumbre",
+        para_que_sirve=(
+            "Avisa por Telegram si, en la última semana, al menos este porcentaje de las ventas de un producto (con 5 ventas o más) se "
+            "cerraron con rebaja por regateo. Sirve para revisar si el precio está alto o el límite es muy generoso. 0 = apagada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=100,
+        unidad="%",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
         clave="meta.activo",
         grupo="meta",
         nombre="Avisar a Meta cuando vendo por un anuncio",
@@ -1022,6 +1037,124 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_PROXIMA_CORRIDA,
         sensible=True,
         aviso="Los eventos que se envían a Meta no se pueden borrar después. Enciéndelo solo cuando hayas revisado que Meta está configurado.",
+    ),
+    Parametro(
+        clave="meta.anuncios_activo",
+        grupo="meta",
+        nombre="Leer mis anuncios de Meta",
+        para_que_sirve=(
+            "Cada hora el sistema lee los anuncios de tu cuenta publicitaria (nombre, estado, miniatura) y cuánto gastó cada uno. Con eso "
+            "puedes vincular un anuncio a su oferta antes de publicarlo, ver el costo por venta y recibir alertas. Solo lee: no cambia "
+            "nada en Meta. Necesita que la app de Meta tenga permiso de anuncios y que guardes la cuenta publicitaria en Conexión con Meta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.dias_metricas",
+        grupo="meta",
+        nombre="Días de gasto que se vuelven a leer",
+        para_que_sirve="Meta ajusta las cifras de los últimos días durante horas: en cada lectura se vuelven a pedir estos días.",
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=7,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alertas_activas",
+        grupo="meta",
+        nombre="Alertas de anuncios por Telegram",
+        para_que_sirve=(
+            "Te avisa (una vez al día por cada caso) si un anuncio activo vende un producto agotado o pausado, una oferta que ya terminó, "
+            "un producto con poco stock, si no tiene oferta ni producto vinculado o si Meta lo rechazó. Las alertas de gasto se activan "
+            "poniendo sus límites. Solo avisan."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.pausa_automatica",
+        grupo="meta",
+        nombre="Pausar solo un anuncio que vende algo que ya no hay",
+        para_que_sirve=(
+            "Si un anuncio activo promociona un producto agotado o pausado, o una oferta que terminó o agotó su cupo, el sistema lo pausa en "
+            "Meta y te avisa. Solo pausa por esos hechos (nunca por rendimiento), nunca reactiva un anuncio y nunca cambia presupuestos: "
+            "reactivarlo lo haces tú en el Administrador de anuncios."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+        sensible=True,
+        aviso="Enciéndelo después de ver unas dos semanas de alertas y confirmar que avisan bien (regla D3 del plan).",
+    ),
+    Parametro(
+        clave="meta.alerta_gasto_sin_venta",
+        grupo="meta",
+        nombre="Alerta: gasto sin ninguna venta",
+        para_que_sirve=(
+            "Avisa cuando un anuncio gastó al menos esta cantidad (en el periodo de alertas) y no trajo ninguna venta. 0 = apagada. "
+            "Sugerencia: el costo máximo que aceptas pagar por una venta."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=500,
+        unidad="dólares",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alerta_costo_conversacion",
+        grupo="meta",
+        nombre="Alerta: conversación demasiado cara",
+        para_que_sirve=(
+            "Avisa cuando un anuncio paga más que esto por cada conversación iniciada (según Meta), una vez que tiene suficientes "
+            "conversaciones. En centavos: 150 = $1,50. 0 = apagada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=2000,
+        unidad="centavos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alerta_minimo_conversaciones",
+        grupo="meta",
+        nombre="Conversaciones mínimas para juzgar un anuncio",
+        para_que_sirve="La alerta de conversación cara solo se evalúa desde esta cantidad de conversaciones (con menos, es puro azar).",
+        tipo=TIPO_ENTERO,
+        defecto=10,
+        minimo=1,
+        maximo=200,
+        unidad="conversaciones",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.dias_alertas",
+        grupo="meta",
+        nombre="Periodo de las alertas de gasto",
+        para_que_sirve="Cuántos días hacia atrás se suman el gasto, las conversaciones y las ventas para las alertas.",
+        tipo=TIPO_ENTERO,
+        defecto=7,
+        minimo=1,
+        maximo=30,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.resumen_diario",
+        grupo="meta",
+        nombre="Resumen diario por Telegram",
+        para_que_sirve=(
+            "Cada mañana te manda el resumen de ayer: gasto en anuncios, conversaciones, ventas, costo por venta y ganancia después del gasto."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
     ),
     Parametro(
         clave="meta.minutos_espera",
@@ -1077,6 +1210,18 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=15,
         minimo=5,
         maximo=120,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
+    ),
+    Parametro(
+        clave="jobs.minutos_meta_anuncios",
+        grupo="tareas",
+        nombre="Cada cuánto se leen los anuncios de Meta",
+        para_que_sirve="Cada cuántos minutos se leen los anuncios y el gasto de Meta y se revisan las alertas (si está encendido).",
+        tipo=TIPO_ENTERO,
+        defecto=60,
+        minimo=30,
+        maximo=240,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),

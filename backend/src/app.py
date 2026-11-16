@@ -12,6 +12,7 @@ from src.integrations.rocketfy import get_rocketfy_client
 from src.jobs.latido import LatidoService, estado_latido
 from src.jobs.reconciliacion import ReconciliacionService
 from src.jobs.eventos_meta import EventosMetaService
+from src.jobs.meta_anuncios import MetaAnunciosService
 from src.jobs.recordatorios import RecordatoriosService
 from src.jobs.seguimiento import SeguimientoService
 from src.jobs.stock_watcher import StockWatcherService
@@ -181,6 +182,13 @@ def _job_eventos_meta() -> None:
         logging.getLogger(__name__).exception("Fallo no controlado en job de aviso de ventas a Meta")
 
 
+def _job_meta_anuncios() -> None:
+    try:
+        MetaAnunciosService().ejecutar()
+    except Exception:
+        logging.getLogger(__name__).exception("Fallo no controlado en job de anuncios de Meta")
+
+
 def _job_latido() -> None:
     try:
         LatidoService().ejecutar()
@@ -199,6 +207,7 @@ _INTERVALOS_DE_JOBS = {
     "seguimiento": "jobs.minutos_seguimiento",
     "recordatorios": "jobs.minutos_recordatorios",
     "eventos_meta": "jobs.minutos_eventos_meta",
+    "meta_anuncios": "jobs.minutos_meta_anuncios",
 }
 
 
@@ -259,6 +268,7 @@ def start_scheduler():
     scheduler.add_job(_job_seguimiento, "interval", minutes=minutos["seguimiento"], id="seguimiento")
     scheduler.add_job(_job_recordatorios, "interval", minutes=minutos["recordatorios"], id="recordatorios")
     scheduler.add_job(_job_eventos_meta, "interval", minutes=minutos["eventos_meta"], id="eventos_meta")
+    scheduler.add_job(_job_meta_anuncios, "interval", minutes=minutos["meta_anuncios"], id="meta_anuncios")
     scheduler.add_job(
         _job_latido,
         "interval",
@@ -273,9 +283,9 @@ def start_scheduler():
     # Logger propio: el de Flask se llama igual que este módulo ("src.app")
     # y tiene su propio handler, así que un mensaje de __name__ salía doble.
     logging.getLogger("src.scheduler").info(
-        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, enfriamiento de leads %d min, seguimiento de clientes %d min, recordatorios %d min, aviso de ventas a Meta %d min, latido DB %d h)",
+        "Scheduler iniciado (reconciliación %d min, stock watcher %d min, sincronización de productos %d min, enfriamiento de leads %d min, seguimiento de clientes %d min, recordatorios %d min, aviso de ventas a Meta %d min, anuncios de Meta %d min, latido DB %d h)",
         minutos["reconciliacion_pedidos"], minutos["stock_watcher"], minutos["sync_productos"], minutos["enfriar_leads"],
-        minutos["seguimiento"], minutos["recordatorios"], minutos["eventos_meta"], HORAS_ENTRE_LATIDOS,
+        minutos["seguimiento"], minutos["recordatorios"], minutos["eventos_meta"], minutos["meta_anuncios"], HORAS_ENTRE_LATIDOS,
     )
     return scheduler
 
