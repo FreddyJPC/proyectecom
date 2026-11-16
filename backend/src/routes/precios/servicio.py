@@ -119,6 +119,9 @@ class CotizadorServicio:
             logger.exception("No se pudieron leer los Ajustes: el regateo queda limitado solo por el límite del producto")
             return None
 
+    def transferencia_negocio(self) -> TransferenciaNegocio:
+        return self._transferencia_negocio()
+
     def _transferencia_negocio(self) -> TransferenciaNegocio:
         try:
             datos = self._precios.transferencia_negocio()
@@ -271,10 +274,36 @@ def describir_cotizacion(cot: Cotizacion) -> str:
     return "\n".join(filas)
 
 
+def describir_cotizacion_guardada(datos: Optional[Dict[str, Any]]) -> str:
+    """El pedido actual (la cotización guardada en el lead) en palabras para Victoria. Vacío si no hay."""
+    if not datos or not datos.get("lineas"):
+        return ""
+    filas = []
+    for linea in datos["lineas"]:
+        texto = f"- {linea['cantidad']} x {linea['nombre']}" + (f" ({linea['variante']})" if linea.get("variante") else "")
+        texto += f": ${linea['precio']}"
+        if linea.get("precio_lista") and Decimal(linea["precio_lista"]) > Decimal(linea["precio"]):
+            texto += f" (antes ${linea['precio_lista']})"
+        filas.append(texto)
+    if datos.get("regateo_vigente"):
+        filas.append(f"- Precio acordado con el cliente por los productos: ${datos['subtotal_contraentrega']}")
+    if datos.get("envio_gratis"):
+        filas.append("- Envío: GRATIS")
+    elif datos.get("envio") and Decimal(datos["envio"]) > 0:
+        filas.append(f"- Envío: ${datos['envio']}")
+    elif datos.get("envio_pendiente"):
+        filas.append("- Envío: falta elegir la entrega")
+    filas.append(f"- Total contra entrega: ${datos['total_contraentrega']}")
+    if datos.get("total_transferencia") and Decimal(datos["total_transferencia"]) < Decimal(datos["total_contraentrega"]):
+        filas.append(f"- Total si paga por transferencia: ${datos['total_transferencia']}")
+    return "Pedido actual (lo calculó el sistema; comunica exactamente estos montos):\n" + "\n".join(filas)
+
+
 __all__ = [
     "CotizadorServicio",
     "LineaInvalida",
     "describir_cotizacion",
+    "describir_cotizacion_guardada",
     "lineas_del_lead",
     "producto_precio",
     "oferta_precio",

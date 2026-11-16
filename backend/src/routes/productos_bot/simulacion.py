@@ -33,6 +33,7 @@ La única llamada de red real es la de la IA (Anthropic): sin ella no hay prueba
 """
 import json
 import logging
+from types import SimpleNamespace
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -648,6 +649,8 @@ def simular_turno(
         # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
         # (parámetro «Enviar fotos»): así se puede ver cómo la usa Victoria antes de encenderla.
         enviar_fotos=True,
+        # La conversación de prueba no existe en la base: no se lee el anuncio de ninguna conversación real.
+        anuncios_repo=SimpleNamespace(llegadas_de=lambda conversacion_id: []),
     )
     respuesta = cerebro.procesar_turno(lead["conversacion_id"], mensaje)
 

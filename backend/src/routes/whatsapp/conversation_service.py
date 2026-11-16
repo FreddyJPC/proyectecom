@@ -29,6 +29,7 @@ from .contexto_contacto import formatear_historial
 from .ficha import formatear_ficha_producto
 from .instrucciones import instrucciones_vigentes
 from .repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
+from src.routes.precios.servicio import describir_cotizacion_guardada
 from .tools import HerramientasVictoria, herramientas_de_victoria
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class VictoriaConversationService:
         entrega_repo: Optional[EntregaRepository] = None,
         canales=None,
         transcriptor=None,
+        anuncios_repo=None,
     ):
         # Qué tan largo es el historial, cuántas vueltas con herramientas se permiten, si se
         # ofrece la foto y qué modelo responde son PARÁMETROS que se cambian desde la app
@@ -96,6 +98,8 @@ class VictoriaConversationService:
         self._canales_fijo = canales
         # Perezoso, igual: el servicio de transcripción (voz -> texto) solo se arma si llega un audio. None = el de producción.
         self._transcriptor_fijo = transcriptor
+        # Perezoso: de dónde se lee el texto del anuncio por el que llegó el cliente (ADR-017, hueco H8).
+        self._anuncios_fijo = anuncios_repo
 
     def procesar_turno(self, conversacion_id: int, mensaje_cliente: Optional[str] = None) -> str:
         """Responde lo que el cliente escribió y Victoria todavía no contestó.
@@ -125,8 +129,10 @@ class VictoriaConversationService:
         plantilla = self._plantilla_fija if self._plantilla_fija is not None else instrucciones_vigentes.plantilla()
         system_prompt = plantilla.format(
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
-            + self._formatear_contexto_producto(producto_contexto),
+            + self._formatear_contexto_producto(producto_contexto)
+            + self._contexto_de_precios(lead, conversacion, producto_contexto),
             contexto_lead_actual=self._formatear_contexto_lead(lead, producto_contexto)
+            + self._pedido_actual(lead)
             + self._historial_del_cliente(conversacion, lead),
             fecha_actual=_fecha_legible_ecuador(),
         )
@@ -421,6 +427,39 @@ class VictoriaConversationService:
             "antes de seguir. Si el cliente pregunta por uno de ellos, usa ver_ficha_producto "
             "para leer su información completa antes de responder:\n" + lista
         )
+
+    def _contexto_de_precios(self, lead: dict, conversacion: dict, producto: Optional[dict]) -> str:
+        """ADR-017: precios especiales del producto, ofertas que puede pedir este cliente y el texto del anuncio por el que llegó.
+        Best-effort: si algo falla, Victoria responde sin esto (vende al precio normal, que es lo seguro)."""
+        partes = []
+        try:
+            if producto is not None and hasattr(self._ejecutor, "reglas_para_victoria"):
+                partes.append(self._ejecutor.reglas_para_victoria(producto))
+            if hasattr(self._ejecutor, "ofertas_para_victoria"):
+                partes.append(self._ejecutor.ofertas_para_victoria(lead, conversacion))
+            partes.append(self._texto_del_anuncio(conversacion))
+        except Exception:
+            logger.exception("No se pudo armar el contexto de precios (se responde sin él)")
+        texto = "\n\n".join(p for p in partes if p)
+        return f"\n\n{texto}" if texto else ""
+
+    def _texto_del_anuncio(self, conversacion: dict) -> str:
+        if conversacion.get("origen") != "anuncio":
+            return ""
+        if self._anuncios_fijo is None:
+            from src.routes.anuncios.repository import AnuncioRepository  # perezoso
+
+            self._anuncios_fijo = AnuncioRepository()
+        for llegada in self._anuncios_fijo.llegadas_de(conversacion["id"]):
+            partes = [t for t in (llegada.get("titulo"), llegada.get("texto")) if t]
+            if partes:
+                return "El cliente llegó por un anuncio que decía: «" + " — ".join(partes)[:400] + "». No prometas nada que no esté en tu información."
+        return ""
+
+    @staticmethod
+    def _pedido_actual(lead: dict) -> str:
+        texto = describir_cotizacion_guardada(lead.get("cotizacion"))
+        return f"\n\n{texto}" if texto else ""
 
     def _historial_del_cliente(self, conversacion: dict, lead: dict) -> str:
         """Lo que se habló y compró antes con este contacto (como la ficha de un CRM), para que Victoria no lo trate como a un

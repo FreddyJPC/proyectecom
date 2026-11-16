@@ -121,8 +121,11 @@ class AnuncioRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "select ap.id_anuncio, ap.producto_sku, ap.nombre, p.nombre as producto_nombre "
-                    "from anuncios_productos ap join productos_bot p on p.sku = ap.producto_sku "
+                    # Un anuncio apunta a un producto O a una oferta (ADR-017, migración 033).
+                    "select ap.id_anuncio, ap.producto_sku, ap.oferta_id, ap.nombre, p.nombre as producto_nombre, "
+                    "o.nombre as oferta_nombre "
+                    "from anuncios_productos ap left join productos_bot p on p.sku = ap.producto_sku "
+                    "left join ofertas o on o.id = ap.oferta_id "
                     "where ap.id_anuncio = %s",
                     (id_anuncio,),
                 )
@@ -139,6 +142,7 @@ class AnuncioRepository:
                     values (%s, %s, %s)
                     on conflict (id_anuncio) do update set
                         producto_sku = excluded.producto_sku,
+                        oferta_id = null,
                         nombre = coalesce(excluded.nombre, anuncios_productos.nombre),
                         actualizado_en = now()
                     """,
@@ -197,6 +201,7 @@ class AnuncioRepository:
                         group by id_anuncio
                     )
                     select i.id_anuncio, ap.producto_sku, ap.nombre as nombre_vinculo, p.nombre as producto_nombre,
+                           ap.oferta_id, o.nombre as oferta_nombre,
                            u.titulo, u.texto, u.url_anuncio, u.tipo_origen, u.tipo_media, u.imagen_url, u.miniatura_url,
                            u.ultima_llegada, pr.primera_llegada,
                            coalesce(t.llegadas, 0) as llegadas, coalesce(t.conversaciones, 0) as conversaciones,
@@ -205,11 +210,12 @@ class AnuncioRepository:
                     from ids i
                     left join anuncios_productos ap on ap.id_anuncio = i.id_anuncio
                     left join productos_bot p on p.sku = ap.producto_sku
+                    left join ofertas o on o.id = ap.oferta_id
                     left join ultima u on u.id_anuncio = i.id_anuncio
                     left join primera pr on pr.id_anuncio = i.id_anuncio
                     left join toques t on t.id_anuncio = i.id_anuncio
                     left join vendido v on v.id_anuncio = i.id_anuncio
-                    order by (ap.producto_sku is null) desc, coalesce(u.ultima_llegada, ap.creado_en) desc
+                    order by (ap.producto_sku is null and ap.oferta_id is null) desc, coalesce(u.ultima_llegada, ap.creado_en) desc
                     """,
                     {"desde": desde},
                 )

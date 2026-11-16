@@ -22,6 +22,7 @@ escala siempre con el mensaje de la excepción como motivo (ver
 PROGRESS.md, Fase 3.2, para el detalle completo de esta decisión).
 """
 import logging
+from datetime import timedelta, timezone
 import re
 import time
 import unicodedata
@@ -66,7 +67,7 @@ from src.routes.precios.negociacion import (
     SIN_REGATEO,
     negociar,
 )
-from src.routes.precios.reglas import dinero
+from src.routes.precios.reglas import dinero, precio_transferencia
 from src.routes.precios.repository import vigente
 from src.routes.precios.servicio import CotizadorServicio, ahora_utc, describir_cotizacion, lineas_del_lead
 
@@ -1396,6 +1397,87 @@ class HerramientasVictoria:
             "`variante`." + envio + self._nota_transferencia(cotizacion, lead)
         )
 
+    # -- lo que Victoria ve en su información (conversation_service lo pide en cada turno) -------
+    def reglas_para_victoria(self, producto: dict) -> str:
+        """Los precios especiales de un producto, en palabras para Victoria. Vacío si no tiene ninguno (como siempre)."""
+        lineas = []
+        maximo = int(producto.get("max_unidades_por_pedido") or 1)
+        escalas = [e for e in self._cotizador.escalas_de_producto(producto["sku"]) if e.cantidad <= maximo]
+        if escalas:
+            lineas.append("- Precio por cantidad: " + ", ".join(f"{e.cantidad} por ${e.precio_total:.2f}" for e in escalas) + ".")
+        precio = dinero(producto["precio"])
+        tipo, valor = producto.get("transferencia_tipo"), producto.get("transferencia_valor")
+        if not tipo:
+            negocio = self._cotizador.transferencia_negocio()
+            tipo, valor = (negocio.tipo, negocio.valor) if negocio.tipo != "precio" else (None, None)
+        transferencia = precio_transferencia(precio, 1, tipo, valor)
+        if transferencia is not None and transferencia < precio:
+            lineas.append(f"- Pagando por transferencia: ${transferencia:.2f} por unidad (contra entrega ${precio:.2f}).")
+        if not producto.get("envio_incluido", True):
+            if producto.get("envio_gratis_desde_unidades"):
+                lineas.append(f"- Envío gratis desde {producto['envio_gratis_desde_unidades']} unidades.")
+            if producto.get("envio_gratis_desde_monto") is not None:
+                lineas.append(f"- Envío gratis desde ${dinero(producto['envio_gratis_desde_monto']):.2f} de compra.")
+        if producto.get("regateo_tipo"):
+            lineas.append("- Admite rebaja: si el cliente pide descuento o propone un precio, usa negociar_precio.")
+        if not lineas:
+            return ""
+        return "Precios especiales de este producto (los calcula el sistema; no inventes otros):\n" + "\n".join(lineas)
+
+    def ofertas_para_victoria(self, lead: dict, conversacion: dict) -> str:
+        """Las ofertas que este cliente puede pedir (regla P6), la del anuncio primero, y si la del anuncio ya terminó."""
+        ofertas = self._ofertas_para(lead, conversacion)
+        if not ofertas:
+            return ""
+        del_anuncio = self._oferta_del_anuncio(lead, conversacion)
+        ahora = ahora_utc()
+        filas, aviso = [], ""
+        for oferta in sorted(ofertas, key=lambda o: o["id"] != del_anuncio):
+            if not vigente(oferta, ahora):
+                if oferta["id"] == del_anuncio:
+                    if parametros.valor("precios.oferta_terminada") == "dueno":
+                        aviso = (
+                            f"La oferta del anuncio por el que llegó («{oferta['nombre']}») YA TERMINÓ: si la pide, usa escalar_a_humano."
+                        )
+                    else:
+                        aviso = (
+                            f"La oferta del anuncio por el que llegó («{oferta['nombre']}») YA TERMINÓ: si la pide, explícale con "
+                            "naturalidad que terminó y ofrécele los productos a su precio normal."
+                        )
+                continue
+            incluye = ", ".join(f"{i.get('cantidad') or 1} x {i.get('producto_nombre') or i['producto_sku']}" for i in oferta.get("items") or [])
+            texto = f"- #{oferta['id']} {oferta['nombre']}: ${dinero(oferta['precio']):.2f} (incluye {incluye})"
+            texto += "; envío incluido" if oferta.get("envio_incluido", True) else "; el envío se cobra aparte"
+            if oferta.get("hasta"):
+                texto += f"; válida hasta el {oferta['hasta'].astimezone(timezone(timedelta(hours=-5))):%d/%m %H:%M}"
+            if oferta.get("descripcion"):
+                texto += f". {oferta['descripcion']}"
+            if oferta["id"] == del_anuncio:
+                texto += ". ES LA OFERTA DEL ANUNCIO POR EL QUE LLEGÓ: ofrécela primero"
+                if oferta.get("texto_anuncio"):
+                    texto += f". El anuncio dice: «{oferta['texto_anuncio']}»"
+            filas.append(texto + ".")
+        partes = []
+        if filas:
+            partes.append(
+                "Ofertas que puedes ofrecer a este cliente (regístralas con aplicar_oferta y su número; el precio lo pone la oferta):\n"
+                + "\n".join(filas)
+            )
+        if aviso:
+            partes.append(aviso)
+        return "\n".join(partes)
+
+    def _oferta_del_anuncio(self, lead: dict, conversacion: dict) -> Optional[int]:
+        id_anuncio = lead.get("id_anuncio") or conversacion.get("id_anuncio")
+        if not id_anuncio:
+            return None
+        try:
+            vinculo = self._cotizador.vinculo_de_anuncio(id_anuncio)
+        except Exception:
+            logger.exception("No se pudo leer el vínculo del anuncio", extra={"id_anuncio": id_anuncio})
+            return None
+        return int(vinculo["oferta_id"]) if vinculo and vinculo.get("oferta_id") else None
+
     # -- ayudantes de precio --------------------------------------------------------------------
     def _guardar_cotizacion(self, lead_id: int, lead: dict, lineas, regateo: Regateo) -> Cotizacion:
         cotizacion = self._cotizador.cotizar(lead, lineas=lineas, regateo=regateo)
@@ -1573,13 +1655,8 @@ class HerramientasVictoria:
         """Las ofertas que este cliente puede pedir: la del anuncio por el que llegó (aunque haya terminado, para decírselo) y las
         públicas (regla P6). Si la base falla, ninguna: se vende al precio normal."""
         try:
-            ids = set()
-            id_anuncio = lead.get("id_anuncio") or conversacion.get("id_anuncio")
-            if id_anuncio:
-                vinculo = self._cotizador.vinculo_de_anuncio(id_anuncio)
-                if vinculo and vinculo.get("oferta_id"):
-                    ids.add(int(vinculo["oferta_id"]))
-            ofertas = list(self._cotizador.ofertas_de(ids).values())
+            del_anuncio = self._oferta_del_anuncio(lead, conversacion)
+            ofertas = list(self._cotizador.ofertas_de([del_anuncio] if del_anuncio else []).values())
             vistos = {o["id"] for o in ofertas}
             ofertas += [o for o in self._cotizador.ofertas_publicas() if o["id"] not in vistos]
             return ofertas

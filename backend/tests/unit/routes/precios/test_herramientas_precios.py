@@ -335,3 +335,41 @@ class TestOfertas:
         assert [l["producto_sku"] for l in venta["lineas"]] == ["PROP-1", "PROP-2"]
         assert all(l["oferta_id"] == 8 for l in venta["lineas"])
         assert venta["descuento_total"] == D("5.00") and venta["total"] == D("35.00")
+
+
+class TestLoQueVictoriaVe:
+    def test_sin_reglas_no_se_agrega_nada(self):
+        assert Escena().herramientas.reglas_para_victoria(LINTERNA) == ""
+
+    def test_precios_especiales_del_producto(self):
+        producto = _producto(
+            "LIN", "Linterna", "25.00", transferencia_tipo="monto", transferencia_valor=D("5"), regateo_tipo="porcentaje",
+            regateo_valor=D("10"),
+        )
+        e = Escena(productos=(producto,), precios=PreciosEnMemoria(escalas={"LIN": [{"cantidad": 2, "precio_total": D("45")}]}))
+        texto = e.herramientas.reglas_para_victoria(producto)
+        assert "2 por $45.00" in texto and "transferencia: $20.00 por unidad" in texto and "negociar_precio" in texto
+        assert "mínimo" not in texto  # el límite del regateo nunca se le muestra
+
+    def test_la_oferta_del_anuncio_va_primero_con_su_texto(self):
+        precios = PreciosEnMemoria(
+            ofertas={7: _oferta(texto_anuncio="Linterna + cargador a solo $30"), 9: _oferta(id=9, nombre="Pack doble", visibilidad="publica")},
+            vinculos={"AD": {"oferta_id": 7}},
+        )
+        e = Escena(precios=precios)
+        texto = e.herramientas.ofertas_para_victoria({"id_anuncio": "AD"}, {})
+        assert texto.index("#7") < texto.index("#9") and "OFERTA DEL ANUNCIO" in texto and "a solo $30" in texto
+
+    def test_oferta_del_anuncio_vencida_se_avisa(self):
+        precios = PreciosEnMemoria(ofertas={7: _oferta(hasta=AHORA - timedelta(hours=1))}, vinculos={"AD": {"oferta_id": 7}})
+        texto = Escena(precios=precios).herramientas.ofertas_para_victoria({"id_anuncio": "AD"}, {})
+        assert "YA TERMINÓ" in texto and "precio normal" in texto and "#7" not in texto
+
+    def test_pedido_actual_en_palabras(self):
+        from src.routes.precios.servicio import describir_cotizacion_guardada
+
+        e = Escena(productos=(_producto("LIN", "Linterna", "25.00", transferencia_tipo="precio", transferencia_valor=D("20")),))
+        e.usar("registrar_producto", producto_sku="LIN", producto_nombre="Linterna")
+        texto = describir_cotizacion_guardada(e.lead["cotizacion"])
+        assert "Total contra entrega: $25.00" in texto and "transferencia: $20.00" in texto
+        assert describir_cotizacion_guardada(None) == ""
