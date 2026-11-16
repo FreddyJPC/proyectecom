@@ -57,6 +57,18 @@ from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistra
 from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
 from src.routes.ventas.servicio import VentasService
 from src.routes.precios.pago import pedido_prepagado
+from src.routes.precios.cotizacion import LINEA_OFERTA, LINEA_PRODUCTO, Cotizacion, LineaInvalida, LineaPedido, Regateo
+from src.routes.precios.negociacion import (
+    ACEPTA,
+    CONTRAOFERTA,
+    FIRME,
+    MINIMO,
+    SIN_REGATEO,
+    negociar,
+)
+from src.routes.precios.reglas import dinero
+from src.routes.precios.repository import vigente
+from src.routes.precios.servicio import CotizadorServicio, ahora_utc, describir_cotizacion, lineas_del_lead
 
 from .ficha import formatear_ficha_producto
 from .minimos import extraer_minimo_rocketfy
@@ -182,8 +194,11 @@ HERRAMIENTAS_VICTORIA = [
             "debe ser copiado EXACTO, carácter por carácter, del SKU que "
             "aparece en la información del producto de tu system prompt — "
             "nunca lo inventes, abrevies, ni le des un formato distinto. "
-            "El TOTAL a cobrar lo calcula el sistema (precio del catálogo x "
-            "cantidad) y te lo devuelve: no lo envíes ni lo calcules tú."
+            "El TOTAL a cobrar lo calcula el sistema (precio, precio por "
+            "cantidad, descuentos y envío) y te lo devuelve: no lo envíes ni "
+            "lo calcules tú. Si el cliente quiere OTRO producto además del que "
+            "ya pidió, usa agregar=true (si los pedidos con varios productos "
+            "están permitidos, el sistema te lo dirá)."
         ),
         parametros={
             "type": "object",
@@ -205,8 +220,62 @@ HERRAMIENTAS_VICTORIA = [
                         "Omitir si no aplica o el cliente no especificó."
                     ),
                 },
+                "agregar": {
+                    "type": "boolean",
+                    "description": (
+                        "true si el cliente quiere este producto ADEMÁS de lo que ya pidió (un pedido con varios productos). "
+                        "Omitir para cambiar el producto del pedido por este."
+                    ),
+                },
             },
             "required": ["producto_sku", "producto_nombre"],
+        },
+    ),
+    HerramientaLLM(
+        nombre="negociar_precio",
+        descripcion=(
+            "Úsala SIEMPRE que el cliente pida una rebaja o proponga un precio menor («¿me lo deja en 45?», «¿a cuánto me lo da?»). "
+            "Tú nunca decides un precio ni un descuento: el sistema decide si se acepta, qué contraoferta hacer o si ya no se puede bajar, "
+            "y te dice qué responder. Envía el precio que pide el cliente por los PRODUCTOS (sin el envío). Si el cliente solo pregunta "
+            "si hay descuento sin decir un número, no la uses: pregúntale cuánto le gustaría pagar o menciona los precios especiales que "
+            "te dio el sistema (por transferencia o por cantidad)."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "precio": {"type": "string", "description": "El precio que propone el cliente por los productos, solo el número (ej. 45)."},
+            },
+            "required": ["precio"],
+        },
+    ),
+    HerramientaLLM(
+        nombre="quitar_producto",
+        descripcion=(
+            "Quita un producto u oferta del pedido cuando el cliente ya no lo quiere. El sistema recalcula el total y te lo devuelve."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "producto_sku": {"type": "string", "description": "SKU del producto a quitar."},
+                "oferta_id": {"type": "integer", "description": "Número de la oferta a quitar (si es una oferta)."},
+            },
+        },
+    ),
+    HerramientaLLM(
+        nombre="aplicar_oferta",
+        descripcion=(
+            "Registra una OFERTA (combo o promoción) en el pedido: por ejemplo el combo del anuncio por el que llegó el cliente. "
+            "Las ofertas disponibles para este cliente aparecen en tu información (con su número). Úsala en cuanto el cliente "
+            "confirme que quiere la oferta. El precio lo pone la oferta: no lo cambies ni lo calcules."
+        ),
+        parametros={
+            "type": "object",
+            "properties": {
+                "oferta_id": {"type": "integer", "description": "Número de la oferta, tal como aparece en tu información."},
+                "nombre": {"type": "string", "description": "Nombre de la oferta, si no tienes el número."},
+                "cantidad": {"type": "integer", "minimum": 1, "description": "Cuántas veces la lleva. Omitir si es una."},
+                "agregar": {"type": "boolean", "description": "true si la quiere ADEMÁS de lo que ya pidió."},
+            },
         },
     ),
     HerramientaLLM(
@@ -471,6 +540,7 @@ class HerramientasVictoria:
         imagen_repo: Optional[ImagenRepository] = None,
         catalogo_ubicaciones=None,
         cuentas_repo: Optional[CuentaBancariaRepository] = None,
+        cotizador: Optional[CotizadorServicio] = None,
     ):
         self._catalogo_fijo = catalogo_ubicaciones
         self._leads = lead_repo or LeadRepository()
@@ -487,6 +557,9 @@ class HerramientasVictoria:
         self._ventas = ventas_service or VentasService()
         self._imagenes = imagen_repo or ImagenRepository()
         self._cuentas = cuentas_repo or CuentaBancariaRepository()
+        # ADR-017: el ÚNICO que calcula precios (descuentos, regateo, ofertas, envío). Usa los mismos repositorios de productos y
+        # entregas que las herramientas, así los tests y la simulación lo alimentan con lo suyo.
+        self._cotizador = cotizador or CotizadorServicio(productos=self._productos, entregas=self._entregas)
         # Perezoso: el registro de canales solo se arma si de verdad se envía una foto.
         self._canales = canales
         # Perezoso, igual que los canales: el servicio de leads (temperatura y «no contactar») se arma al usarlo.
@@ -498,6 +571,9 @@ class HerramientasVictoria:
             "guardar_datos_cliente": self._handle_guardar_datos_cliente,
             "ver_ficha_producto": self._handle_ver_ficha_producto,
             "registrar_producto": self._handle_registrar_producto,
+            "negociar_precio": self._handle_negociar_precio,
+            "quitar_producto": self._handle_quitar_producto,
+            "aplicar_oferta": self._handle_aplicar_oferta,
             "registrar_metodo_pago": self._handle_registrar_metodo_pago,
             "enviar_cuenta_para_transferir": self._handle_enviar_cuenta_para_transferir,
             "registrar_entrega": self._handle_registrar_entrega,
@@ -769,10 +845,22 @@ class HerramientasVictoria:
         if stock is not None and stock < cantidad:
             return self._respuesta_sin_stock(lead_id, conversacion_id, producto_real, cantidad, stock)
 
-        total = self._calcular_total(producto_real, cantidad)
+        variante, nota_variante = self._variante_oficial(producto_real, entrada.get("variante"))
+
+        # ADR-017: el total sale de la COTIZACIÓN (precio por cantidad, transferencia, envío...). Sin reglas, es el de siempre.
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        nueva = LineaPedido(tipo=LINEA_PRODUCTO, sku=producto_real["sku"], cantidad=cantidad, variante=variante)
+        lineas, problema = self._lineas_con(lead, nueva, bool(entrada.get("agregar")), [producto_real])
+        if problema is not None:
+            return problema
+        try:
+            cotizacion = self._cotizador.cotizar(lead, lineas=lineas, regateo=Regateo(), envio_costo=None)
+        except LineaInvalida:
+            logger.exception("No se pudo cotizar el pedido", extra=contexto)
+            return "No pude calcular el precio de este pedido. Usa escalar_a_humano para que una persona lo atienda."
+        total = cotizacion.total
         self._avisar_si_el_llm_envio_otro_total(entrada, total, contexto)
 
-        variante, nota_variante = self._variante_oficial(producto_real, entrada.get("variante"))
         self._leads.actualizar_producto(
             lead_id,
             producto_sku=producto_real["sku"],
@@ -781,15 +869,22 @@ class HerramientasVictoria:
             variante=variante,
             cantidad=cantidad,
         )
-        if not producto_real.get("envio_incluido", True):
+        self._leads.guardar_precios(lead_id, self._cotizador.campos(cotizacion, lineas, Regateo()))
+        pistas = self._pistas_de_precio(cotizacion, producto_real, cantidad, lead.get("metodo_pago"))
+        if len(lineas) > 1:
             return (
-                f"Producto registrado: {cantidad} x {producto_real['nombre']}. Subtotal: ${total}, SIN el envío: "
+                "Pedido actualizado:\n" + describir_cotizacion(cotizacion) + "\nEse es el monto exacto que debes comunicarle al "
+                "cliente; no lo cambies." + nota_variante + pistas
+            )
+        if cotizacion.envio_pendiente:
+            return (
+                f"Producto registrado: {cantidad} x {producto_real['nombre']}. Subtotal: ${cotizacion.subtotal_a_pagar}, SIN el envío: "
                 "este producto cobra el envío aparte. Cuando tengas el cantón y la provincia del cliente, usa "
-                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta." + nota_variante
+                "registrar_entrega para ofrecerle las opciones; el total final te lo devuelve esa herramienta." + nota_variante + pistas
             )
         return (
             f"Producto registrado: {cantidad} x {producto_real['nombre']}. "
-            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies." + nota_variante
+            f"Total a cobrar: ${total}. Ese es el monto exacto que debes comunicarle al cliente; no lo cambies." + nota_variante + pistas
         )
 
     @staticmethod
@@ -910,14 +1005,14 @@ class HerramientasVictoria:
             # El dueño verifica el pago a mano: ni el lead ni la conversación quedan «esperando_pago»
             # (ese estado es el de la regla de Rocketfy que le pide el comprobante a Victoria).
             self._leads.actualizar_metodo_pago(lead_id, metodo_pago=entrada["metodo_pago"], esperar_comprobante=False)
-            return "Método de pago registrado."
+            return "Método de pago registrado." + self._total_segun_pago(lead_id)
         self._leads.actualizar_metodo_pago(lead_id, metodo_pago=entrada["metodo_pago"])
         if entrada["metodo_pago"] == "transferencia":
             # Espejo a nivel conversación -- el módulo de Conversaciones
             # del dashboard filtra/cuenta "esperando_pago" sobre
             # conversaciones.estado, no sobre leads.estado.
             self._conversaciones.marcar_esperando_pago(conversacion_id)
-        return "Método de pago registrado."
+        return "Método de pago registrado." + self._total_segun_pago(lead_id)
 
     def _handle_enviar_cuenta_para_transferir(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         """Los datos de la cuenta los arma el código desde la tabla `cuentas_bancarias` (nunca la IA): ver `cuentas.py`."""
@@ -931,7 +1026,7 @@ class HerramientasVictoria:
         if producto is not None and "transferencia" not in _normalizar_texto(producto.get("metodos_pago_aceptados") or ""):
             return "Este producto no acepta pago por transferencia. Explícaselo al cliente y ofrécele los métodos de pago que sí acepta."
         cuentas = self._cuentas.listar(solo_activas=True)
-        return respuesta_para_victoria(entrada.get("banco"), bool(entrada.get("cualquiera")), cuentas, lead.get("total"))
+        return respuesta_para_victoria(entrada.get("banco"), bool(entrada.get("cualquiera")), cuentas, self._total_por_transferencia(lead))
 
     def _handle_registrar_imagen_recibida(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
         """La IA vio una foto o PDF del cliente: se guarda lo que entendió (para el historial y para el dueño) y, si es un comprobante,
@@ -969,7 +1064,7 @@ class HerramientasVictoria:
     def _atender_comprobante(self, lead_id: int, conversacion_id: int, entrada: dict, detalle: str) -> str:
         lead = self._leads.obtener_por_id(lead_id) or {}
         monto = _leer_monto(entrada.get("monto"))
-        total = _leer_monto(lead.get("total"))
+        total = _leer_monto(self._total_por_transferencia(lead))
         if monto is None:
             comparacion = "el monto no se pudo leer"
         elif total is None:
@@ -1073,7 +1168,7 @@ class HerramientasVictoria:
                 "al cliente las opciones y su total final, y luego vuelve a intentar cerrar."
             )
 
-        cantidad = int(lead.get("cantidad") or 1)
+        cantidad = self._unidades_del_principal(lead)
 
         # Última revisión ANTES de crear un pedido real en Rocketfy: el
         # producto sigue activo, la cantidad sigue permitida, el precio no
@@ -1110,7 +1205,7 @@ class HerramientasVictoria:
             canton=lead["canton"],
             provincia=lead["provincia"],
             total=lead["total"],
-            lineas=[LineaPedidoDTO(sku=lead["producto_sku"], nombre=nombre_linea, cantidad=cantidad)],
+            lineas=self._lineas_para_rocketfy(lead, nombre_linea, cantidad),
             # Una transferencia ya confirmada por el dueño es un pedido PREPAGADO (`not_COD = 1`): el repartidor no cobra
             # nada. Antes iba siempre como contra entrega y el cliente pagaba dos veces (hallazgo H0, ADR-017). Llegar aquí con
             # transferencia sin pago confirmado es imposible (se frena arriba), pero se exige igual para no confiar en el orden.
@@ -1142,6 +1237,383 @@ class HerramientasVictoria:
         self._registrar_venta_de_rocketfy(lead_id, conversacion_id, producto)
         return f"¡Pedido confirmado! Llega en {tiempo_entrega}. Comunícaselo al cliente y agradécele."
 
+    # ------------------------------------------------------------------
+    # Precios: regateo, varias líneas y ofertas (ADR-017)
+    # ------------------------------------------------------------------
+    def _handle_negociar_precio(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        """El cliente pide rebaja: el CÓDIGO decide (regla P1). Victoria solo comunica lo que se le dice aquí."""
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        lineas = lineas_del_lead(lead)
+        if not lineas:
+            return "Primero registra el producto con registrar_producto; después se puede hablar del precio."
+        if lead.get("estado") in ESTADOS_DE_LEAD_CERRADO:
+            return "Este pedido ya se cerró: el precio no se puede cambiar."
+        pedido = _leer_monto(entrada.get("precio"))
+        if pedido is None or pedido <= 0:
+            return (
+                "Necesito el precio que propone el cliente, solo el número (ej. 45). Si no dijo un número, pregúntale con naturalidad "
+                "cuánto le gustaría pagar."
+            )
+        try:
+            base = self._cotizador.cotizar(lead, regateo=Regateo())
+        except LineaInvalida:
+            return "No pude calcular el precio de este pedido. Usa escalar_a_humano para que una persona lo atienda."
+        previo = Regateo.desde_json(lead.get("regateo"))
+        if previo.base is not None and previo.base != base.subtotal:
+            previo = Regateo()  # el pedido cambió desde el último regateo: empieza de nuevo
+        resultado = negociar(
+            base.subtotal,
+            base.minimo_regateo,
+            pedido,
+            rondas_hechas=previo.rondas,
+            ultima_contraoferta=previo.contraoferta,
+            estrategia=parametros.valor("precios.regateo_estrategia"),
+            redondeo=parametros.valor("precios.regateo_redondeo"),
+            rondas_maximas=parametros.valor("precios.regateo_rondas"),
+        )
+        precio = resultado.precio
+        logger.info(
+            "Regateo: el cliente pide %s, decisión %s (%s)", pedido, resultado.decision, precio,
+            extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
+        )
+        if resultado.decision == ACEPTA:
+            acordado = Regateo(acordado=precio, base=base.subtotal, rondas=resultado.rondas, contraoferta=previo.contraoferta)
+            cotizacion = self._guardar_cotizacion(lead_id, lead, lineas, acordado)
+            envio = " (más el envío que elija)" if cotizacion.envio_pendiente else ""
+            return (
+                f"ACEPTADO: los productos quedan en ${precio:.2f}. Total a cobrar: ${cotizacion.total:.2f}{envio}. Confírmaselo al cliente "
+                "con alegría y sigue con la venta. Ese es el monto exacto; no lo cambies." + self._nota_transferencia(cotizacion, lead)
+            )
+        if resultado.decision in (CONTRAOFERTA, MINIMO):
+            seguir = Regateo(acordado=None, base=base.subtotal, rondas=resultado.rondas, contraoferta=precio)
+            self._guardar_cotizacion(lead_id, lead, lineas, seguir)
+            if resultado.decision == CONTRAOFERTA:
+                return (
+                    f"No aceptes ${pedido:.2f} todavía. Ofrécele ${precio:.2f} por los productos, con naturalidad, como un esfuerzo "
+                    "especial. Si el cliente acepta o insiste en su precio, vuelve a llamar negociar_precio con lo que diga."
+                )
+            return (
+                f"No se puede dejar en ${pedido:.2f}. Lo más que puedes ofrecer es ${precio:.2f} por los productos: ofréceselo con "
+                "amabilidad, sin decir que es un mínimo ni hablar de márgenes. Si acepta, vuelve a llamar negociar_precio con ese precio."
+            )
+        if resultado.decision == FIRME:
+            return (
+                f"Ya no se puede bajar más: mantén ${precio:.2f} por los productos, con amabilidad. Si el cliente no acepta, respeta "
+                "su decisión y no insistas."
+            )
+        if resultado.decision == SIN_REGATEO:
+            extra = (
+                f" Lo que sí puedes ofrecerle: pagando por transferencia el total queda en ${base.total_transferencia:.2f}."
+                if base.hay_precio_por_transferencia and lead.get("metodo_pago") != "transferencia"
+                else ""
+            )
+            return (
+                f"Este pedido no tiene rebaja: los productos cuestan ${base.subtotal:.2f}. Explícaselo con amabilidad, sin inventar "
+                "descuentos." + extra
+            )
+        return f"Lo que ofrece el cliente ya cubre el precio: los productos cuestan ${base.subtotal:.2f}. No hace falta rebajar nada."
+
+    def _handle_quitar_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        lineas = lineas_del_lead(lead)
+        sku = _normalizar_texto(str(entrada.get("producto_sku") or ""))
+        oferta_id = entrada.get("oferta_id")
+
+        def _es_la_linea(linea: LineaPedido) -> bool:
+            if oferta_id is not None and linea.tipo == LINEA_OFERTA:
+                return str(linea.oferta_id) == str(oferta_id)
+            return bool(sku) and linea.tipo == LINEA_PRODUCTO and _normalizar_texto(linea.sku or "") == sku
+
+        restantes = [l for l in lineas if not _es_la_linea(l)]
+        if len(restantes) == len(lineas):
+            return "Eso no está en el pedido. Revisa el pedido actual en tu información y vuelve a intentarlo con el SKU exacto."
+        if not restantes:
+            return (
+                "Es lo único del pedido: no lo quites. Si el cliente ya no quiere nada, no cierres la venta; si prefiere otro "
+                "producto, regístralo con registrar_producto (sin agregar)."
+            )
+        try:
+            cotizacion = self._cotizador.cotizar(lead, lineas=restantes, regateo=Regateo(), envio_costo=None)
+        except LineaInvalida:
+            return "No pude recalcular el pedido. Usa escalar_a_humano para que una persona lo atienda."
+        self._guardar_resumen(lead_id, cotizacion, restantes)
+        return "Listo, se quitó del pedido. Pedido actual:\n" + describir_cotizacion(cotizacion)
+
+    def _handle_aplicar_oferta(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id) or {}
+        candidatas = self._ofertas_para(lead, conversacion)
+        oferta = self._elegir_oferta(candidatas, entrada)
+        if oferta is None:
+            vigentes = [o for o in candidatas if vigente(o, ahora_utc())]
+            if not vigentes:
+                return "Este cliente no tiene ofertas disponibles: véndele los productos a su precio normal."
+            lista = "; ".join(f"#{o['id']} {o['nombre']} (${dinero(o['precio']):.2f})" for o in vigentes)
+            return f"No encontré esa oferta para este cliente. Las disponibles son: {lista}."
+        if not vigente(oferta, ahora_utc()):
+            return self._oferta_terminada(lead_id, conversacion_id, oferta)
+
+        cantidad = _leer_cantidad(entrada.get("cantidad"))
+        if cantidad is None:
+            return "La cantidad debe ser un número entero de 1 en adelante."
+        maximo = int(oferta.get("maximo_por_cliente") or 1)
+        if cantidad > maximo:
+            return f"Esta oferta se puede llevar como máximo {maximo} vez/veces por cliente. Explícaselo con naturalidad."
+
+        productos = []
+        for item in oferta.get("items") or []:
+            producto = self._productos.obtener_por_sku(item["producto_sku"])
+            if not self._esta_activo(producto):
+                return self._oferta_terminada(lead_id, conversacion_id, oferta)
+            unidades = int(item.get("cantidad") or 1) * cantidad
+            stock = self._stock_disponible(producto)
+            if stock is not None and stock < unidades:
+                return self._respuesta_sin_stock(lead_id, conversacion_id, producto, unidades, stock)
+            productos.append(producto)
+        if not productos:
+            return self._oferta_terminada(lead_id, conversacion_id, oferta)
+
+        nueva = LineaPedido(tipo=LINEA_OFERTA, oferta_id=int(oferta["id"]), cantidad=cantidad, variante=(entrada.get("variante") or None))
+        lineas, problema = self._lineas_con(lead, nueva, bool(entrada.get("agregar")), productos)
+        if problema is not None:
+            return problema
+        try:
+            cotizacion = self._cotizador.cotizar(lead, lineas=lineas, regateo=Regateo(), envio_costo=None)
+        except LineaInvalida:
+            return self._oferta_terminada(lead_id, conversacion_id, oferta)
+        problema = self._cotizador.vigencia_de_ofertas(cotizacion, lead.get("contacto_id"))
+        if problema is not None:
+            return f"{problema} Díselo al cliente con naturalidad y ofrécele los productos a su precio normal."
+        self._guardar_resumen(lead_id, cotizacion, lineas)
+        envio = (
+            " Esta oferta cobra el envío aparte: cuando tengas el cantón y la provincia usa registrar_entrega."
+            if cotizacion.envio_pendiente
+            else ""
+        )
+        return (
+            "Oferta registrada. Pedido:\n" + describir_cotizacion(cotizacion) + "\nEse es el monto exacto que debes comunicarle al cliente; "
+            "no lo cambies. Si algún producto tiene colores o tallas, pregúntale cuál prefiere y vuelve a llamar aplicar_oferta con "
+            "`variante`." + envio + self._nota_transferencia(cotizacion, lead)
+        )
+
+    # -- ayudantes de precio --------------------------------------------------------------------
+    def _guardar_cotizacion(self, lead_id: int, lead: dict, lineas, regateo: Regateo) -> Cotizacion:
+        cotizacion = self._cotizador.cotizar(lead, lineas=lineas, regateo=regateo)
+        self._leads.guardar_precios(lead_id, self._cotizador.campos(cotizacion, lineas, regateo))
+        return cotizacion
+
+    def _guardar_resumen(self, lead_id: int, cotizacion: Cotizacion, lineas) -> None:
+        """Pedido nuevo o cambiado (sin entrega elegida todavía): el resumen del lead y la cotización."""
+        primera = cotizacion.lineas[0]
+        self._leads.actualizar_producto(
+            lead_id,
+            producto_sku=primera.items[0].sku,
+            producto_nombre=primera.nombre,
+            total=cotizacion.total,
+            variante=primera.variante if primera.tipo == LINEA_PRODUCTO else None,
+            cantidad=primera.cantidad if primera.tipo == LINEA_PRODUCTO else cotizacion.unidades,
+        )
+        campos = self._cotizador.campos(cotizacion, lineas, Regateo())
+        if campos.get("lineas") is None:
+            campos["producto_variante"] = primera.variante
+        self._leads.guardar_precios(lead_id, campos)
+
+    def _lineas_con(self, lead: dict, nueva: LineaPedido, agregar: bool, productos_nuevos) -> Tuple[list, Optional[str]]:
+        """Las líneas del pedido con `nueva`: la reemplaza todo (lo de siempre) o se suma a lo que ya pidió (ADR-017)."""
+        actuales = lineas_del_lead(lead)
+        if not agregar or not actuales:
+            return [nueva], None
+        if not parametros.valor("precios.varios_productos"):
+            return [], (
+                "Por ahora cada pedido lleva un solo producto (o una oferta). Pregúntale al cliente cuál prefiere primero; cuando "
+                "cierren este pedido, puede hacer otro."
+            )
+        mezcla = self._mezcla_no_permitida(actuales, productos_nuevos)
+        if mezcla is not None:
+            return [], mezcla
+
+        def _misma(linea: LineaPedido) -> bool:
+            if linea.tipo != nueva.tipo:
+                return False
+            if linea.tipo == LINEA_OFERTA:
+                return linea.oferta_id == nueva.oferta_id
+            return linea.sku == nueva.sku and (linea.variante or None) == (nueva.variante or None)
+
+        return [l for l in actuales if not _misma(l)] + [nueva], None
+
+    def _mezcla_no_permitida(self, actuales, productos_nuevos) -> Optional[str]:
+        """Regla P5: un pedido no junta productos de Rocketfy con productos propios (se despachan por caminos distintos)."""
+        tipos = {es_de_cierre_manual(p) for p in productos_nuevos if p}
+        for linea in actuales:
+            if linea.tipo == LINEA_PRODUCTO:
+                tipos.add(es_de_cierre_manual(self._productos.obtener_por_sku(linea.sku)))
+            else:
+                for oferta in self._cotizador.ofertas_de([linea.oferta_id]).values():
+                    for item in oferta.get("items") or []:
+                        tipos.add(es_de_cierre_manual(self._productos.obtener_por_sku(item["producto_sku"])))
+        if len(tipos) > 1:
+            return (
+                "Ese producto no se puede juntar en el mismo pedido con lo que ya pidió (uno lo despacha el proveedor y el otro lo "
+                "gestiona el dueño). Ofrécele hacerlo en dos pedidos: primero cierren este y luego el otro."
+            )
+        return None
+
+    def _pistas_de_precio(self, cotizacion: Cotizacion, producto: dict, cantidad: int, metodo: Optional[str]) -> str:
+        """Lo que Victoria PUEDE ofrecer de este pedido, según las reglas del dueño (P3, P4). Nunca el mínimo del regateo."""
+        pistas = []
+        maximo = int(producto.get("max_unidades_por_pedido") or 1)
+        escalas = [e for e in self._cotizador.escalas_de_producto(producto["sku"]) if cantidad < e.cantidad <= maximo]
+        if escalas:
+            texto = ", ".join(f"{e.cantidad} por ${e.precio_total:.2f}" for e in escalas)
+            como = (
+                "Menciónaselo UNA vez, con naturalidad, si aún no lo hiciste."
+                if parametros.valor("precios.mencionar_por_cantidad")
+                else "Dilo solo si el cliente pregunta."
+            )
+            pistas.append(f"Precio por cantidad de este producto: {texto}. {como}")
+        if cotizacion.hay_precio_por_transferencia and metodo != "transferencia":
+            como = (
+                "Menciónaselo cuando hablen del pago."
+                if parametros.valor("precios.mencionar_transferencia")
+                else "Dilo solo si el cliente pregunta."
+            )
+            pistas.append(f"Pagando por transferencia el total baja a ${cotizacion.total_transferencia:.2f}. {como}")
+        if cotizacion.minimo_regateo is not None:
+            pistas.append("Este pedido admite rebaja: si el cliente pide descuento o propone un precio, usa negociar_precio.")
+        return (" " + " ".join(pistas)) if pistas else ""
+
+    @staticmethod
+    def _nota_transferencia(cotizacion: Cotizacion, lead: dict) -> str:
+        if cotizacion.hay_precio_por_transferencia and lead.get("metodo_pago") != "transferencia":
+            return f" Si paga por transferencia, el total queda en ${cotizacion.total_transferencia:.2f}."
+        return ""
+
+    def _total_segun_pago(self, lead_id: int) -> str:
+        """Al elegir el método de pago, el total puede cambiar (precio por transferencia): se recalcula y se le dice a Victoria."""
+        lead = self._leads.obtener_por_id(lead_id) or {}
+        lineas = lineas_del_lead(lead)
+        if not lineas:
+            return ""
+        try:
+            cotizacion = self._cotizador.cotizar(lead)
+        except LineaInvalida:
+            return ""
+        self._leads.guardar_precios(lead_id, self._cotizador.campos(cotizacion, lineas))
+        if not cotizacion.hay_precio_por_transferencia:
+            return ""
+        if lead.get("metodo_pago") == "transferencia":
+            return f" Con transferencia el total queda en ${cotizacion.total:.2f} (precio especial por transferencia): comunícale ese total."
+        return f" Total a cobrar contra entrega: ${cotizacion.total:.2f}."
+
+    @staticmethod
+    def _total_por_transferencia(lead: dict):
+        """Lo que el cliente debe transferir: el total por transferencia si es más barato; si no, el total."""
+        return lead.get("total_transferencia") or lead.get("total")
+
+    @staticmethod
+    def _unidades_del_principal(lead: dict) -> int:
+        """Unidades del producto principal en las líneas de PRODUCTO (el máximo por pedido se mide por producto)."""
+        if not lead.get("lineas"):
+            return int(lead.get("cantidad") or 1)
+        return sum(
+            int(l.get("cantidad") or 1)
+            for l in lead["lineas"]
+            if (l.get("tipo") or LINEA_PRODUCTO) == LINEA_PRODUCTO and l.get("sku") == lead.get("producto_sku")
+        )
+
+    def _revisar_otras_lineas(self, lead: dict, cotizacion: Cotizacion, sku_principal: str) -> Optional[str]:
+        """En un pedido de varias líneas: cada producto sigue activo, dentro de su máximo y con stock para TODAS sus unidades."""
+        if not lead.get("lineas"):
+            return None
+        unidades = {}
+        for item in cotizacion.items:
+            unidades[item.sku] = unidades.get(item.sku, 0) + item.cantidad
+        for sku, total in unidades.items():
+            producto = self._productos.obtener_por_sku(sku)
+            if not self._esta_activo(producto):
+                return f"El producto {sku} del pedido ya no está disponible (pausado o eliminado)."
+            stock = self._stock_disponible(producto, fresco=True)
+            if stock is not None and stock < total:
+                return f"Sin stock suficiente al cerrar: {sku}, pedido {total}, disponible {stock}."
+        for linea in cotizacion.lineas:
+            if linea.tipo != LINEA_PRODUCTO:
+                continue
+            producto = self._productos.obtener_por_sku(linea.sku) or {}
+            maximo = int(producto.get("max_unidades_por_pedido") or 1)
+            if linea.cantidad > maximo:
+                return f"El cliente pidió {linea.cantidad} unidades de {linea.sku} pero el máximo por pedido es {maximo}."
+        return None
+
+    def _lineas_para_rocketfy(self, lead: dict, nombre_linea: str, cantidad: int) -> List[LineaPedidoDTO]:
+        """Un producto: la línea de siempre. Varias líneas u ofertas: un renglón por producto, con su variante en el nombre."""
+        if not lead.get("lineas"):
+            return [LineaPedidoDTO(sku=lead["producto_sku"], nombre=nombre_linea, cantidad=cantidad)]
+        cotizacion = self._cotizador.cotizar(lead)
+        return [
+            LineaPedidoDTO(sku=i.sku, nombre=f"{i.nombre} - {i.variante}" if i.variante else i.nombre, cantidad=i.cantidad)
+            for i in cotizacion.items
+        ]
+
+    def _productos_del_pedido(self, lead: dict) -> dict:
+        """Las filas de todos los productos del pedido (para la foto de la venta)."""
+        skus = []
+        for linea in (lead.get("cotizacion") or {}).get("lineas") or []:
+            skus.extend(i["sku"] for i in linea.get("items") or [])
+        if not skus and lead.get("producto_sku"):
+            skus = [lead["producto_sku"]]
+        filas = {}
+        for sku in skus:
+            if sku not in filas:
+                fila = self._productos.obtener_por_sku(sku)
+                if fila is not None:
+                    filas[sku] = fila
+        return filas
+
+    def _ofertas_para(self, lead: dict, conversacion: dict) -> list:
+        """Las ofertas que este cliente puede pedir: la del anuncio por el que llegó (aunque haya terminado, para decírselo) y las
+        públicas (regla P6). Si la base falla, ninguna: se vende al precio normal."""
+        try:
+            ids = set()
+            id_anuncio = lead.get("id_anuncio") or conversacion.get("id_anuncio")
+            if id_anuncio:
+                vinculo = self._cotizador.vinculo_de_anuncio(id_anuncio)
+                if vinculo and vinculo.get("oferta_id"):
+                    ids.add(int(vinculo["oferta_id"]))
+            ofertas = list(self._cotizador.ofertas_de(ids).values())
+            vistos = {o["id"] for o in ofertas}
+            ofertas += [o for o in self._cotizador.ofertas_publicas() if o["id"] not in vistos]
+            return ofertas
+        except Exception:
+            logger.exception("No se pudieron leer las ofertas del cliente", extra={"lead_id": lead.get("id")})
+            return []
+
+    @staticmethod
+    def _elegir_oferta(candidatas: list, entrada: dict) -> Optional[dict]:
+        if entrada.get("oferta_id") is not None:
+            for oferta in candidatas:
+                if str(oferta["id"]) == str(entrada["oferta_id"]):
+                    return oferta
+        nombre = _normalizar_texto(str(entrada.get("nombre") or ""))
+        if nombre:
+            for oferta in candidatas:
+                if nombre in _normalizar_texto(oferta["nombre"]) or _normalizar_texto(oferta["nombre"]) in nombre:
+                    return oferta
+        return candidatas[0] if len(candidatas) == 1 and entrada.get("oferta_id") is None and not nombre else None
+
+    def _oferta_terminada(self, lead_id: int, conversacion_id: int, oferta: dict) -> str:
+        if parametros.valor("precios.oferta_terminada") == "dueno":
+            self._handle_escalar_a_humano(
+                lead_id, conversacion_id, {"motivo": f"El cliente quiere la oferta «{oferta['nombre']}», que ya terminó o no tiene stock."}
+            )
+            return (
+                f"La oferta «{oferta['nombre']}» ya no está disponible. Ya se avisó al dueño: dile al cliente con naturalidad que en breve "
+                "lo atienden y no prometas nada."
+            )
+        return (
+            f"La oferta «{oferta['nombre']}» ya no está disponible (terminó, se pausó o se agotó). Díselo al cliente con naturalidad y "
+            "ofrécele los productos a su precio normal (regístralos con registrar_producto)."
+        )
+
     def _pasar_nuevo_pedido_al_dueno(self, lead: dict, conversacion_id: int) -> str:
         """El pedido anterior de esta conversación se canceló y el cliente quiere comprar otra vez. No se cierra
         una segunda venta sobre el mismo lead: se avisa al dueño (queda en «Por gestionar») y la conversación
@@ -1164,7 +1636,7 @@ class HerramientasVictoria:
             lead = self._leads.obtener_por_id(lead_id)
             conversacion = self._conversaciones.obtener_por_id(conversacion_id)
             entrega = self._entregas.obtener(lead["entrega_opcion_id"]) if lead.get("entrega_opcion_id") else None
-            self._ventas.registrar_venta_rocketfy(lead, producto, conversacion, entrega)
+            self._ventas.registrar_venta_rocketfy(lead, producto, conversacion, entrega, productos=self._productos_del_pedido(lead))
         except Exception:
             logger.exception("No se pudo registrar la venta del lead %s para los reportes", lead_id)
 
@@ -1176,8 +1648,11 @@ class HerramientasVictoria:
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         entrega = self._entregas.obtener(lead["entrega_opcion_id"]) if lead.get("entrega_opcion_id") else None
         try:
+            productos = self._productos_del_pedido(lead)
+            controla = {sku: controla_su_stock(fila) for sku, fila in productos.items()} if lead.get("lineas") else None
             resultado = self._ventas.cerrar_manual(
-                lead, producto, conversacion, entrega, controla_su_stock(producto), self._detalle_del_pedido(lead, cantidad)
+                lead, producto, conversacion, entrega, controla_su_stock(producto), self._detalle_del_pedido(lead, cantidad),
+                productos=productos, controla_por_sku=controla,
             )
         except StockInsuficienteError as exc:
             return self._respuesta_sin_stock(lead_id, conversacion_id, producto, cantidad, exc.disponible or 0)
@@ -1205,8 +1680,9 @@ class HerramientasVictoria:
 
     @staticmethod
     def _detalle_del_pedido(lead: dict, cantidad: int) -> str:
-        producto = f"{cantidad} x {lead['producto_nombre']}"
-        if lead.get("producto_variante"):
+        # En un pedido de varias líneas (ADR-017) el nombre ya es el resumen «1 x A + 2 x B».
+        producto = lead["producto_nombre"] if lead.get("lineas") else f"{cantidad} x {lead['producto_nombre']}"
+        if lead.get("producto_variante") and not lead.get("lineas"):
             producto += f" ({lead['producto_variante']})"
         entrega = lead.get("entrega_nombre") or "envío incluido en el precio"
         return f"{producto} · total ${Decimal(str(lead['total'])):.2f} · entrega: {entrega} · pago: {lead['metodo_pago']}"
@@ -1270,16 +1746,25 @@ class HerramientasVictoria:
                 aviso_a_victoria.format(que="las unidades del pedido"),
             )
 
-        # El precio cotizado es el del producto (subtotal); el envío se verifica aparte.
-        precio_actual = producto.get("precio")
-        cotizado = Decimal(str(lead["subtotal"] if lead.get("subtotal") is not None else lead["total"])).quantize(Decimal("0.01"))
-        if precio_actual is None or self._calcular_total(producto, cantidad) != cotizado:
-            actual = self._calcular_total(producto, cantidad) if precio_actual is not None else "desconocido"
+        # ADR-017: se vuelve a cotizar con los datos de AHORA (precios, reglas, ofertas, envío) y tiene que dar lo mismo que se le dijo.
+        cotizado = Decimal(str(lead["total"])).quantize(Decimal("0.01"))
+        try:
+            cotizacion = self._cotizador.cotizar(lead)
+        except LineaInvalida:
+            cotizacion = None
+        if producto.get("precio") is None or cotizacion is None or cotizacion.total != cotizado:
+            actual = f"${cotizacion.total}" if cotizacion is not None else "desconocido"
             return (
                 f"El precio de {sku} no coincide con lo cotizado al cliente (cotizado ${cotizado}, "
-                f"actual ${actual} por {cantidad} unidad(es)). Pudo cambiar durante la conversación.",
+                f"actual {actual} por {cantidad} unidad(es)). Pudo cambiar durante la conversación.",
                 aviso_a_victoria.format(que="el precio"),
             )
+        oferta_problema = self._cotizador.vigencia_de_ofertas(cotizacion, lead.get("contacto_id"))
+        if oferta_problema is not None:
+            return oferta_problema, aviso_a_victoria.format(que="la oferta")
+        otros = self._revisar_otras_lineas(lead, cotizacion, sku)
+        if otros is not None:
+            return otros, aviso_a_victoria.format(que="los productos del pedido")
 
         problema_de_entrega = self._problema_de_entrega(lead, producto)
         if problema_de_entrega is not None:
@@ -1305,7 +1790,10 @@ class HerramientasVictoria:
             return f"La opción de entrega «{lead.get('entrega_nombre')}» de {lead['producto_sku']} ya no existe."
         if opcion["id"] not in {o["id"] for o in opciones_aplicables([opcion], lead.get("canton"), lead.get("provincia"))}:
             return f"La entrega «{opcion['nombre']}» ya no aplica al destino del cliente ({lead.get('canton')})."
-        if Decimal(str(opcion["costo_cliente"])).quantize(Decimal("0.01")) != Decimal(str(lead.get("costo_envio") or 0)).quantize(Decimal("0.01")):
+        # Con envío gratis (ADR-017) el cliente no paga la opción: su costo no se compara (la cotización fresca revisa el total).
+        if not (lead.get("cotizacion") or {}).get("envio_gratis") and (
+            Decimal(str(opcion["costo_cliente"])).quantize(Decimal("0.01")) != Decimal(str(lead.get("costo_envio") or 0)).quantize(Decimal("0.01"))
+        ):
             return f"El costo de «{opcion['nombre']}» cambió desde que se le cotizó al cliente."
         return None
 
@@ -1345,7 +1833,11 @@ class HerramientasVictoria:
                 "contactar y despídete. Este es tu último mensaje."
             )
 
-        subtotal = Decimal(str(lead["subtotal"] if lead.get("subtotal") is not None else lead["total"]))
+        try:
+            sin_envio = self._cotizador.cotizar(lead, envio_costo=None)
+            subtotal = sin_envio.subtotal_a_pagar
+        except LineaInvalida:
+            subtotal = Decimal(str(lead["subtotal"] if lead.get("subtotal") is not None else lead["total"]))
         texto = (entrada.get("opcion") or "").strip()
         if not texto:
             lista = "\n".join(describir(o, con_numero=i) for i, o in enumerate(aplicables, start=1))
@@ -1360,11 +1852,19 @@ class HerramientasVictoria:
             lista = "\n".join(describir(o, con_numero=i) for i, o in enumerate(aplicables, start=1))
             return f"No reconocí esa opción. Las disponibles son:\n{lista}\nPregúntale al cliente cuál prefiere."
 
-        total = total_con_envio(subtotal, elegida)
-        self._leads.actualizar_entrega(lead_id, elegida["id"], elegida["nombre"], elegida["tipo"], elegida["costo_cliente"], total)
+        cotizacion = self._cotizador.cotizar(lead, envio_costo=dinero(elegida["costo_cliente"]))
+        total = cotizacion.total
+        self._leads.actualizar_entrega(lead_id, elegida["id"], elegida["nombre"], elegida["tipo"], cotizacion.envio, total)
+        self._leads.guardar_precios(lead_id, self._cotizador.campos(cotizacion, lineas_del_lead(lead)))
+        envio = "envío GRATIS" if cotizacion.envio_gratis else f"envío ${cotizacion.envio:.2f}"
+        extra = (
+            f" Si paga por transferencia: ${cotizacion.total_transferencia:.2f}."
+            if cotizacion.hay_precio_por_transferencia and lead.get("metodo_pago") != "transferencia"
+            else ""
+        )
         return (
-            f"Entrega registrada: {describir(elegida)}. Total a cobrar: ${total} (productos ${subtotal:.2f} + envío "
-            f"${Decimal(str(elegida['costo_cliente'])):.2f}). Ese es el monto exacto que debes comunicarle al cliente; no lo cambies."
+            f"Entrega registrada: {describir(elegida)}. Total a cobrar: ${total} (productos ${cotizacion.subtotal_a_pagar:.2f} + "
+            f"{envio}). Ese es el monto exacto que debes comunicarle al cliente; no lo cambies.{extra}"
         )
 
     def _handle_solicitar_gestion(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:

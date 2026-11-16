@@ -15,7 +15,7 @@ from src.routes.ajustes.services import AjustesService
 
 from .reglas import acciones_disponibles
 from .repository import VentasRepository
-from .snapshot import armar_venta
+from .snapshot import armar_venta, armar_venta_cotizada
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +42,22 @@ class VentasService:
             logger.exception("No se pudo leer el envío estimado general; se usa 0 en la foto de la venta")
             return Decimal("0.00")
 
+    def _armar(self, lead, producto, conversacion, entrega, estado: str, productos: Optional[Dict[str, Dict[str, Any]]]):
+        """Con la cotización guardada en el lead (ADR-017) la foto lleva todas las líneas y los descuentos; sin ella, como siempre."""
+        if lead.get("cotizacion") and productos is not None:
+            return armar_venta_cotizada(lead, lead["cotizacion"], productos, producto, conversacion, entrega, estado, self._envio_general())
+        return armar_venta(lead, producto, conversacion, entrega, estado, self._envio_general())
+
     def registrar_venta_rocketfy(
-        self, lead: Dict[str, Any], producto: Dict[str, Any], conversacion: Optional[Dict[str, Any]], entrega: Optional[Dict[str, Any]]
+        self,
+        lead: Dict[str, Any],
+        producto: Dict[str, Any],
+        conversacion: Optional[Dict[str, Any]],
+        entrega: Optional[Dict[str, Any]],
+        productos: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         try:
-            venta, lineas = armar_venta(lead, producto, conversacion, entrega, "despachada", self._envio_general())
+            venta, lineas = self._armar(lead, producto, conversacion, entrega, "despachada", productos)
             self._repo.registrar(venta, lineas)
         except Exception:
             logger.exception(
@@ -62,10 +73,17 @@ class VentasService:
         entrega: Optional[Dict[str, Any]],
         controla_stock: bool,
         detalle_solicitud: str,
+        productos: Optional[Dict[str, Dict[str, Any]]] = None,
+        controla_por_sku: Optional[Dict[str, bool]] = None,
     ) -> Dict[str, Any]:
-        venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", self._envio_general())
+        venta, lineas = self._armar(lead, producto, conversacion, entrega, "por_gestionar", productos)
+        if controla_por_sku is None:
+            return self._repo.cerrar_manual(
+                venta, lineas, producto["sku"], int(lead.get("cantidad") or 1), controla_stock, detalle_solicitud
+            )
         return self._repo.cerrar_manual(
-            venta, lineas, producto["sku"], int(lead.get("cantidad") or 1), controla_stock, detalle_solicitud
+            venta, lineas, producto["sku"], int(lead.get("cantidad") or 1), controla_stock, detalle_solicitud,
+            controla_por_sku=controla_por_sku,
         )
 
     # -- Lo que hace el dueño después de cerrar (ver `reglas.py`) -------------------------------

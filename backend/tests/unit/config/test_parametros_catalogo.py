@@ -26,7 +26,7 @@ class TestInvariantesDelCatalogo:
         # 15 del plan de parametrización + «Fotos por envío» (ADR-012) + 8 de leads (enfriamiento, atribución y cliente
         # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea) + 7 de recordatorios y
         # 4 del aviso de ventas a Meta (interruptor, espera, antigüedad, intentos) + la tarea que los envía.
-        assert len(CATALOGO) == 54
+        assert len(CATALOGO) == 61
 
     def test_el_aviso_de_ventas_a_meta_viene_apagado_de_fabrica(self):
         """Lo que se envía a Meta no se puede borrar: hay que encenderlo a propósito."""

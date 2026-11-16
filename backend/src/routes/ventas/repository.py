@@ -14,6 +14,8 @@ Dos caminos:
 """
 from typing import Any, Dict, List, Optional
 
+from psycopg2.extras import Json
+
 from src.config.database import get_connection
 from src.routes.gestion.repository import ResultadoUpsert, upsert_solicitud
 from src.routes.leads.sql import fijar_temperatura
@@ -27,11 +29,23 @@ _COLUMNAS_VENTA = (
     "cliente_nombre", "telefono", "direccion", "canton", "provincia", "entrega_tipo", "entrega_nombre",
     "subtotal", "costo_envio_cliente", "total", "costo_productos", "costo_envio_negocio",
     "id_pedido_local", "id_pedido_rocketfy",
+    # ADR-017: cuánto se descontó y por qué (para medir si el regateo, las escalas y las ofertas convienen).
+    "subtotal_lista", "descuento_total", "descuentos", "cotizacion",
 )
+_COLUMNAS_JSON = ("descuentos", "cotizacion")
 _COLUMNAS_LINEA = (
     "producto_sku", "producto_nombre", "variante", "categoria_id", "categoria_nombre",
-    "cantidad", "precio_unitario", "costo_unitario", "stock_descontado",
+    "cantidad", "precio_unitario", "costo_unitario", "stock_descontado", "oferta_id", "precio_lista_unitario",
 )
+
+
+def _valor_venta(venta: Dict[str, Any], columna: str) -> Any:
+    valor = venta.get(columna)
+    if columna == "descuento_total" and valor is None:
+        return 0
+    if columna in _COLUMNAS_JSON and valor is not None:
+        return Json(valor)
+    return valor
 
 
 def _insertar_venta(cur, venta: Dict[str, Any], lineas: List[Dict[str, Any]]) -> Optional[int]:
@@ -39,7 +53,7 @@ def _insertar_venta(cur, venta: Dict[str, Any], lineas: List[Dict[str, Any]]) ->
     cur.execute(
         f"insert into ventas ({', '.join(_COLUMNAS_VENTA)}) values ({', '.join(['%s'] * len(_COLUMNAS_VENTA))}) "
         "on conflict (lead_id) do nothing returning id",
-        tuple(venta.get(c) for c in _COLUMNAS_VENTA),
+        tuple(_valor_venta(venta, c) for c in _COLUMNAS_VENTA),
     )
     fila = cur.fetchone()
     if fila is None:
@@ -52,6 +66,34 @@ def _insertar_venta(cur, venta: Dict[str, Any], lineas: List[Dict[str, Any]]) ->
             (venta_id, *(linea.get(c) for c in _COLUMNAS_LINEA)),
         )
     return venta_id
+
+
+def _descontar_stock(cur, sku: str, cantidad: int):
+    """Descuenta `cantidad` del stock propio de `sku` sin bajar de cero. Devuelve (stock restante, si se pausó por agotarse).
+    Si no alcanza lanza `StockInsuficienteError` y, como todo va en la misma transacción, no queda nada a medias."""
+    cur.execute(
+        """
+        update productos_bot set
+            stock_ultimo = stock_ultimo - %s, stock_actualizado_en = now(), actualizado_en = now()
+        where sku = %s and stock_ultimo >= %s
+        returning stock_ultimo
+        """,
+        (cantidad, sku, cantidad),
+    )
+    fila = cur.fetchone()
+    if fila is None:
+        cur.execute("select stock_ultimo from productos_bot where sku = %s", (sku,))
+        actual = cur.fetchone()
+        raise StockInsuficienteError(disponible=actual[0] if actual else None)
+    pausado = False
+    if fila[0] <= 0:
+        # Se vendió la última unidad: el producto deja de ofrecerse solo (reanudar es manual).
+        cur.execute(
+            "update productos_bot set estado = 'agotado', activo = false, actualizado_en = now() where sku = %s and estado = 'activo'",
+            (sku,),
+        )
+        pausado = cur.rowcount > 0
+    return fila[0], pausado
 
 
 class VentasRepository:
@@ -78,43 +120,36 @@ class VentasRepository:
         cantidad: int,
         controla_stock: bool,
         detalle_solicitud: str,
+        controla_por_sku: Optional[Dict[str, bool]] = None,
     ) -> Dict[str, Any]:
         """Cierra la venta de un producto propio en una sola transacción (ver el docstring del módulo).
 
         Lanza `StockInsuficienteError` si el producto lleva control de stock y no alcanza (no se toca
-        nada) y `VentaYaRegistradaError` si ese lead ya había cerrado."""
+        nada) y `VentaYaRegistradaError` si ese lead ya había cerrado.
+
+        `controla_por_sku` (ADR-017, pedido con varias líneas): qué productos llevan control de stock. Cada línea descuenta SUS
+        unidades. Sin él, se comporta como siempre: un producto (`sku`) y `cantidad` unidades."""
         conversacion_id, lead_id = venta["conversacion_id"], venta["lead_id"]
         with get_connection() as conn:
             with conn.cursor() as cur:
+                if controla_por_sku is None:
+                    controla_por_sku = {sku: controla_stock}
+                    lineas = [{**linea, "cantidad": linea.get("cantidad") or cantidad} for linea in lineas]
                 stock_restante: Optional[int] = None
                 pausado = False
-                if controla_stock:
-                    cur.execute(
-                        """
-                        update productos_bot set
-                            stock_ultimo = stock_ultimo - %s, stock_actualizado_en = now(), actualizado_en = now()
-                        where sku = %s and stock_ultimo >= %s
-                        returning stock_ultimo
-                        """,
-                        (cantidad, sku, cantidad),
-                    )
-                    fila = cur.fetchone()
-                    if fila is None:
-                        cur.execute("select stock_ultimo from productos_bot where sku = %s", (sku,))
-                        actual = cur.fetchone()
-                        raise StockInsuficienteError(disponible=actual[0] if actual else None)
-                    stock_restante = fila[0]
-                    if stock_restante <= 0:
-                        # Se vendió la última unidad: el producto deja de ofrecerse solo (reanudar es manual).
-                        cur.execute(
-                            "update productos_bot set estado = 'agotado', activo = false, actualizado_en = now() "
-                            "where sku = %s and estado = 'activo'",
-                            (sku,),
-                        )
-                        pausado = cur.rowcount > 0
+                for linea in lineas:
+                    if not controla_por_sku.get(linea["producto_sku"]):
+                        continue
+                    restante, se_pauso = _descontar_stock(cur, linea["producto_sku"], int(linea["cantidad"]))
+                    pausado = pausado or se_pauso
+                    if linea["producto_sku"] == sku or stock_restante is None:
+                        stock_restante = restante
 
                 # Cada línea recuerda cuántas unidades se descontaron DE VERDAD: es lo que devolverá cancelar.
-                lineas = [{**linea, "stock_descontado": cantidad if controla_stock else None} for linea in lineas]
+                lineas = [
+                    {**linea, "stock_descontado": int(linea["cantidad"]) if controla_por_sku.get(linea["producto_sku"]) else None}
+                    for linea in lineas
+                ]
                 venta_id = _insertar_venta(cur, venta, lineas)
                 if venta_id is None:
                     raise VentaYaRegistradaError(lead_id)

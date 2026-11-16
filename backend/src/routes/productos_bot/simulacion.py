@@ -44,7 +44,7 @@ from src.routes.gestion.services import ResultadoSolicitud
 from src.routes.gestion.tipos import tipo as tipo_de_solicitud
 from src.routes.leads.temperaturas import GANADO, TEMPERATURAS
 from src.routes.pedidos.services import PedidoService
-from src.routes.ventas.snapshot import armar_venta, ganancia_de
+from src.routes.ventas.snapshot import armar_venta, armar_venta_cotizada, ganancia_de
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
 from src.routes.whatsapp.tools import HerramientasVictoria
 
@@ -259,6 +259,13 @@ class LeadsEnMemoria:
     def actualizar_despacho(self, lead_id, id_pedido_local, id_pedido_rocketfy) -> None:
         self.lead.update(estado="despachado", id_pedido_local=id_pedido_local, id_pedido_rocketfy=id_pedido_rocketfy)
 
+    def guardar_precios(self, lead_id, campos) -> None:
+        # Igual que el UPDATE real (ADR-017): si cambia el total, el cliente tiene que volver a confirmar el resumen.
+        if "total" in campos and self.lead.get("total") is not None and campos["total"] is not None:
+            if Decimal(str(self.lead["total"])) != Decimal(str(campos["total"])):
+                self._reiniciar_confirmacion()
+        self.lead.update(campos)
+
 
 PREFIJO_DE_FOTO = "📷 Foto de "
 
@@ -375,11 +382,18 @@ class VentasEnEnsayo:
         self._conversaciones = conversaciones
         self.venta: Optional[Dict[str, Any]] = None
 
-    def registrar_venta_rocketfy(self, lead, producto, conversacion, entrega) -> None:
+    def registrar_venta_rocketfy(self, lead, producto, conversacion, entrega, productos=None) -> None:
         pass  # el pedido de Rocketfy ya se ve en «pedido»; la foto de la venta no se guarda en la prueba
 
-    def cerrar_manual(self, lead, producto, conversacion, entrega, controla_stock, detalle_solicitud) -> Dict[str, Any]:
-        venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", Decimal("0.00"))
+    def cerrar_manual(
+        self, lead, producto, conversacion, entrega, controla_stock, detalle_solicitud, productos=None, controla_por_sku=None
+    ) -> Dict[str, Any]:
+        if lead.get("cotizacion") and productos is not None:
+            venta, lineas = armar_venta_cotizada(
+                lead, lead["cotizacion"], productos, producto, conversacion, entrega, "por_gestionar", Decimal("0.00")
+            )
+        else:
+            venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", Decimal("0.00"))
         self.venta = {**venta, "lineas": lineas, "ganancia": ganancia_de(venta)}
         stock = producto.get("stock_ultimo")
         restante = stock - int(lead.get("cantidad") or 1) if controla_stock and stock is not None else None

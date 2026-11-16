@@ -181,6 +181,11 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Avisar a Meta de las ventas",
         "Decirle a Meta qué clics de anuncio terminaron en una compra, para que optimice los anuncios hacia quien compra.",
     ),
+    Grupo(
+        "precios",
+        "Precios, regateo y ofertas",
+        "Cómo vende Victoria cuando hay descuentos: regateo, precio por transferencia, precio por cantidad, combos y pedidos con varios productos.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -901,6 +906,106 @@ CATALOGO: Tuple[Parametro, ...] = (
         maximo=240,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
+    ),
+    # ------------------------------------------------------------ Precios (ADR-017)
+    Parametro(
+        clave="precios.varios_productos",
+        grupo="precios",
+        nombre="Pedidos con varios productos",
+        para_que_sirve=(
+            "Permite que Victoria arme un pedido con varios productos distintos (por ejemplo, el del anuncio y otro que el cliente vio "
+            "en otra publicación) y que agregue un combo a lo que ya pidió. Apagado, cada pedido lleva un solo producto (o una oferta), "
+            "como siempre. Nunca se mezclan productos de Rocketfy con productos propios en un mismo pedido."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+        sensible=True,
+        aviso="Antes de encenderlo, prueba en «Probar con Victoria» un pedido de dos productos y uno de prueba en Rocketfy (crearlo y rechazarlo).",
+    ),
+    Parametro(
+        clave="precios.regateo_estrategia",
+        grupo="precios",
+        nombre="Cómo regatea Victoria",
+        para_que_sirve=(
+            "Solo aplica a productos u ofertas que tienen regateo permitido en su ficha. «Contraoferta primero»: si el cliente pide un "
+            "precio dentro del límite, Victoria primero propone uno intermedio y, si el cliente insiste, acepta lo que pidió. «Aceptar "
+            "directo»: acepta de una lo que pida si está dentro del límite. Nunca baja de tu límite ni de tu margen mínimo."
+        ),
+        tipo=TIPO_OPCION,
+        defecto="contraoferta",
+        opciones=(
+            Opcion("contraoferta", "Contraoferta primero (recomendado)", "Ej.: producto de $50, el cliente pide $45, Victoria propone $48."),
+            Opcion("aceptar", "Aceptar directo", "Ej.: producto de $50, el cliente pide $45, Victoria acepta $45."),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.regateo_redondeo",
+        grupo="precios",
+        nombre="Redondeo de las contraofertas",
+        para_que_sirve="A qué se redondea (siempre hacia arriba) el precio que propone Victoria al regatear.",
+        tipo=TIPO_OPCION,
+        defecto="dolar",
+        opciones=(
+            Opcion("dolar", "Al dólar", "$47,50 → $48"),
+            Opcion("medio", "A medio dólar", "$47,20 → $47,50"),
+            Opcion("centavo", "Sin redondear", "$47,25 → $47,25"),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.regateo_rondas",
+        grupo="precios",
+        nombre="Veces que Victoria cede al regatear",
+        para_que_sirve=(
+            "Cuántas contraofertas hace Victoria como máximo en un pedido. Después se mantiene firme en la última con amabilidad."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=5,
+        unidad="veces",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.mencionar_transferencia",
+        grupo="precios",
+        nombre="Victoria ofrece el precio por transferencia",
+        para_que_sirve=(
+            "Si un producto tiene precio especial por transferencia, Victoria lo menciona sola cuando se habla del pago (para eso existe "
+            "el incentivo). Apagado, solo lo dice si el cliente pregunta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.mencionar_por_cantidad",
+        grupo="precios",
+        nombre="Victoria ofrece el precio por cantidad",
+        para_que_sirve=(
+            "Si un producto tiene precio por cantidad («2 por $45»), Victoria lo menciona una vez, cuando el cliente ya eligió el producto. "
+            "Apagado, solo lo dice si el cliente pregunta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.oferta_terminada",
+        grupo="precios",
+        nombre="Si la oferta del anuncio ya terminó",
+        para_que_sirve=(
+            "Qué hace Victoria cuando un cliente llega por un anuncio cuya oferta venció, se pausó o agotó su cupo."
+        ),
+        tipo=TIPO_OPCION,
+        defecto="precio_normal",
+        opciones=(
+            Opcion("precio_normal", "Explicar y ofrecer el precio normal (recomendado)", "La venta sigue, sin la promoción."),
+            Opcion("dueno", "Pasarte la conversación", "Tú decides qué ofrecerle."),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
         clave="meta.activo",

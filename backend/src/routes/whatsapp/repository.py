@@ -1,5 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import List, Optional
+
+from psycopg2.extras import Json
 
 from src.config.database import get_connection
 from src.routes.leads.sql import fijar_temperatura
@@ -20,6 +23,8 @@ _COLUMNAS_PRODUCTO_BOT = (
     "metodos_pago_aceptados, preguntas_frecuentes, temas_no_responder, "
     "max_unidades_por_pedido, activo, imagen_url, estado, proveedor_id, categoria_id, "
     "costo_rocketfy, costo_propio, controla_stock, stock_ultimo, envio_incluido, costo_flete_estimado, "
+    # ADR-017: reglas de precio del producto (todas nulas = se vende como siempre).
+    "transferencia_tipo, transferencia_valor, regateo_tipo, regateo_valor, envio_gratis_desde_unidades, envio_gratis_desde_monto, "
     "creado_en, actualizado_en"
 )
 _SELECT_PRODUCTO_BOT = (
@@ -35,7 +40,9 @@ _COLUMNAS_LEAD = (
     "entrega_opcion_id, entrega_nombre, entrega_tipo, costo_envio, "
     "captura_pago_url, estado, id_pedido_local, id_pedido_rocketfy, creado_en, actualizado_en, "
     "temperatura, temperatura_motivo, temperatura_origen, temperatura_en, temperatura_fijada_hasta, motivo_perdida, "
-    "cerrado_en, origen, id_anuncio, ctwa_clid, datos_confirmacion_pedida_en, datos_confirmados_en"
+    "cerrado_en, origen, id_anuncio, ctwa_clid, datos_confirmacion_pedida_en, datos_confirmados_en, "
+    # ADR-017: líneas del pedido, la cotización del código y el estado del regateo.
+    "lineas, cotizacion, total_transferencia, regateo"
 )
 
 # Si cambia cualquier dato que aparece en el resumen de confirmación, el cliente tiene que volver a confirmar.
@@ -871,6 +878,37 @@ class LeadRepository:
                     where id = %s
                     """,
                     (lead_id,),
+                )
+
+    # Columnas que escribe la cotización (ADR-017). Lista blanca: ningún nombre de columna llega desde afuera.
+    _CAMPOS_DE_PRECIO = (
+        "lineas", "cotizacion", "regateo", "subtotal", "total", "total_transferencia", "costo_envio",
+        "producto_sku", "producto_nombre", "producto_variante", "cantidad",
+    )
+    _CAMPOS_JSON = ("lineas", "cotizacion", "regateo")
+
+    @staticmethod
+    def guardar_precios(lead_id: int, campos: dict) -> None:
+        """Guarda lo que calculó la cotización (y, en un pedido con varias líneas, el resumen del lead). Si el total cambia, el
+        cliente tiene que volver a confirmar el resumen: lo que aceptó ya no es lo que pagará."""
+        validos = {c: v for c, v in campos.items() if c in LeadRepository._CAMPOS_DE_PRECIO}
+        if not validos:
+            return
+        valores = [Json(v) if c in LeadRepository._CAMPOS_JSON and v is not None else v for c, v in validos.items()]
+        asignaciones = ", ".join(f"{c} = %s" for c in validos)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select total from leads where id = %s for update", (lead_id,))
+                actual = cur.fetchone()
+                cambio_total = (
+                    "total" in validos and actual is not None and actual[0] is not None and validos["total"] is not None
+                    and Decimal(str(actual[0])) != Decimal(str(validos["total"]))
+                )
+                cur.execute(
+                    f"update leads set {asignaciones}, "
+                    f"{_BORRAR_CONFIRMACION if cambio_total else 'datos_confirmados_en = datos_confirmados_en'}, "
+                    "actualizado_en = now() where id = %s",
+                    (*valores, lead_id),
                 )
 
     @staticmethod

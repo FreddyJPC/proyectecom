@@ -68,6 +68,9 @@ class FakeLeadRepository:
         if metodo_pago == "transferencia":
             lead["estado"] = "esperando_pago"
 
+    def guardar_precios(self, lead_id, campos):
+        self.leads.setdefault(lead_id, {}).update(campos)
+
     def actualizar_despacho(self, lead_id, id_pedido_local, id_pedido_rocketfy):
         lead = self.leads.setdefault(lead_id, {})
         lead["estado"] = "despachado"
