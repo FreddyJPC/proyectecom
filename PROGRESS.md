@@ -498,6 +498,39 @@ portafolio dueño**, comparte la campaña de la casa y tiene **0 datasets**; no 
 dentro del portafolio AzoShop.
 **Estado:** plan guardado; Fase 0 (Meta) a cargo de Freddy; Fase 1 (código) construida y probada, sin desplegar (entrada 0.0.132). Nada enviado a Meta.
 
+### ADR-017 — Precios, regateo, ofertas y anuncios: tú pones las reglas, el código calcula, Victoria conversa
+**Fecha:** 2026-11-16 · **Plan completo:** `docs/PLAN_MODULO_ANUNCIOS.md` (v2.0) · **Aprobado por Freddy** («me quedo con tus recomendaciones»).
+**Contexto:** Victoria vendía un solo producto a precio de catálogo y tenía prohibido dar descuentos (#57). Freddy pidió control completo
+por producto: descuentos por % o $, regateo con límites, envío gratis, precio distinto por transferencia, precio por cantidad, combos, varios
+productos en un pedido y ofertas con fechas, sin romper lo que ya funciona.
+**Reglas establecidas (si un día se quiere cambiar una, empezar aquí):**
+1. **El código calcula todo precio; la IA nunca.** Victoria recibe una **cotización** armada por el código (`Decimal`) y comunica ese total.
+   Para regatear usa `negociar_precio`, y el código decide. *Por qué:* un modelo de lenguaje puede equivocarse con números o ceder de más.
+2. **El piso manda sobre todo:** ningún descuento, regateo ni oferta deja la venta bajo el **precio mínimo** (costo + envío + margen mínimo de
+   Ajustes, con la calculadora existente). Una oferta puede bajar de ahí solo si el dueño marca a propósito «vender bajo el margen».
+   *Por qué:* proteger la ganancia aunque el cliente insista.
+3. **Jerarquía:** oferta > producto > negocio (lo más específico manda).
+4. **Todo apagado de fábrica:** sin reglas configuradas, el total es exactamente el de antes (lo comprueba un test).
+5. **P1 — Regateo:** Victoria **contraoferta una vez** (punto medio entre el precio y lo que pide el cliente, redondeado) y si el cliente
+   insiste acepta lo que pide **si está dentro del límite**; bajo el límite, ofrece el mínimo permitido. Límite por producto en % o en $.
+6. **P2 — No se suman** regateo y precio por transferencia: se aplica el mejor para el cliente, nunca los dos.
+7. **P3 — Victoria menciona sola el precio por transferencia** cuando se habla del pago (para eso existe el incentivo).
+8. **P4 — Victoria menciona sola el precio por cantidad** una vez, cuando el cliente ya eligió producto.
+9. **P5 — No se mezclan** productos de Rocketfy y productos propios en un mismo pedido (se despachan por caminos distintos): pasa al dueño.
+10. **P6 — Una oferta la ve, por defecto, solo quien llega por su anuncio**; el dueño puede hacerla pública por oferta.
+11. **P7 — Los combos no se regatean** por defecto (el combo ya es el descuento); se puede permitir por oferta.
+12. **Oferta vencida o sin cupo:** Victoria dice con naturalidad que terminó y ofrece el precio normal.
+13. **D3 — Anuncios:** las alertas primero **solo avisan**; la pausa automática (solo por hechos: sin stock u oferta vencida) es un interruptor
+    apagado que se enciende tras ~2 semanas. El sistema **nunca reactiva** un anuncio, **nunca cambia presupuestos** ni crea anuncios.
+14. **D4 — No se envía** el teléfono cifrado a Meta para ventas sin clic (por ahora; primero medir #77).
+15. **D5 — Un solo token de Meta** (WhatsApp, ventas y anuncios): el nivel sin revisión permite un solo usuario del sistema.
+16. **D6 — Umbrales de alertas** = parámetros, con valores definidos con los números del piloto.
+17. **Transferencia confirmada = pedido prepagado** en Rocketfy (`not_COD = 1`): el repartidor no cobra nada (hallazgo H0, 2026-11-16).
+18. **Cada descuento queda guardado con su motivo** (oferta, escala, transferencia, regateo) en el lead y en la venta, para medir si conviene.
+**Alternativas descartadas:** que Victoria conozca el precio mínimo y decida (cedería todo de una vez); sumar descuentos (regala margen);
+reglas de descuento como texto en las instrucciones (no se pueden validar); pausar anuncios por rendimiento (riesgo de apagar uno que vende).
+**Estado:** en desarrollo (pendiente #81).
+
 ---
 
 ## 3. Plan de Desarrollo y Checklist de Progreso

@@ -56,6 +56,7 @@ from src.routes.imagenes.repository import ImagenRepository
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
 from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
 from src.routes.ventas.servicio import VentasService
+from src.routes.precios.pago import pedido_prepagado
 
 from .ficha import formatear_ficha_producto
 from .minimos import extraer_minimo_rocketfy
@@ -1110,7 +1111,10 @@ class HerramientasVictoria:
             provincia=lead["provincia"],
             total=lead["total"],
             lineas=[LineaPedidoDTO(sku=lead["producto_sku"], nombre=nombre_linea, cantidad=cantidad)],
-            no_contra_entrega=False,
+            # Una transferencia ya confirmada por el dueño es un pedido PREPAGADO (`not_COD = 1`): el repartidor no cobra
+            # nada. Antes iba siempre como contra entrega y el cliente pagaba dos veces (hallazgo H0, ADR-017). Llegar aquí con
+            # transferencia sin pago confirmado es imposible (se frena arriba), pero se exige igual para no confiar en el orden.
+            no_contra_entrega=pedido_prepagado(lead),
         )
 
         try:

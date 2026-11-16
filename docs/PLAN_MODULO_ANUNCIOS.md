@@ -283,9 +283,11 @@ Reglas de seguridad:
 
 Cada fase se entrega con tests, documentación, revisión de pantalla (móvil, accesibilidad) y despliegue (migración primero).
 
-## 9. Decisiones que necesito de Freddy
+## 9. Decisiones (APROBADAS por Freddy el 2026-11-16: todas las recomendaciones)
 
-| # | Decisión | Mi recomendación |
+> Las reglas quedan registradas como **ADR-017** en `PROGRESS.md` (sección 2), con su porqué. Para cambiar una regla, empezar ahí.
+
+| # | Decisión | Lo decidido |
 |---|---|---|
 | P1 | Cómo regatea Victoria por defecto | **Contraoferta una vez** (punto medio) y luego acepta lo que pida si está dentro del límite |
 | P2 | ¿Se suman regateo y precio por transferencia? | **No**: se aplica el mejor para el cliente |

@@ -648,6 +648,38 @@ class TestCerrarVenta:
         assert leads.leads[1]["id_pedido_rocketfy"] == 5001
 
     @responses.activate
+    def test_transferencia_confirmada_va_a_rocketfy_como_prepagada(self):
+        # Hallazgo H0 (ADR-017): con el pago ya confirmado, el repartidor NO debe cobrar el total otra vez.
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": 5010, "products_stock": [{"id": 1, "stock": 10}]}, status=200,
+        )
+        responses.add(responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 1, "code": 200, "message": "ok"}, status=200)
+        lead = dict(LEAD_COMPLETO_CONTRAENTREGA, metodo_pago="transferencia", estado_pago="confirmado")
+        leads = FakeLeadRepository(leads={1: lead})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=FakeProductoBotRepository({"DEMO-1": _producto()}))
+
+        resultado = herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_pp")
+
+        assert "pedido confirmado" in resultado.contenido.lower()
+        enviado = json.loads(responses.calls[0].request.body)
+        assert enviado["not_COD"] == 1
+
+    @responses.activate
+    def test_contraentrega_va_a_rocketfy_para_cobrar_al_entregar(self):
+        responses.add(
+            responses.POST, f"{BASE_URL}/orders/create",
+            json={"ok": 1, "code": 200, "message": "ok", "id": 5011, "products_stock": [{"id": 1, "stock": 10}]}, status=200,
+        )
+        responses.add(responses.POST, f"{BASE_URL}/orders/confirm", json={"ok": 1, "code": 200, "message": "ok"}, status=200)
+        leads = FakeLeadRepository(leads={1: dict(LEAD_COMPLETO_CONTRAENTREGA)})
+        herramientas = _herramientas(lead_repo=leads, producto_repo=FakeProductoBotRepository({"DEMO-1": _producto()}))
+
+        herramientas.ejecutar("cerrar_venta", lead_id=1, conversacion_id=1, entrada={}, id_llamada="toolu_ce")
+
+        assert json.loads(responses.calls[0].request.body)["not_COD"] == 0
+
+    @responses.activate
     def test_variante_se_incluye_en_el_nombre_de_la_linea_enviada_a_rocketfy(self):
         responses.add(
             responses.POST,
