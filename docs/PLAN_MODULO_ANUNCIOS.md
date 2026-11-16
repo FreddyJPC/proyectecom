@@ -5,7 +5,8 @@
 > envío gratis, **precio distinto por transferencia**, combos, «si llevo 2…», varios productos en un pedido, ofertas con
 > fechas; (3) sin romper lo que ya funciona; luz verde para cambiar base, lógica y flujos.
 > Análisis hecho leyendo el código, la base, los permisos reales de la app en Meta (conector Devtools) y la documentación
-> oficial de Meta (leída el 2026-11-16). **Nada de este plan está construido todavía.** Pendiente #81.
+> oficial de Meta (leída el 2026-11-16). **Estado (2026-11-16, entrada 0.0.138): F0a y F1–F8 CONSTRUIDAS, SIN DESPLEGAR.**
+> Falta F0b (configurar Meta) y F9 (opcional). Lo construido y las pruebas pendientes: §12. Pendientes #81 y #82.
 
 ## 1. Para qué sirve (en llano)
 
@@ -316,3 +317,42 @@ Cada fase se entrega con tests, documentación, revisión de pantalla (móvil, a
 - **#81** este módulo (F0a–F9).
 - **#57** (descuentos y combos): se resuelve con F2 y F4.
 - **#77** (sin clic) y **#79** (7 días): actualizados con la documentación (§6.5).
+- **#82** pruebas pendientes de este módulo (§12).
+
+## 12. Lo construido y las pruebas que faltan (2026-11-16)
+
+**Construido** (detalle en la entrada 0.0.138 de `PROGRESS.md`; reglas de detalle en ADR-017, 19–28):
+
+| Fase | Estado | Notas / diferencias con el diseño |
+|---|---|---|
+| F0a | Hecha | Transferencia confirmada → `no_contra_entrega=True` (`not_COD=1`). Falta el pedido de prueba |
+| F0b | **Pendiente (Freddy + Claude)** | Caso de uso de Marketing, permisos del token, cuenta publicitaria, `WHATSAPP_WABA_ID` |
+| F1 | Hecha | Las líneas del pedido se guardan en `leads.lineas` (JSON) en vez de una tabla `lead_items`: el lead se guarda entero en cada paso y así no hace falta sincronizar dos tablas |
+| F2 | Hecha | Ficha → «Precios y descuentos». Regateo con `negociar_precio` |
+| F3 | Hecha | Apagada de fábrica (`precios.varios_productos`). El pedido de Rocketfy con varias líneas falta probarlo |
+| F4 | Hecha | Pantalla «Ofertas y combos»; anuncio → oferta desde la oferta, desde la lista de anuncios y desde el tablero |
+| F5 | Hecha | Lectura cada hora, apagada (`meta.anuncios_activo`). Un anuncio «Sin vincular» del tablero se vincula ahí mismo |
+| F6 | Hecha | Tablero «Gasto y rendimiento» en Anuncios. Resumen diario por Telegram apagado |
+| F7 | Hecha | Alertas R1–R9; los umbrales de gasto vienen en 0 (apagados) hasta tener números |
+| F8 | Hecha | Pausa automática apagada; botón «Pausar» manual con confirmación |
+| F9 | No empezada | Opcional, depende de datos reales (#77, #79) |
+
+**Pruebas que faltan (en este orden; pedido de Freddy: hacerlas después del desarrollo).** Ninguna se ha hecho con la IA real,
+con Rocketfy real ni con Meta real.
+
+1. **Desplegar** (con confirmación de Freddy): migraciones 033 y 034 en Supabase → PR → fusión → Railway y Vercel → `/health`.
+2. **Pedido de prueba en Rocketfy con transferencia confirmada** (lo más importante): que llegue como prepagado y el repartidor no cobre.
+   Luego, uno contra entrega, para confirmar que sigue igual.
+3. **Simulación con la IA real** (Catálogo → ficha → «Probar con Victoria»), producto con reglas puestas:
+   - regateo: pide algo dentro del límite (contraoferta y luego acepta), pide menos del límite (ofrece el mínimo), insiste muchas veces (se queda firme);
+   - pago: Victoria menciona sola el precio por transferencia; regateo + transferencia no se suman;
+   - «si llevo 2»: menciona el precio por cantidad una vez; envío gratis desde N unidades;
+   - combo que llega por su anuncio; oferta vencida o sin cupo; oferta pública vista por alguien sin anuncio;
+   - con «Pedidos con varios productos» encendido: dos productos de Rocketfy en un pedido, quitar uno, y la mezcla Rocketfy + propio (debe pasar al dueño).
+4. **Pedido de prueba en Rocketfy con dos productos** (si se va a usar F3).
+5. **Venta de un producto propio con descuento:** que «Por gestionar» y la venta guarden el detalle (precio de lista, descuento y motivo).
+6. **Ver en la app real, con el login de Freddy:** «Precios y descuentos», «Ofertas y combos», el vínculo anuncio → oferta y el tablero.
+7. **F0b en Meta** y escribir la cuenta publicitaria en Conexión con Meta; encender «Leer mis anuncios de Meta», pulsar «Leer ahora» y comparar
+   el gasto con el Administrador de anuncios.
+8. **Pausar un anuncio de prueba** desde el tablero y comprobar en Meta que quedó pausado (y que el sistema no lo reactiva).
+9. **Tras ~2 semanas de piloto:** poner los umbrales de gasto (D6) y decidir si se enciende la pausa automática (D3).

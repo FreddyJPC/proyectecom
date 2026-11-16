@@ -97,7 +97,7 @@ export default function AnunciosPage() {
 
       <ResumenOrigenesCard resumen={resumen.data} cargando={resumen.cargando} />
 
-      <RendimientoMeta />
+      <RendimientoMeta productos={productos.data ?? []} ofertas={ofertas.data?.ofertas ?? []} onVinculado={recargarTodo} />
 
       <SectionCard
         titulo="Tus anuncios"

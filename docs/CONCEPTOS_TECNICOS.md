@@ -1649,3 +1649,57 @@ anuncio» está en Control → Parámetros. Plan completo: `docs/PLAN_META_ADS.m
 
 **El botón «Preparar Meta» (Parámetros → Conexión con Meta).** Para recibir las ventas, Meta necesita un *dataset* (un buzón asociado a tu cuenta de WhatsApp). Se pide con el token, que vive solo en el servidor. En lugar de que alguien copie el token, el botón le pide a Meta el dataset desde el propio servidor y guarda su número. Es seguro repetirlo: según la documentación de Meta, si el dataset ya existe devuelve el mismo. Si algo falla, la pantalla muestra el motivo que dio Meta (sin el token).
 
+## 54. Precios, regateo y ofertas: tú pones las reglas, el código calcula, Victoria conversa
+
+**Para qué sirve.** Para vender como un negocio real (descuento por transferencia, «si llevas 2…», regateo, combos, promos con fecha)
+**sin regalar margen** y sin que la IA invente un precio. Reglas completas y su porqué: **ADR-017** en `PROGRESS.md`; diseño en
+`docs/PLAN_MODULO_ANUNCIOS.md`.
+
+**La cotización.** Cada vez que el pedido cambia (producto, cantidad, forma de pago, entrega, rebaja), el código arma una
+**cotización**: cada línea con su precio de lista, el precio que paga, el envío y el total, todo con `Decimal`. Victoria solo dice ese total.
+Queda guardada en el lead (`leads.cotizacion`) y, al cerrar, en la venta (`ventas.descuentos`, con el **motivo** de cada rebaja), para medir
+si los descuentos convienen. Código: `backend/src/routes/precios/` (`reglas.py`, `cotizacion.py`, `negociacion.py`).
+
+**El piso de margen.** Es el precio más bajo al que conviene vender una unidad:
+`(costo + envío estimado + gastos fijos) ÷ (1 − margen mínimo − otros %)`, con los valores de Catálogo → Ajustes de precios. **Ninguna** rebaja
+baja de ahí. Si al guardar una regla u oferta algo queda debajo, el panel avisa y pide confirmar «a propósito».
+
+**Tres niveles, gana el más específico:** **oferta** > **producto** (ficha → «Precios y descuentos») > **negocio** (Ofertas y combos →
+«Descuento por transferencia para todos»). Sin nada configurado, el total es **exactamente el de antes** (lo comprueba un test).
+
+**Cada regla, en una línea:**
+- **Precio por transferencia:** precio fijo, porcentaje o dólares menos por unidad. Victoria lo menciona sola cuando se habla del pago.
+- **Precio por cantidad:** «2 por $45». Victoria lo menciona una vez, cuando el cliente ya eligió producto.
+- **Regateo:** límite en % o en $ por unidad. Lo decide el código con la herramienta `negociar_precio`: la primera vez **contraoferta**
+  (punto medio, redondeado hacia arriba); si el cliente insiste y está dentro del límite, acepta; si pide menos que el límite, ofrece el mínimo.
+- **No se suman** regateo y transferencia: el cliente paga el menor de los dos.
+- **Envío gratis** desde cierta cantidad de unidades o cierto monto.
+- **Ofertas y combos:** varios productos a un precio, con fechas, cupo y veces por cliente. Por defecto la ve **solo quien llega por su anuncio**
+  y **no se regatea**. Si terminó o no hay cupo, Victoria lo explica y ofrece el precio normal.
+- **Varios productos en un pedido:** apagado de fábrica (parámetro). Nunca se mezclan productos de Rocketfy con productos propios.
+
+**Transferencia confirmada = pedido prepagado.** Si el dueño confirmó la transferencia, el pedido va a Rocketfy como **no contra entrega**
+(`not_COD = 1`): el repartidor no cobra nada. Antes iba como contra entrega por el total (se habría cobrado dos veces).
+
+## 55. Anuncios de Meta: gasto, ganancia neta y alertas
+
+**Para qué sirve.** Saber si cada anuncio **gana o pierde plata** y enterarte a tiempo cuando algo va mal (anuncio activo de un producto
+agotado, oferta vencida, gasto sin ventas), sin entrar al Administrador de anuncios.
+
+**Cómo funciona.** Un trabajo automático (`jobs/meta_anuncios`, cada hora, **apagado de fábrica**: «Leer mis anuncios de Meta») lee de la
+API de Marketing de Meta los anuncios de tu cuenta publicitaria y su gasto por día (`meta_anuncios`, `meta_metricas_diarias`). El tablero de
+Anuncios → «Gasto y rendimiento» junta ese gasto con **tus** ventas: costo por venta, retorno y **ganancia neta** (lo que dejan las ventas menos
+costos y menos lo gastado en el anuncio).
+
+**Alertas (R1–R9).** Por ejemplo: anuncio activo de algo agotado (R1), oferta terminada (R2), poco stock (R3), gasto sin ventas (R4), conversación
+cara (R5), pierde plata por venta (R6), anuncio sin producto ni oferta (R7), rechazado por Meta (R8), demasiadas ventas con regateo (R9). Cada alerta
+se avisa **una vez al día** como máximo (tabla `meta_alertas`). Los umbrales son parámetros (en 0 = apagados hasta tener números del piloto).
+
+**Pausar.** Desde el panel puedes pausar un anuncio con un botón (pide confirmar). La **pausa automática** solo actúa por **hechos** (sin stock u
+oferta terminada), viene **apagada**, hace como máximo 10 pausas al día y queda anotada (`meta_acciones`). El sistema **nunca** reactiva un
+anuncio, **nunca** cambia presupuestos ni crea anuncios. Si Meta no confirma una pausa, se anota como «dudosa» y se vuelve a leer el estado antes
+de intentar otra cosa.
+
+**Qué necesita.** El mismo token del aviso de ventas (`META_CAPI_TOKEN`, regla D5: un solo usuario del sistema) con los permisos `ads_read` y
+`ads_management`, el caso de uso de Marketing en la app de Meta y la cuenta publicitaria asignada al usuario del sistema. La cuenta se escribe en
+Parámetros → Conexión con Meta (respaldo: `META_AD_ACCOUNT_ID` en Railway).

@@ -29,6 +29,10 @@ import { useApi } from "@/hooks/use-api";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import type { AnuncioMeta, TableroAnuncios } from "@/types/meta";
+import type { Oferta } from "@/types/precios";
+import type { ProductoBotResumen } from "@/types/producto-bot";
+
+import { VincularAnuncioDialog } from "./vincular-dialog";
 
 const DIAS: Chip[] = [
   { value: "1", label: "Hoy" },
@@ -44,16 +48,40 @@ function estadoInfo(estado: string | null): { label: string; variant: "success" 
   return { label: "Pausado", variant: "neutral" };
 }
 
-function vinculo(a: AnuncioMeta) {
+type Vincular = { productos: ProductoBotResumen[]; ofertas: Oferta[]; onVinculado: () => void };
+
+/** Qué vende el anuncio. Si no vende nada, se puede vincular ahí mismo (plan F5: vincular desde la lista de Meta). */
+function vinculo(a: AnuncioMeta, v: Vincular) {
   if (a.ofertaId !== null) return <Link href={`/ofertas/${a.ofertaId}`} className="text-primary underline-offset-2 hover:underline">{a.ofertaNombre}</Link>;
   if (a.productoSku) return <Link href={`/catalogo/producto/${encodeURIComponent(a.productoSku)}`} className="text-primary underline-offset-2 hover:underline">{a.productoNombre}</Link>;
-  return <span className="text-status-warning-ink">Sin vincular</span>;
+  return (
+    <VincularAnuncioDialog
+      idAnuncio={a.idAnuncio}
+      nombreActual={a.nombre}
+      productos={v.productos}
+      ofertas={v.ofertas}
+      onVinculado={v.onVinculado}
+      trigger={
+        <button type="button" className="inline-flex min-h-10 items-center font-medium text-status-warning-ink underline underline-offset-2">
+          Sin vincular: vincular
+        </button>
+      }
+    />
+  );
 }
 
 /** Gasto y resultado de cada anuncio según Meta + lo que pasó en tu negocio (ADR-017). Solo si «Leer mis anuncios de Meta» está encendido. */
-export function RendimientoMeta() {
+export function RendimientoMeta({ productos = [], ofertas = [], onVinculado }: { productos?: ProductoBotResumen[]; ofertas?: Oferta[]; onVinculado?: () => void }) {
   const [dias, setDias] = useState("7");
   const tablero = useApi<TableroAnuncios>(`/meta/anuncios?dias=${dias}`);
+  const vincular: Vincular = {
+    productos,
+    ofertas,
+    onVinculado: () => {
+      tablero.recargar();
+      onVinculado?.();
+    },
+  };
   const [leyendo, setLeyendo] = useState(false);
   const t = tablero.data;
 
@@ -169,7 +197,7 @@ export function RendimientoMeta() {
                     <p className="min-w-0 text-sm font-medium break-words">{a.nombre ?? a.idAnuncio}</p>
                     <StatusBadge {...estadoInfo(a.estadoEfectivo)} />
                   </div>
-                  <p className="text-xs text-muted-foreground">Vende: {vinculo(a)}</p>
+                  <p className="text-xs text-muted-foreground">Vende: {vinculo(a, vincular)}</p>
                   <dl className="grid grid-cols-3 gap-2 text-xs">
                     <div>
                       <dt className="text-muted-foreground">Gasto</dt>
@@ -212,7 +240,7 @@ export function RendimientoMeta() {
                         <p className="truncate font-medium">{a.nombre ?? a.idAnuncio}</p>
                         <StatusBadge {...estadoInfo(a.estadoEfectivo)} className="mt-1" />
                       </TableCell>
-                      <TableCell className="max-w-44 truncate">{vinculo(a)}</TableCell>
+                      <TableCell className="max-w-44 truncate">{vinculo(a, vincular)}</TableCell>
                       <TableCell className="tabular text-right">{formatMoney(a.gasto)}</TableCell>
                       <TableCell className="tabular text-right">{a.conversacionesMeta}</TableCell>
                       <TableCell className="tabular text-right">

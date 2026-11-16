@@ -15,7 +15,7 @@ import type { VinculoAnuncio } from "@/types/anuncios";
 import type { Oferta } from "@/types/precios";
 import type { ProductoBotResumen } from "@/types/producto-bot";
 
-/** Vincula un anuncio con un producto. Sirve para los anuncios que ya llegaron (el ID viene dado) y para uno NUEVO que aún
+/** Vincula un anuncio con un producto o con una oferta (ADR-017). Sirve para los anuncios que ya llegaron (el ID viene dado) y para uno NUEVO que aún
  * no ha traído a nadie (se escribe el ID que muestra el Administrador de anuncios de Meta). */
 export function VincularAnuncioDialog({
   trigger,
