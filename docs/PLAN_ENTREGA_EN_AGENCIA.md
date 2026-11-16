@@ -4,6 +4,48 @@
 > cliente retire con seguridad y a su hora, en vez de a su casa (direcciones difíciles, nadie en casa). Si el cliente prefiere su casa,
 > se sigue el flujo de siempre. Regla de oro: **Victoria no inventa agencias ni datos; si algo no lo puede controlar, pasa a GESTIÓN.**
 > **Nada construido todavía.** Pendiente #83.
+>
+> **Decisión de Freddy (2026-11-16):** se hace primero la **versión 1** (§0): Victoria ofrece la agencia, y si el cliente la quiere,
+> el dueño define la agencia en GESTIÓN. El catálogo automático de agencias (§3 en adelante) queda como **versión 2**, para el futuro.
+
+## 0. Versión 1: Victoria ofrece la agencia y el dueño la define
+
+**Revisión del flujo actual (2026-11-16):**
+
+| Qué | Cómo está hoy | Hueco |
+|---|---|---|
+| Datos que pide Victoria | nombre, dirección, cantón, provincia (+ producto, entrega, pago). El teléfono sale de WhatsApp | **No pide referencia** («frente a…», «casa esquinera») |
+| Datos que recibe Rocketfy | todos los obligatorios (`name`, `phone`, `address`, `city`, `province`, `total`, `order_details`) | `address_2` (referencia) y `carrier_observations` (indicaciones al repartidor) van **vacíos**; las coordenadas de una ubicación 📍 no se mandan (Victoria la pega como texto en la dirección) |
+| Pasar a una persona | `escalar_a_humano` → estado «escalada» + Telegram; Victoria se despide | El motivo es texto libre; no hay un aviso claro de «falta la agencia» |
+| Lo que hace el dueño en el panel | Escribe al cliente, «Tomar la conversación», «Que Victoria continúe» (con nota y confirmar pago) | **No puede corregir la dirección del pedido**: los datos de envío se ven pero no se editan. Solo podría dictárselos a Victoria en la nota (ella los copiaría: riesgo de error) |
+| Botón «Crear pedido» de la conversación | Abre el formulario manual con los datos | **Riesgo de pedido duplicado:** ese pedido no queda unido al lead; si después se devuelve la conversación a Victoria, ella podría crear otro |
+| Estado 23 de Rocketfy «Recogida en Agencia» | Llega por el webhook y se guarda como cualquier estado | Nadie se entera de que un paquete espera retiro (si no lo retiran, vuelve y se pierde el flete) |
+
+**Flujo propuesto (versión 1):**
+
+1. **Victoria ofrece la agencia una sola vez**, cuando ya sabe la ciudad (texto editable como parámetro, interruptor **apagado** de fábrica;
+   solo para productos que van por Rocketfy).
+2. **Prefiere su casa** → flujo de siempre, y ahora Victoria **pide también una referencia** (va a `address_2`).
+3. **Quiere agencia** (lo diga como lo diga: «sí, por el centro», «la de Urdesa», manda un enlace, una foto o su ubicación) → Victoria
+   anota «entrega en agencia» y **lo que dijo el cliente, tal cual**, sin confirmar ninguna agencia ni prometer nada. **Sigue tomando el
+   resto** (producto, nombre, ciudad, provincia, forma de pago).
+4. **Cuando ya tiene todo lo demás**, el **código** (no Victoria) pasa la conversación a gestión: estado «escalada», aviso por Telegram
+   «Falta definir la agencia de retiro — el cliente dijo: «…»». Victoria le dice al cliente que en un momento le confirman la agencia exacta.
+5. **Tú en el panel:** ves un aviso «Falta definir la agencia» con lo que dijo el cliente. Conversas con él si hace falta. En una tarjeta
+   nueva **«Datos de envío»** (editable) escribes la dirección de la agencia, la referencia y las indicaciones para el repartidor (viene
+   propuesta: «RETIRO EN AGENCIA SERVIENTREGA … — el cliente retira con cédula»). El código valida ciudad y provincia al guardar.
+6. **Pulsas «Que Victoria continúe»** (ya existe) → Victoria le muestra al cliente el **resumen con la agencia**, el cliente confirma y
+   ella cierra la venta: el pedido va a Rocketfy con la dirección de la agencia, la referencia y las indicaciones.
+
+**Arreglos que van con la versión 1:**
+- Referencia e indicaciones guardadas en el lead y enviadas a Rocketfy; coordenadas de la ubicación 📍 también.
+- Si el dueño cambia los datos de envío después de que el cliente confirmó, la confirmación se borra (el cliente vuelve a confirmar).
+- El botón «Crear pedido» de la conversación deja el pedido **unido al lead**, y Victoria no puede crear otro (evita duplicados).
+- Aviso por Telegram cuando Rocketfy marca un pedido como **«Recogida en Agencia»** (estado 23), para recordarle al cliente que lo retire.
+
+**Antes de usarlo con clientes:** un pedido de prueba con la dirección de una agencia y la indicación de retiro, y preguntar a Rocketfy si
+así basta (B1) y si cambia el precio (B2).
+
 
 ## 1. Para qué sirve (en llano)
 
