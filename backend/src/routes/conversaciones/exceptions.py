@@ -21,3 +21,15 @@ class SinPedidoEnCursoError(Exception):
 
 class ArchivoNoDisponibleError(Exception):
     """El mensaje no tiene archivo, o Meta ya no lo entrega."""
+
+
+class PedidoYaCerradoError(Exception):
+    """Se quiso cambiar los datos de envío de un pedido que ya se creó o se pasó al dueño: ya no tiene efecto."""
+
+
+class DatosEnvioInvalidosError(ValueError):
+    """La ciudad o la provincia no coinciden con el catálogo de entregas. `sugerencias`: nombres parecidos."""
+
+    def __init__(self, mensaje: str, sugerencias=None):
+        super().__init__(mensaje)
+        self.sugerencias = list(sugerencias or [])

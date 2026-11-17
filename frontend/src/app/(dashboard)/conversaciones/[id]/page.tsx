@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, Bot, CircleSlash, Clock, Info, Loader2, NotebookPen, Package, Play, SendHorizontal, UserRound } from "lucide-react";
+import { Banknote, Bot, CircleSlash, Clock, Info, Loader2, MapPin, NotebookPen, Package, PencilLine, Play, SendHorizontal, TriangleAlert, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
@@ -23,6 +23,7 @@ import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion
 
 import { ArchivoDelMensaje } from "./archivo-del-mensaje";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
+import { DatosEnvioDialog } from "./datos-envio-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
 const REFRESCO_MS = 15_000;
@@ -106,7 +107,9 @@ function PanelDatos({
   guardandoNota,
   notaCambiada,
   telefono,
+  onDatosGuardados,
 }: {
+  onDatosGuardados: () => void;
   lead: LeadConversacion | null;
   conversacion: ConversacionDetalleCompleto["conversacion"];
   nota: string;
@@ -127,6 +130,12 @@ function PanelDatos({
   if (lead?.productoSku) paramsPedido.set("productoSku", lead.productoSku);
   if (lead?.productoNombre) paramsPedido.set("productoNombre", lead.productoNombre);
   if (lead?.total) paramsPedido.set("total", lead.total);
+  if (lead?.referencia) paramsPedido.set("direccion2", lead.referencia);
+  if (lead?.indicacionesEntrega) paramsPedido.set("observaciones", lead.indicacionesEntrega);
+  // El pedido manual queda unido a esta venta: Victoria ya no podrá crear otro (evita duplicados).
+  paramsPedido.set("conversacionId", String(conversacion.id));
+  const puedeEditarEnvio = Boolean(lead) && !["despachado", "por_gestionar", "cancelado"].includes(lead?.estado ?? "");
+  const agenciaPendiente = lead?.tipoEntrega === "agencia" && !lead?.agenciaDefinidaEn;
 
   return (
     <div className="flex flex-col gap-6 p-4">
@@ -144,9 +153,47 @@ function PanelDatos({
               </a>
             ) : null}
           </Dato>
-          <Dato label="Dirección">{lead?.direccion}</Dato>
           <Dato label="Cantón y provincia">{[lead?.canton, lead?.provincia].filter(Boolean).join(", ")}</Dato>
         </dl>
+      </section>
+
+      <section aria-labelledby="t-envio" className="space-y-3 border-t pt-5">
+        <h2 id="t-envio" className="flex items-center gap-2 text-sm font-semibold">
+          <MapPin className="size-4 text-muted-foreground" aria-hidden /> Envío
+        </h2>
+        {agenciaPendiente && (
+          <div role="status" className="space-y-1 rounded-lg bg-status-warning-soft p-3 text-sm text-status-warning-ink">
+            <p className="flex items-start gap-2 font-medium">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden /> Falta definir la agencia
+            </p>
+            <p>El cliente dijo: «{lead?.agenciaIndicada || "no dijo cuál"}». Acuerda la agencia con él, escríbela en «Datos de envío» y pulsa «Que Victoria continúe».</p>
+          </div>
+        )}
+        <dl className="space-y-3">
+          <Dato label="Entrega">{lead?.tipoEntrega === "agencia" ? "Retiro en agencia de Servientrega" : lead?.tipoEntrega === "domicilio" ? "A domicilio" : undefined}</Dato>
+          <Dato label={lead?.tipoEntrega === "agencia" ? "Agencia" : "Dirección"}>{agenciaPendiente ? undefined : lead?.direccion}</Dato>
+          {lead?.referencia && <Dato label="Referencia">{lead.referencia}</Dato>}
+          {lead?.indicacionesEntrega && <Dato label="Indicaciones al repartidor">{lead.indicacionesEntrega}</Dato>}
+          {lead?.ubicacionCompartida && (
+            <Dato label="Ubicación que compartió">
+              <a href={lead.ubicacionCompartida} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
+                Ver en el mapa
+              </a>
+            </Dato>
+          )}
+        </dl>
+        {puedeEditarEnvio && lead && (
+          <DatosEnvioDialog
+            conversacionId={String(conversacion.id)}
+            lead={lead}
+            onGuardado={onDatosGuardados}
+            trigger={
+              <Button type="button" variant={agenciaPendiente ? "default" : "outline"} className="w-full">
+                <PencilLine /> {agenciaPendiente ? "Definir la agencia" : "Editar datos de envío"}
+              </Button>
+            }
+          />
+        )}
       </section>
 
       <OrigenCliente conversacion={conversacion} />
@@ -356,6 +403,7 @@ export default function ConversacionDetallePage() {
       onGuardarNota={handleGuardarNota}
       guardandoNota={guardandoNota}
       notaCambiada={notaCambiada}
+      onDatosGuardados={recargar}
     />
   );
 

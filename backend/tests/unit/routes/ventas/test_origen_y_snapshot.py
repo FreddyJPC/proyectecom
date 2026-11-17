@@ -94,6 +94,7 @@ class TestArmarVenta:
             {
                 "producto_sku": "PROP-0001", "producto_nombre": "Zapatos", "variante": "talla 40", "categoria_id": 3,
                 "categoria_nombre": "Calzado", "cantidad": 2, "precio_unitario": Decimal("30.00"), "costo_unitario": Decimal("18.00"),
+                "oferta_id": None, "precio_lista_unitario": Decimal("30.00"),
             }
         ]
         assert ganancia_de(venta) == Decimal("62.00") - Decimal("36.00") - Decimal("1.50")

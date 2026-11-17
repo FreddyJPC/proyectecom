@@ -12,20 +12,26 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { VinculoAnuncio } from "@/types/anuncios";
+import type { Oferta } from "@/types/precios";
 import type { ProductoBotResumen } from "@/types/producto-bot";
 
-/** Vincula un anuncio con un producto. Sirve para los anuncios que ya llegaron (el ID viene dado) y para uno NUEVO que aún
+/** Vincula un anuncio con un producto o con una oferta (ADR-017). Sirve para los anuncios que ya llegaron (el ID viene dado) y para uno NUEVO que aún
  * no ha traído a nadie (se escribe el ID que muestra el Administrador de anuncios de Meta). */
 export function VincularAnuncioDialog({
   trigger,
   productos,
   idAnuncio,
   productoActual,
+  ofertas = [],
+  ofertaActual,
   nombreActual,
   onVinculado,
 }: {
   trigger: ReactNode;
   productos: ProductoBotResumen[];
+  /** Ofertas (combos y promos) que el anuncio puede vender en vez de un producto suelto (ADR-017). */
+  ofertas?: Oferta[];
+  ofertaActual?: number | null;
   /** Si viene, el ID no se puede cambiar (es un anuncio que ya está en la lista). */
   idAnuncio?: string;
   productoActual?: string | null;
@@ -35,6 +41,8 @@ export function VincularAnuncioDialog({
   const [abierto, setAbierto] = useState(false);
   const [id, setId] = useState(idAnuncio ?? "");
   const [sku, setSku] = useState(productoActual ?? "");
+  const [tipo, setTipo] = useState<"producto" | "oferta">(ofertaActual ? "oferta" : "producto");
+  const [ofertaId, setOfertaId] = useState(ofertaActual ? String(ofertaActual) : "");
   const [nombre, setNombre] = useState(nombreActual ?? "");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +51,16 @@ export function VincularAnuncioDialog({
 
   const elegibles = productos.filter((p) => p.estado !== "archivado");
   const idLimpio = id.trim();
-  const puedeGuardar = idLimpio !== "" && sku !== "" && !guardando;
+  const ofertasElegibles = ofertas.filter((o) => o.estado !== "archivada");
+  const puedeGuardar = idLimpio !== "" && (tipo === "producto" ? sku !== "" : ofertaId !== "") && !guardando;
 
   function alCambiarApertura(valor: boolean) {
     setAbierto(valor);
     if (valor) {
       setId(idAnuncio ?? "");
       setSku(productoActual ?? "");
+      setTipo(ofertaActual ? "oferta" : "producto");
+      setOfertaId(ofertaActual ? String(ofertaActual) : "");
       setNombre(nombreActual ?? "");
       setError(null);
       setConfirmarCambio(null);
@@ -63,11 +74,19 @@ export function VincularAnuncioDialog({
     setGuardando(true);
     setError(null);
     try {
-      const vinculo = await apiFetch<VinculoAnuncio>(`/anuncios/${encodeURIComponent(idLimpio)}/producto`, {
-        method: "PUT",
-        body: JSON.stringify({ sku, nombre: nombre.trim() || null, reasignar }),
-      });
-      toast.success(`Anuncio vinculado a «${vinculo.productoNombre}».`);
+      if (tipo === "oferta") {
+        const vinculo = await apiFetch<{ ofertaNombre: string }>(
+          `/precios/ofertas/${encodeURIComponent(ofertaId)}/anuncios/${encodeURIComponent(idLimpio)}`,
+          { method: "PUT", body: JSON.stringify({ nombre: nombre.trim() || null, reasignar }) },
+        );
+        toast.success(`Anuncio vinculado a la oferta «${vinculo.ofertaNombre}».`);
+      } else {
+        const vinculo = await apiFetch<VinculoAnuncio>(`/anuncios/${encodeURIComponent(idLimpio)}/producto`, {
+          method: "PUT",
+          body: JSON.stringify({ sku, nombre: nombre.trim() || null, reasignar }),
+        });
+        toast.success(`Anuncio vinculado a «${vinculo.productoNombre}».`);
+      }
       setAbierto(false);
       onVinculado();
     } catch (err) {
@@ -85,10 +104,10 @@ export function VincularAnuncioDialog({
         <form onSubmit={(e) => void guardar(e)} noValidate>
           <DialogHeader>
             <div className="flex items-center gap-1 pr-8">
-              <DialogTitle>{idAnuncio ? "Vincular con un producto" : "Vincular un anuncio"}</DialogTitle>
-              <InfoButton titulo="Vincular un anuncio con un producto">
+              <DialogTitle>{idAnuncio ? "Qué vende este anuncio" : "Vincular un anuncio"}</DialogTitle>
+              <InfoButton titulo="Vincular un anuncio">
                 <p>
-                  Cuando un cliente llega tocando un anuncio vinculado, Victoria ya sabe <strong>de qué producto hablar</strong> y no tiene que preguntárselo.
+                  Cuando un cliente llega tocando un anuncio vinculado, Victoria ya sabe <strong>de qué producto u oferta hablar</strong> y no tiene que preguntárselo.
                 </p>
                 <ul>
                   <li>
@@ -101,10 +120,10 @@ export function VincularAnuncioDialog({
                     <strong>Nombre (opcional):</strong> para reconocer el anuncio en la lista mientras Meta no mande su título.
                   </li>
                 </ul>
-                <p>Un anuncio se vincula a un solo producto. Si ya estaba vinculado a otro, te pedimos confirmar el cambio.</p>
+                <p>Un anuncio vende una sola cosa: un producto a su precio o una oferta (combo, 2x1, precio especial). Si ya vendía otra, te pedimos confirmar el cambio.</p>
               </InfoButton>
             </div>
-            <DialogDescription>Elige el producto del que habla este anuncio.</DialogDescription>
+            <DialogDescription>Elige qué vende este anuncio: un producto o una oferta.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -122,6 +141,38 @@ export function VincularAnuncioDialog({
                 className="tabular"
               />
             </div>
+            {ofertasElegibles.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="anuncio-tipo">Este anuncio vende</Label>
+                <Select value={tipo} onValueChange={(v) => setTipo(v as "producto" | "oferta")}>
+                  <SelectTrigger id="anuncio-tipo" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="producto">Un producto a su precio</SelectItem>
+                    <SelectItem value="oferta">Una oferta o combo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {tipo === "oferta" ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="anuncio-oferta">Oferta</Label>
+                <Select value={ofertaId} onValueChange={setOfertaId}>
+                  <SelectTrigger id="anuncio-oferta" className="w-full">
+                    <SelectValue placeholder="Elige una oferta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ofertasElegibles.map((o) => (
+                      <SelectItem key={o.id} value={String(o.id)}>
+                        {o.nombre}
+                        {o.situacion !== "vigente" ? " (no está a la venta)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
             <div className="grid gap-1.5">
               <Label htmlFor="anuncio-producto">Producto</Label>
               <Select value={sku} onValueChange={setSku}>
@@ -138,6 +189,7 @@ export function VincularAnuncioDialog({
                 </SelectContent>
               </Select>
             </div>
+            )}
             <div className="grid gap-1.5">
               <Label htmlFor="anuncio-nombre">
                 Nombre <span className="font-normal text-muted-foreground">(opcional)</span>
@@ -151,9 +203,9 @@ export function VincularAnuncioDialog({
                   <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
                   {confirmarCambio}
                 </p>
-                <p>¿Quieres cambiarlo al producto que elegiste?</p>
+                <p>¿Quieres cambiarlo a lo que elegiste?</p>
                 <Button type="button" size="sm" variant="outline" className="bg-card text-foreground" disabled={guardando} onClick={(e) => void guardar(e, true)}>
-                  Sí, cambiar el producto
+                  Sí, cambiarlo
                 </Button>
               </div>
             )}

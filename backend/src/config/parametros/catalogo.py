@@ -181,6 +181,16 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Avisar a Meta de las ventas",
         "Decirle a Meta qué clics de anuncio terminaron en una compra, para que optimice los anuncios hacia quien compra.",
     ),
+    Grupo(
+        "precios",
+        "Precios, regateo y ofertas",
+        "Cómo vende Victoria cuando hay descuentos: regateo, precio por transferencia, precio por cantidad, combos y pedidos con varios productos.",
+    ),
+    Grupo(
+        "entrega",
+        "Entregas",
+        "Cómo recibe el cliente su pedido: en su domicilio o retirándolo en una agencia de Servientrega.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -470,7 +480,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "con herramientas») y la conversación se pasa a una persona."
         ),
         tipo=TIPO_TEXTO,
-        defecto="Disculpa la demora — ya te conecto con un asesor humano que te ayuda enseguida 🙋",
+        defecto="Disculpe la demora — ya le comunico con un asesor que le ayuda enseguida 🙋",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
@@ -902,6 +912,179 @@ CATALOGO: Tuple[Parametro, ...] = (
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),
+    # ------------------------------------------------------------ Entregas (entrada 0.0.140)
+    Parametro(
+        clave="entrega.ofrecer_agencia",
+        grupo="entrega",
+        nombre="Recomendar el retiro en agencia de Servientrega",
+        para_que_sirve=(
+            "Cuando Victoria ya sabe la ciudad del cliente, le recomienda UNA vez que el pedido llegue a una agencia de Servientrega "
+            "(lo retira con su cédula, a su hora). Si prefiere su casa, se respeta. Si acepta, Victoria anota lo que dijo y, cuando "
+            "tiene los demás datos, te pasa la conversación: tú escribes la agencia en «Datos de envío» y pulsas «Que Victoria "
+            "continúe». Victoria nunca elige ni nombra una agencia. Solo para productos que van por Rocketfy."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+        sensible=True,
+        aviso="Antes de encenderlo, haz un pedido de prueba con la dirección de una agencia y pregunta a Rocketfy si así basta.",
+    ),
+    Parametro(
+        clave="entrega.texto_ofrecer_agencia",
+        grupo="entrega",
+        nombre="Idea para recomendar la agencia",
+        para_que_sirve=(
+            "Lo que Victoria transmite al recomendar el retiro en agencia. Es una guía: ella lo dice con sus palabras, en el "
+            "momento natural de la conversación."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto=(
+            "Le recomiendo que el envío llegue a una agencia de Servientrega: así lo retira con seguridad y a la hora que le quede "
+            "mejor, sin depender de que el repartidor lo encuentre en casa. ¿Le parece bien, o prefiere que se lo llevemos a su domicilio?"
+        ),
+        largo_maximo=400,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="entrega.indicaciones_agencia",
+        grupo="entrega",
+        nombre="Indicación para el repartidor en un retiro en agencia",
+        para_que_sirve=(
+            "Lo que se manda a Rocketfy como indicación para el repartidor cuando el pedido es de retiro en agencia y tú no "
+            "escribiste otra en «Datos de envío». La dirección del pedido es la de la agencia."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="RETIRO EN AGENCIA SERVIENTREGA: el cliente retira con su cédula.",
+        largo_maximo=300,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="entrega.avisar_paquete_en_agencia",
+        grupo="entrega",
+        nombre="Avisarme cuando un paquete espera en la agencia",
+        para_que_sirve=(
+            "Cuando Rocketfy marca un pedido como «Recogida en Agencia» (el paquete espera en una oficina de Servientrega), te "
+            "avisa por Telegram con el cliente y su teléfono, para que le recuerdes retirarlo antes de que lo devuelvan."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    # ------------------------------------------------------------ Precios (ADR-017)
+    Parametro(
+        clave="precios.varios_productos",
+        grupo="precios",
+        nombre="Pedidos con varios productos",
+        para_que_sirve=(
+            "Permite que Victoria arme un pedido con varios productos distintos (por ejemplo, el del anuncio y otro que el cliente vio "
+            "en otra publicación) y que agregue un combo a lo que ya pidió. Apagado, cada pedido lleva un solo producto (o una oferta), "
+            "como siempre. Nunca se mezclan productos de Rocketfy con productos propios en un mismo pedido."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+        sensible=True,
+        aviso="Antes de encenderlo, prueba en «Probar con Victoria» un pedido de dos productos y uno de prueba en Rocketfy (crearlo y rechazarlo).",
+    ),
+    Parametro(
+        clave="precios.regateo_estrategia",
+        grupo="precios",
+        nombre="Cómo regatea Victoria",
+        para_que_sirve=(
+            "Solo aplica a productos u ofertas que tienen regateo permitido en su ficha. «Contraoferta primero»: si el cliente pide un "
+            "precio dentro del límite, Victoria primero propone uno intermedio y, si el cliente insiste, acepta lo que pidió. «Aceptar "
+            "directo»: acepta de una lo que pida si está dentro del límite. Nunca baja de tu límite ni de tu margen mínimo."
+        ),
+        tipo=TIPO_OPCION,
+        defecto="contraoferta",
+        opciones=(
+            Opcion("contraoferta", "Contraoferta primero (recomendado)", "Ej.: producto de $50, el cliente pide $45, Victoria propone $48."),
+            Opcion("aceptar", "Aceptar directo", "Ej.: producto de $50, el cliente pide $45, Victoria acepta $45."),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.regateo_redondeo",
+        grupo="precios",
+        nombre="Redondeo de las contraofertas",
+        para_que_sirve="A qué se redondea (siempre hacia arriba) el precio que propone Victoria al regatear.",
+        tipo=TIPO_OPCION,
+        defecto="dolar",
+        opciones=(
+            Opcion("dolar", "Al dólar", "$47,50 → $48"),
+            Opcion("medio", "A medio dólar", "$47,20 → $47,50"),
+            Opcion("centavo", "Sin redondear", "$47,25 → $47,25"),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.regateo_rondas",
+        grupo="precios",
+        nombre="Veces que Victoria cede al regatear",
+        para_que_sirve=(
+            "Cuántas contraofertas hace Victoria como máximo en un pedido. Después se mantiene firme en la última con amabilidad."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=5,
+        unidad="veces",
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.mencionar_transferencia",
+        grupo="precios",
+        nombre="Victoria ofrece el precio por transferencia",
+        para_que_sirve=(
+            "Si un producto tiene precio especial por transferencia, Victoria lo menciona sola cuando se habla del pago (para eso existe "
+            "el incentivo). Apagado, solo lo dice si el cliente pregunta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.mencionar_por_cantidad",
+        grupo="precios",
+        nombre="Victoria ofrece el precio por cantidad",
+        para_que_sirve=(
+            "Si un producto tiene precio por cantidad («2 por $45»), Victoria lo menciona una vez, cuando el cliente ya eligió el producto. "
+            "Apagado, solo lo dice si el cliente pregunta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.oferta_terminada",
+        grupo="precios",
+        nombre="Si la oferta del anuncio ya terminó",
+        para_que_sirve=(
+            "Qué hace Victoria cuando un cliente llega por un anuncio cuya oferta venció, se pausó o agotó su cupo."
+        ),
+        tipo=TIPO_OPCION,
+        defecto="precio_normal",
+        opciones=(
+            Opcion("precio_normal", "Explicar y ofrecer el precio normal (recomendado)", "La venta sigue, sin la promoción."),
+            Opcion("dueno", "Pasarte la conversación", "Tú decides qué ofrecerle."),
+        ),
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="precios.alerta_regateo_pct",
+        grupo="precios",
+        nombre="Alerta: el regateo se está volviendo costumbre",
+        para_que_sirve=(
+            "Avisa por Telegram si, en la última semana, al menos este porcentaje de las ventas de un producto (con 5 ventas o más) se "
+            "cerraron con rebaja por regateo. Sirve para revisar si el precio está alto o el límite es muy generoso. 0 = apagada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=100,
+        unidad="%",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
     Parametro(
         clave="meta.activo",
         grupo="meta",
@@ -917,6 +1100,124 @@ CATALOGO: Tuple[Parametro, ...] = (
         aplica=APLICA_PROXIMA_CORRIDA,
         sensible=True,
         aviso="Los eventos que se envían a Meta no se pueden borrar después. Enciéndelo solo cuando hayas revisado que Meta está configurado.",
+    ),
+    Parametro(
+        clave="meta.anuncios_activo",
+        grupo="meta",
+        nombre="Leer mis anuncios de Meta",
+        para_que_sirve=(
+            "Cada hora el sistema lee los anuncios de tu cuenta publicitaria (nombre, estado, miniatura) y cuánto gastó cada uno. Con eso "
+            "puedes vincular un anuncio a su oferta antes de publicarlo, ver el costo por venta y recibir alertas. Solo lee: no cambia "
+            "nada en Meta. Necesita que la app de Meta tenga permiso de anuncios y que guardes la cuenta publicitaria en Conexión con Meta."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.dias_metricas",
+        grupo="meta",
+        nombre="Días de gasto que se vuelven a leer",
+        para_que_sirve="Meta ajusta las cifras de los últimos días durante horas: en cada lectura se vuelven a pedir estos días.",
+        tipo=TIPO_ENTERO,
+        defecto=3,
+        minimo=1,
+        maximo=7,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alertas_activas",
+        grupo="meta",
+        nombre="Alertas de anuncios por Telegram",
+        para_que_sirve=(
+            "Te avisa (una vez al día por cada caso) si un anuncio activo vende un producto agotado o pausado, una oferta que ya terminó, "
+            "un producto con poco stock, si no tiene oferta ni producto vinculado o si Meta lo rechazó. Las alertas de gasto se activan "
+            "poniendo sus límites. Solo avisan."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.pausa_automatica",
+        grupo="meta",
+        nombre="Pausar solo un anuncio que vende algo que ya no hay",
+        para_que_sirve=(
+            "Si un anuncio activo promociona un producto agotado o pausado, o una oferta que terminó o agotó su cupo, el sistema lo pausa en "
+            "Meta y te avisa. Solo pausa por esos hechos (nunca por rendimiento), nunca reactiva un anuncio y nunca cambia presupuestos: "
+            "reactivarlo lo haces tú en el Administrador de anuncios."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
+        sensible=True,
+        aviso="Enciéndelo después de ver unas dos semanas de alertas y confirmar que avisan bien (regla D3 del plan).",
+    ),
+    Parametro(
+        clave="meta.alerta_gasto_sin_venta",
+        grupo="meta",
+        nombre="Alerta: gasto sin ninguna venta",
+        para_que_sirve=(
+            "Avisa cuando un anuncio gastó al menos esta cantidad (en el periodo de alertas) y no trajo ninguna venta. 0 = apagada. "
+            "Sugerencia: el costo máximo que aceptas pagar por una venta."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=500,
+        unidad="dólares",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alerta_costo_conversacion",
+        grupo="meta",
+        nombre="Alerta: conversación demasiado cara",
+        para_que_sirve=(
+            "Avisa cuando un anuncio paga más que esto por cada conversación iniciada (según Meta), una vez que tiene suficientes "
+            "conversaciones. En centavos: 150 = $1,50. 0 = apagada."
+        ),
+        tipo=TIPO_ENTERO,
+        defecto=0,
+        minimo=0,
+        maximo=2000,
+        unidad="centavos",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.alerta_minimo_conversaciones",
+        grupo="meta",
+        nombre="Conversaciones mínimas para juzgar un anuncio",
+        para_que_sirve="La alerta de conversación cara solo se evalúa desde esta cantidad de conversaciones (con menos, es puro azar).",
+        tipo=TIPO_ENTERO,
+        defecto=10,
+        minimo=1,
+        maximo=200,
+        unidad="conversaciones",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.dias_alertas",
+        grupo="meta",
+        nombre="Periodo de las alertas de gasto",
+        para_que_sirve="Cuántos días hacia atrás se suman el gasto, las conversaciones y las ventas para las alertas.",
+        tipo=TIPO_ENTERO,
+        defecto=7,
+        minimo=1,
+        maximo=30,
+        unidad="días",
+        aplica=APLICA_PROXIMA_CORRIDA,
+    ),
+    Parametro(
+        clave="meta.resumen_diario",
+        grupo="meta",
+        nombre="Resumen diario por Telegram",
+        para_que_sirve=(
+            "Cada mañana te manda el resumen de ayer: gasto en anuncios, conversaciones, ventas, costo por venta y ganancia después del gasto."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=False,
+        aplica=APLICA_PROXIMA_CORRIDA,
     ),
     Parametro(
         clave="meta.minutos_espera",
@@ -972,6 +1273,18 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto=15,
         minimo=5,
         maximo=120,
+        unidad="minutos",
+        aplica=APLICA_AL_GUARDAR,
+    ),
+    Parametro(
+        clave="jobs.minutos_meta_anuncios",
+        grupo="tareas",
+        nombre="Cada cuánto se leen los anuncios de Meta",
+        para_que_sirve="Cada cuántos minutos se leen los anuncios y el gasto de Meta y se revisan las alertas (si está encendido).",
+        tipo=TIPO_ENTERO,
+        defecto=60,
+        minimo=30,
+        maximo=240,
         unidad="minutos",
         aplica=APLICA_AL_GUARDAR,
     ),

@@ -12,9 +12,11 @@ import { SectionCard } from "@/components/app/section-card";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import type { Anuncio, PeriodoAnuncios, ResumenOrigenes } from "@/types/anuncios";
+import type { ListaOfertas } from "@/types/precios";
 import type { ProductoBotResumen } from "@/types/producto-bot";
 
 import { AnuncioCard } from "./anuncio-card";
+import { RendimientoMeta } from "./rendimiento-meta";
 import { ResumenOrigenesCard } from "./resumen-origenes";
 import { VincularAnuncioDialog } from "./vincular-dialog";
 
@@ -31,6 +33,7 @@ export default function AnunciosPage() {
   const resumen = useApi<ResumenOrigenes>(`/anuncios/resumen?dias=${periodo}`);
   const anuncios = useApi<Anuncio[]>(`/anuncios?dias=${periodo}`);
   const productos = useApi<ProductoBotResumen[]>("/productos-bot");
+  const ofertas = useApi<ListaOfertas>("/precios/ofertas");
 
   const lista = anuncios.data ?? [];
   const sinVincular = resumen.data?.anunciosSinVincular ?? 0;
@@ -42,6 +45,7 @@ export default function AnunciosPage() {
   const botonVincular = (
     <VincularAnuncioDialog
       productos={productos.data ?? []}
+      ofertas={ofertas.data?.ofertas ?? []}
       onVinculado={recargarTodo}
       trigger={
         <Button type="button" variant="outline" size="sm">
@@ -93,6 +97,8 @@ export default function AnunciosPage() {
 
       <ResumenOrigenesCard resumen={resumen.data} cargando={resumen.cargando} />
 
+      <RendimientoMeta productos={productos.data ?? []} ofertas={ofertas.data?.ofertas ?? []} onVinculado={recargarTodo} />
+
       <SectionCard
         titulo="Tus anuncios"
         descripcion="Los que han traído clientes o que vinculaste de antemano."
@@ -134,7 +140,7 @@ export default function AnunciosPage() {
         ) : (
           <ul className="divide-y">
             {lista.map((a) => (
-              <AnuncioCard key={a.idAnuncio} anuncio={a} productos={productos.data ?? []} onCambio={recargarTodo} />
+              <AnuncioCard key={a.idAnuncio} anuncio={a} productos={productos.data ?? []} ofertas={ofertas.data?.ofertas ?? []} onCambio={recargarTodo} />
             ))}
           </ul>
         )}

@@ -109,6 +109,7 @@ const anunciosMeta = {
   "120210000123": { titulo: "Audífonos Bluetooth Pro · 30 h de batería", texto: "Cancelación de ruido, estuche de carga y envío a todo el Ecuador. Escríbenos y pregunta por tu color.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000123", tipoOrigen: "ad", tipoMedia: "image", imagenUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-1.svg`, miniaturaUrl: null },
   "120210000456": { titulo: "Lámpara LED recargable", texto: "Luz cálida, 3 intensidades y hasta 20 horas de uso.", urlAnuncio: "https://www.facebook.com/ads/library/?id=120210000456", tipoOrigen: "ad", tipoMedia: "video", imagenUrl: null, miniaturaUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/anuncio-2.svg` },
   "120210000789": { titulo: "Zapatos de cuero hechos a mano · 2x1", texto: null, urlAnuncio: null, tipoOrigen: "ad", tipoMedia: "image", imagenUrl: null, miniaturaUrl: null },
+  "120210000555": { titulo: "Zapatos 2x1 · solo este fin de semana", texto: "Dos pares del mismo modelo por $60.", urlAnuncio: null, tipoOrigen: "ad", tipoMedia: "image", imagenUrl: null, miniaturaUrl: null },
 };
 const vinculosAnuncio = { "120210000123": { sku: "AUD-BT-001", nombre: "Video principal" }, "120210000456": { sku: "LMP-LED-220", nombre: null } };
 const nombreProductoBot = (sku) => (productosBot.find((f) => f.sku === sku) || {}).nombre || sku;
@@ -142,10 +143,82 @@ const convDetalle = (id) => {
       nombreCliente: c.nombreCliente, direccion: "Av. 9 de Octubre 1234 y Boyacá", canton: "Guayaquil", provincia: "Guayas",
       productoSku: "AUD-BT-001", productoNombre: c.productoInteres, productoVariante: "Negro", total: "34.90", metodoPago: c.estado === "esperando_pago" ? "transferencia" : "contraentrega",
       estadoPago: null, estado: c.estado === "cerrada" ? "despachado" : "en_proceso", idPedidoLocal: c.estado === "cerrada" ? 1035 : null, idPedidoRocketfy: c.estado === "cerrada" ? 884035 : null,
+      id: c.id, tipoEntrega: "domicilio", agenciaIndicada: null, agenciaDefinidaEn: null, referencia: "Frente al parque, casa esquinera verde", indicacionesEntrega: null,
+      ubicacionCompartida: c.id === 301 ? "https://maps.google.com/?q=-2.170998,-79.922359" : null,
+      ...(envios[c.id] || {}),
     } : null,
     mensajes: mensajesDe(c),
   };
 };
+
+// ---------- Datos de envío (entrega en agencia, entrada 0.0.140) ----------
+// La conversación 294 (Santiago) quiere retirar en agencia y falta definirla: así se ve el aviso «Falta definir la agencia».
+const envios = {
+  294: { tipoEntrega: "agencia", agenciaIndicada: "Sí, mándeme a una agencia por el centro", agenciaDefinidaEn: null, direccion: null, referencia: null, canton: "Guayaquil", provincia: "Guayas" },
+};
+
+// ---------- Aprendizaje de Victoria ----------
+const casosAprendizaje = [
+  { id: 6, creadoEn: ago(20), conversacionId: 294, leadId: 94, cliente: "Santiago Caicedo", canal: "whatsapp", tipo: "agencia_por_definir", tipoNombre: "Falta definir la agencia", origen: "sistema",
+    motivo: "Falta definir la agencia de Servientrega para retirar el pedido. El cliente dijo: «Sí, mándeme a una agencia por el centro».", mensajeCliente: "Sí, mándeme a una agencia por el centro", etapa: "entrega", productoSku: "LMP-LED-220",
+    mensajes: [{ rol: "bot", texto: "Le recomiendo que el envío llegue a una agencia de Servientrega… ¿Le parece bien?", en: ago(22) }, { rol: "cliente", texto: "Sí, mándeme a una agencia por el centro", en: ago(21) }],
+    estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 5, creadoEn: ago(95), conversacionId: 301, leadId: 101, cliente: "María Fernanda Loor", canal: "whatsapp", tipo: "pidio_asesor", tipoNombre: "El cliente pidió un asesor", origen: "victoria",
+    motivo: "La clienta pidió que la llamen por teléfono.", mensajeCliente: "Mejor prefiero hablar con una persona, ¿pueden llamarme?", etapa: "datos", productoSku: "AUD-BT-001",
+    mensajes: [{ rol: "bot", texto: "¿Me ayuda con su nombre completo para el envío?", en: ago(97) }, { rol: "cliente", texto: "Mejor prefiero hablar con una persona, ¿pueden llamarme?", en: ago(96) }],
+    estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 4, creadoEn: ago(60 * 5), conversacionId: 297, leadId: 97, cliente: "Daniela Vera", canal: "whatsapp", tipo: "sin_respuesta", tipoNombre: "No tenía la respuesta", origen: "victoria",
+    motivo: "Preguntó si el cargador sirve para un Samsung A54 y la ficha no lo dice.", mensajeCliente: "y si sirve pal samsung a54??", etapa: "producto", productoSku: "CRG-RAP-33",
+    mensajes: [{ rol: "cliente", texto: "y si sirve pal samsung a54??", en: ago(60 * 5 + 1) }], estado: "pendiente", categoria: null, accion: null, nota: null, revisadoPor: null, revisadoEn: null },
+  { id: 3, creadoEn: ago(60 * 26), conversacionId: 298, leadId: 98, cliente: "Lucía Mendoza", canal: "whatsapp", tipo: "no_entendio", tipoNombre: "No entendió al cliente", origen: "victoria",
+    motivo: "No se entendió si quería dos lámparas o la lámpara y el cargador.", mensajeCliente: "kiero la d 2 y lotro", etapa: "producto", productoSku: "LMP-LED-220",
+    mensajes: [{ rol: "cliente", texto: "kiero la d 2 y lotro", en: ago(60 * 26 + 2) }], estado: "resuelto", categoria: "Pedido ambiguo", accion: "instrucciones", nota: "Se agregó un ejemplo a sus instrucciones.", revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 20) },
+  { id: 2, creadoEn: ago(60 * 30), conversacionId: 292, leadId: 92, cliente: "Marcelo Ortiz", canal: "whatsapp", tipo: "dueno_intervino", tipoNombre: "El dueño tuvo que intervenir", origen: "dueno",
+    motivo: "El dueño le escribió al cliente mientras Victoria la atendía.", mensajeCliente: "¿Tienen talla 44?", etapa: "producto", productoSku: "PROP-0001",
+    mensajes: [], estado: "revisado", categoria: null, accion: "ficha", nota: "Falta poner las tallas en la ficha.", revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 29) },
+  { id: 1, creadoEn: ago(60 * 50), conversacionId: 300, leadId: 100, cliente: "Carlos Andrade", canal: "whatsapp", tipo: "fuera_de_reglas", tipoNombre: "Pidió algo fuera de las reglas", origen: "victoria",
+    motivo: "Pidió 50% de descuento.", mensajeCliente: "si me lo deja a la mitad se lo compro ya", etapa: "pago", productoSku: null, mensajes: [], estado: "descartado",
+    categoria: null, accion: "ninguna", nota: null, revisadoPor: "freddy@azoshop.ec", revisadoEn: ago(60 * 48) },
+];
+const TIPOS_APRENDIZAJE = [
+  ["no_entendio", "No entendió al cliente"], ["sin_respuesta", "No tenía la respuesta"], ["fuera_de_reglas", "Pidió algo fuera de las reglas"],
+  ["pidio_asesor", "El cliente pidió un asesor"], ["cliente_molesto", "Cliente molesto"], ["problema_pago", "Problema con el pago"],
+  ["problema_entrega", "Problema con la entrega"], ["agencia_por_definir", "Falta definir la agencia"], ["gestion", "Producto de cierre manual"],
+  ["cierre_frenado", "El cierre se frenó"], ["error_proveedor", "Falló el proveedor de envíos"], ["error_sistema", "Falló el sistema"],
+  ["dueno_intervino", "El dueño tuvo que intervenir"], ["otro", "Otro motivo"],
+];
+const ACCIONES_APRENDIZAJE = [
+  ["instrucciones", "Se cambiaron las instrucciones de Victoria"], ["ficha", "Se completó la ficha del producto"], ["parametro", "Se ajustó un parámetro"],
+  ["sistema", "Hace falta un cambio en el sistema"], ["ninguna", "No hacía falta cambiar nada"],
+];
+function manejarAprendizaje(req, res, p, q, send) {
+  if (p === "/aprendizaje/resumen") {
+    const conteo = {};
+    for (const c of casosAprendizaje) conteo[c.tipo] = (conteo[c.tipo] || 0) + 1;
+    const porTipo = Object.entries(conteo).sort((a, b) => b[1] - a[1]).map(([tipo, cantidad]) => ({ tipo, cantidad, tipoNombre: (TIPOS_APRENDIZAJE.find((t) => t[0] === tipo) || [tipo, tipo])[1] }));
+    return send({ pendientes: casosAprendizaje.filter((c) => c.estado === "pendiente").length, total: casosAprendizaje.length, porTipo, porEtapa: [],
+      tipos: TIPOS_APRENDIZAJE.map(([tipo, nombre]) => ({ tipo, nombre })), acciones: ACCIONES_APRENDIZAJE.map(([accion, nombre]) => ({ accion, nombre })) });
+  }
+  if (p === "/aprendizaje" && req.method === "GET") {
+    const filtrados = casosAprendizaje.filter((c) => (!q.get("estado") || c.estado === q.get("estado")) && (!q.get("tipo") || c.tipo === q.get("tipo")));
+    const pagina = Number(q.get("pagina") || 1), porPagina = Number(q.get("porPagina") || 20);
+    return send({ casos: filtrados.slice((pagina - 1) * porPagina, pagina * porPagina), total: filtrados.length, pagina, porPagina });
+  }
+  const m = p.match(/^\/aprendizaje\/(\d+)$/);
+  if (m && req.method === "PATCH") {
+    let raw = "";
+    req.on("data", (d) => (raw += d));
+    return req.on("end", () => {
+      const caso = casosAprendizaje.find((c) => c.id === Number(m[1]));
+      if (!caso) return send({ error: "No existe ese caso." }, 404);
+      const b = raw ? JSON.parse(raw) : {};
+      Object.assign(caso, { estado: b.estado, accion: b.accion ?? null, categoria: b.categoria ?? null, nota: b.nota ?? null,
+        revisadoPor: b.estado === "pendiente" ? null : "freddy@azoshop.ec", revisadoEn: b.estado === "pendiente" ? null : new Date().toISOString() });
+      send(caso);
+    });
+  }
+  send({ error: "mock: ruta no implementada " + p }, 404);
+}
 
 // ---------- Anuncios ----------
 const dosDecimales = (n) => Number(n).toFixed(2);
@@ -153,6 +226,7 @@ const estadoAnuncios = [
   { id: "120210000789", llegadas: 5, conversaciones: 5, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: ago(60 * 3), primera: ago(60 * 24 * 2) },
   { id: "120210000123", llegadas: 14, conversaciones: 12, ventas: 3, ingresos: 104.7, ganancia: 38.4, sinCosto: 0, ultima: ago(25), primera: ago(60 * 24 * 20) },
   { id: "120210000456", llegadas: 6, conversaciones: 5, ventas: 1, ingresos: 29.9, ganancia: 12.8, sinCosto: 1, ultima: ago(60 * 30), primera: ago(60 * 24 * 9) },
+  { id: "120210000555", llegadas: 3, conversaciones: 3, ventas: 2, ingresos: 120, ganancia: 31.4, sinCosto: 0, ultima: ago(60 * 26), primera: ago(60 * 24 * 4) },
   { id: "120210000999", llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true },
 ];
 const nombresVinculo = { "120210000999": "Anuncio de prueba (zapatos)" };
@@ -161,17 +235,19 @@ const anuncioFila = (e) => {
   const meta = anunciosMeta[e.id] || {};
   const v = vinculosAnuncio[e.id];
   return {
-    idAnuncio: e.id, productoSku: v ? v.sku : null, productoNombre: v ? nombreProductoBot(v.sku) : null, nombreVinculo: v ? v.nombre : null,
+    idAnuncio: e.id, productoSku: v ? v.sku : null, productoNombre: v ? nombreProductoBot(v.sku) : null, nombreVinculo: v ? v.nombre : (vinculosOferta[e.id] ? vinculosOferta[e.id].nombre : null),
+    ofertaId: vinculosOferta[e.id] ? vinculosOferta[e.id].ofertaId : null,
+    ofertaNombre: vinculosOferta[e.id] ? (ofertas.find((o) => o.id === vinculosOferta[e.id].ofertaId) || {}).nombre || null : null,
     titulo: meta.titulo || null, texto: meta.texto || null, urlAnuncio: meta.urlAnuncio || null, tipoOrigen: meta.tipoOrigen || null, tipoMedia: meta.tipoMedia || null,
     imagenUrl: meta.imagenUrl || null, miniaturaUrl: meta.miniaturaUrl || null, primeraLlegada: e.primera, ultimaLlegada: e.ultima,
     llegadas: e.llegadas, conversaciones: e.conversaciones, ventas: e.ventas, ingresos: dosDecimales(e.ingresos), ganancia: dosDecimales(e.ganancia), ventasSinCosto: e.sinCosto,
   };
 };
-const listaAnuncios = () => estadoAnuncios.map(anuncioFila).sort((a, b) => Number(a.productoSku !== null) - Number(b.productoSku !== null));
+const listaAnuncios = () => estadoAnuncios.map(anuncioFila).sort((a, b) => Number(a.productoSku !== null || a.ofertaId !== null) - Number(b.productoSku !== null || b.ofertaId !== null));
 const resumenAnuncios = () => ({
   anuncio: { conversaciones: 17, ventas: 4, ingresos: "134.60", ganancia: "51.20" },
   directo: { conversaciones: 9, ventas: 2, ingresos: "69.80", ganancia: "24.00" },
-  llegadas: 25, anunciosActivos: 3, anunciosSinVincular: estadoAnuncios.filter((e) => !e.soloVinculo && !vinculosAnuncio[e.id]).length,
+  llegadas: 25, anunciosActivos: 3, anunciosSinVincular: estadoAnuncios.filter((e) => !e.soloVinculo && !vinculosAnuncio[e.id] && !vinculosOferta[e.id]).length,
 });
 const manejarAnuncios = (req, res, p, send) => {
   if (p === "/anuncios" && req.method === "GET") return send(listaAnuncios());
@@ -180,8 +256,9 @@ const manejarAnuncios = (req, res, p, send) => {
   if (m) {
     const id = decodeURIComponent(m[1]);
     if (req.method === "DELETE") {
-      if (!vinculosAnuncio[id]) return send({ error: `El anuncio ${id} no está vinculado a ningún producto.` }, 404);
+      if (!vinculosAnuncio[id] && !vinculosOferta[id]) return send({ error: `El anuncio ${id} no está vinculado a nada.` }, 404);
       delete vinculosAnuncio[id];
+      quitarDeOfertas(id);
       return send({ ok: true });
     }
     if (req.method === "PUT") {
@@ -193,7 +270,10 @@ const manejarAnuncios = (req, res, p, send) => {
         if (!producto) return send({ error: `No existe el producto ${dato.sku}.` }, 404);
         const actual = vinculosAnuncio[id];
         if (actual && actual.sku !== dato.sku && !dato.reasignar) return send({ error: `El anuncio ${id} ya está vinculado a ${nombreProductoBot(actual.sku)}.`, vinculadoA: { sku: actual.sku, nombre: nombreProductoBot(actual.sku) } }, 409);
-        vinculosAnuncio[id] = { sku: dato.sku, nombre: dato.nombre || (actual && actual.nombre) || null };
+        const deOferta = vinculosOferta[id];
+        if (deOferta && !dato.reasignar) return send({ error: `El anuncio ${id} ya está vinculado a la oferta «${(ofertas.find((o) => o.id === deOferta.ofertaId) || {}).nombre}».` }, 409);
+        quitarDeOfertas(id);
+        vinculosAnuncio[id] = { sku: dato.sku, nombre: dato.nombre || (actual && actual.nombre) || (deOferta && deOferta.nombre) || null };
         if (!estadoAnuncios.find((e) => e.id === id)) estadoAnuncios.push({ id, llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true });
         return send({ idAnuncio: id, productoSku: dato.sku, productoNombre: producto.nombre });
       });
@@ -786,7 +866,7 @@ function turnoVictoria(f, b) {
     return true;
   };
   const escalar = (motivo) => {
-    escalada = true; usar("escalar_a_humano", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
+    escalada = true; usar("pasar_a_asesor", { motivo }, "Escalado correctamente. Este es tu último mensaje — despídete cordialmente informando que un asesor la va a contactar en breve.");
     avisos.push({ canal: "telegram", texto: `Victoria escaló la conversación. Motivo: ${motivo}` });
   };
   // --- Productos propios: el pedido no se crea solo; pasa al dueño (ADR-012) ---
@@ -1187,6 +1267,112 @@ function manejarCuentas(req, res, p, send) {
   });
 }
 
+
+// ---------- Precios y ofertas (ADR-017) ----------
+const vinculosOferta = { "120210000555": { ofertaId: 2, nombre: "Zapatos 2x1" } };
+const reglasPrecio = {};
+const transferenciaNegocio = { transferenciaTipo: "monto", transferenciaValor: "2.00" };
+const isoEn = (dias) => new Date(now + dias * 86400000).toISOString();
+const ofertas = [
+  { id: 1, nombre: "Audífonos + cargador", descripcion: "Incluye funda de regalo.", textoAnuncio: "Audífonos Bluetooth Pro + cargador rápido por solo $39.90", precio: "39.90", precioLista: "49.80", ahorro: "9.90", envioIncluido: true, desde: null, hasta: isoEn(10), cupo: 30, maximoPorCliente: 2, visibilidad: "anuncio", regateoTipo: null, regateoValor: null, transferenciaTipo: "monto", transferenciaValor: "3.00", bajoMargenAutorizado: false, estado: "activa", situacion: "vigente", vigente: true,
+    items: [{ productoSku: "AUD-BT-001", productoNombre: "Audífonos Bluetooth Pro", cantidad: 1, variante: null, precio: "34.90", productoActivo: true }, { productoSku: "CRG-RAP-33", productoNombre: "Cargador Rápido 33W", cantidad: 1, variante: null, precio: "14.90", productoActivo: true }],
+    anuncios: [], ventas: 4, ingreso: "159.60", creadaEn: isoEn(-6) },
+  { id: 2, nombre: "Zapatos 2x1", descripcion: "Dos pares del mismo modelo; tallas 38 a 42.", textoAnuncio: "Zapatos de cuero hechos a mano · 2x1", precio: "60.00", precioLista: "120.00", ahorro: "60.00", envioIncluido: false, desde: null, hasta: isoEn(-1), cupo: null, maximoPorCliente: 1, visibilidad: "anuncio", regateoTipo: null, regateoValor: null, transferenciaTipo: null, transferenciaValor: null, bajoMargenAutorizado: true, estado: "activa", situacion: "vencida", vigente: false,
+    items: [{ productoSku: "PROP-0001", productoNombre: "Zapatos de cuero", cantidad: 2, variante: null, precio: "60.00", productoActivo: true }],
+    anuncios: ["120210000555"], ventas: 2, ingreso: "120.00", creadaEn: isoEn(-20) },
+  { id: 3, nombre: "Lámpara: 2 por $35", descripcion: null, textoAnuncio: null, precio: "35.00", precioLista: "39.80", ahorro: "4.80", envioIncluido: true, desde: isoEn(2), hasta: isoEn(9), cupo: 20, maximoPorCliente: 1, visibilidad: "publica", regateoTipo: "monto", regateoValor: "1.00", transferenciaTipo: null, transferenciaValor: null, bajoMargenAutorizado: false, estado: "activa", situacion: "programada", vigente: false,
+    items: [{ productoSku: "LMP-LED-220", productoNombre: "Lámpara LED Recargable", cantidad: 2, variante: null, precio: "19.90", productoActivo: true }],
+    anuncios: [], ventas: 0, ingreso: "0.00", creadaEn: isoEn(-1) },
+];
+function quitarDeOfertas(id) {
+  delete vinculosOferta[id];
+  for (const o of ofertas) o.anuncios = o.anuncios.filter((x) => x !== id);
+}
+function reglasDe(sku) {
+  const prod = productosBot.find((f) => f.sku === sku);
+  if (!prod) return null;
+  const base = { sku, nombre: prod.nombre, precio: prod.precio, costo: prod.costo || "12.00", precioMinimo: "18.67", margenConfirmado: true, envioIncluido: prod.envioIncluido !== false, maxUnidades: prod.maxUnidadesPorPedido || 3,
+    transferenciaTipo: null, transferenciaValor: null, regateoTipo: null, regateoValor: null, envioGratisDesdeUnidades: null, envioGratisDesdeMonto: null, escalas: [] };
+  // Datos de ejemplo coherentes: AUD-BT-001 se vende de a 1 (sin precio por cantidad); los zapatos, hasta 3.
+  if (sku === "AUD-BT-001" && !reglasPrecio[sku]) Object.assign(base, { transferenciaTipo: "precio", transferenciaValor: "29.90", regateoTipo: "monto", regateoValor: "3.00" });
+  if (sku === "PROP-0001" && !reglasPrecio[sku]) Object.assign(base, { escalas: [{ cantidad: 2, precioTotal: "80.00" }], envioGratisDesdeUnidades: 2 });
+  return { ...base, ...(reglasPrecio[sku] || {}) };
+}
+function manejarPrecios(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const cuerpo = raw ? JSON.parse(raw) : {};
+    let m;
+    if ((m = p.match(/^\/precios\/productos\/(.+)$/))) {
+      const sku = decodeURIComponent(m[1]);
+      const r = reglasDe(sku);
+      if (!r) return send({ error: "Ese producto no existe." }, 404);
+      if (req.method === "GET") return send(r);
+      if (cuerpo.transferenciaTipo === "precio" && Number(cuerpo.transferenciaValor) < 15 && !cuerpo.confirmarBajoMargen) {
+        return send({ error: "Algún precio queda bajo tu margen mínimo.", bloqueos: [`El precio por transferencia ($${cuerpo.transferenciaValor}) queda bajo tu margen mínimo (mínimo $18.67).`] }, 409);
+      }
+      const { confirmarBajoMargen, ...resto } = cuerpo;
+      reglasPrecio[sku] = { ...resto, envioGratisDesdeUnidades: resto.envioGratisDesdeUnidades ?? null };
+      return send(reglasDe(sku));
+    }
+    if (p === "/precios/negocio") {
+      if (req.method === "PUT") Object.assign(transferenciaNegocio, { transferenciaTipo: cuerpo.transferenciaTipo ?? null, transferenciaValor: cuerpo.transferenciaTipo ? cuerpo.transferenciaValor : null });
+      return send(transferenciaNegocio);
+    }
+    if (p === "/precios/ofertas" && req.method === "GET") return send({ ofertas: ofertas.filter((o) => q.get("archivadas") ? true : o.estado !== "archivada") });
+    if (p === "/precios/ofertas" && req.method === "POST") {
+      const id = Math.max(...ofertas.map((o) => o.id)) + 1;
+      const items = (cuerpo.items || []).map((i) => ({ productoSku: i.productoSku, productoNombre: nombreProductoBot(i.productoSku), cantidad: i.cantidad, variante: i.variante, precio: (productosBot.find((f) => f.sku === i.productoSku) || {}).precio || "0.00", productoActivo: true }));
+      const nueva = { id, ...cuerpo, items, precioLista: cuerpo.precio, ahorro: "0.00", estado: "activa", situacion: "vigente", vigente: true, anuncios: [], ventas: 0, ingreso: "0.00", creadaEn: new Date().toISOString() };
+      ofertas.unshift(nueva);
+      return send(nueva, 201);
+    }
+    if ((m = p.match(/^\/precios\/ofertas\/(\d+)\/anuncios\/(.+)$/))) {
+      const oferta = ofertas.find((o) => o.id === Number(m[1]));
+      const idAnuncio = decodeURIComponent(m[2]);
+      if (!oferta) return send({ error: "Esa oferta no existe." }, 404);
+      if ((vinculosAnuncio[idAnuncio] || (vinculosOferta[idAnuncio] && vinculosOferta[idAnuncio].ofertaId !== oferta.id)) && !cuerpo.reasignar) return send({ error: "Ese anuncio ya está vinculado a otro producto u oferta." }, 409);
+      delete vinculosAnuncio[idAnuncio];
+      quitarDeOfertas(idAnuncio);
+      vinculosOferta[idAnuncio] = { ofertaId: oferta.id, nombre: cuerpo.nombre || null };
+      if (!estadoAnuncios.find((e) => e.id === idAnuncio)) estadoAnuncios.push({ id: idAnuncio, llegadas: 0, conversaciones: 0, ventas: 0, ingresos: 0, ganancia: 0, sinCosto: 0, ultima: null, primera: null, soloVinculo: true });
+      if (!oferta.anuncios.includes(idAnuncio)) oferta.anuncios.push(idAnuncio);
+      return send({ idAnuncio, ofertaId: oferta.id, ofertaNombre: oferta.nombre });
+    }
+    if ((m = p.match(/^\/precios\/ofertas\/(\d+)$/))) {
+      const oferta = ofertas.find((o) => o.id === Number(m[1]));
+      if (!oferta) return send({ error: "Esa oferta no existe." }, 404);
+      if (req.method === "PUT") {
+        Object.assign(oferta, cuerpo);
+        if (cuerpo.estado && cuerpo.estado !== "activa") oferta.situacion = cuerpo.estado;
+      }
+      return send(oferta);
+    }
+    send({ error: "mock: ruta no implementada " + p }, 404);
+  });
+}
+
+// ---------- Tablero de anuncios de Meta (ADR-017) ----------
+const cuentaMeta = { cuentaPublicitaria: "1445728047079452" };
+const tableroMeta = () => ({
+  dias: 7, lecturaActiva: true, ultimaLectura: ago(35),
+  totales: { gasto: "86.40", ingreso: "264.30", ventas: 7, conversacionesMeta: 61, costoPorVenta: "12.34", gananciaNeta: "21.60" },
+  anuncios: [
+    { idAnuncio: "120210000123", nombre: "Audífonos · video principal", estado: "ACTIVE", estadoEfectivo: "ACTIVE", campana: "Audífonos noviembre", conjunto: "Ecuador 25-45", presupuestoDiario: "10.00", titulo: "Audífonos Bluetooth Pro", miniaturaUrl: null, productoSku: "AUD-BT-001", productoNombre: "Audífonos Bluetooth Pro", ofertaId: null, ofertaNombre: null, gasto: "52.10", conversacionesMeta: 38, conversaciones: 12, impresiones: 9400, clics: 310, ventas: 5, entregadas: 3, devueltas: 1, ingreso: "174.50", descuentos: "6.00", costoPorConversacion: "1.37", costoPorVenta: "10.42", gananciaNeta: "13.70", roas: "3.35" },
+    { idAnuncio: "120210000555", nombre: "Zapatos 2x1", estado: "ACTIVE", estadoEfectivo: "ACTIVE", campana: "Zapatos", conjunto: "Cuenca", presupuestoDiario: "5.00", titulo: "Zapatos de cuero · 2x1", miniaturaUrl: null, productoSku: null, productoNombre: null, ofertaId: 2, ofertaNombre: "Zapatos 2x1", gasto: "21.30", conversacionesMeta: 15, conversaciones: 5, impresiones: 4100, clics: 120, ventas: 2, entregadas: 2, devueltas: 0, ingreso: "89.80", descuentos: "60.00", costoPorConversacion: "1.42", costoPorVenta: "10.65", gananciaNeta: "7.90", roas: "4.22" },
+    { idAnuncio: "120210000789", nombre: "Zapatos de cuero · carrusel", estado: "ACTIVE", estadoEfectivo: "ACTIVE", campana: "Zapatos", conjunto: "Guayaquil", presupuestoDiario: "4.00", titulo: "Zapatos de cuero hechos a mano · 2x1", miniaturaUrl: null, productoSku: vinculosAnuncio["120210000789"] ? vinculosAnuncio["120210000789"].sku : null, productoNombre: vinculosAnuncio["120210000789"] ? nombreProductoBot(vinculosAnuncio["120210000789"].sku) : null, ofertaId: vinculosOferta["120210000789"] ? vinculosOferta["120210000789"].ofertaId : null, ofertaNombre: vinculosOferta["120210000789"] ? (ofertas.find((o) => o.id === vinculosOferta["120210000789"].ofertaId) || {}).nombre : null, gasto: "6.20", conversacionesMeta: 5, conversaciones: 5, impresiones: 1300, clics: 40, ventas: 0, entregadas: 0, devueltas: 0, ingreso: "0.00", descuentos: "0.00", costoPorConversacion: "1.24", costoPorVenta: null, gananciaNeta: "-6.20", roas: null },
+    { idAnuncio: "120210000456", nombre: "Lámpara LED", estado: "PAUSED", estadoEfectivo: "PAUSED", campana: "Hogar", conjunto: "Quito", presupuestoDiario: "5.00", titulo: null, miniaturaUrl: null, productoSku: "LMP-LED-220", productoNombre: "Lámpara LED Recargable", ofertaId: null, ofertaNombre: null, gasto: "13.00", conversacionesMeta: 8, conversaciones: 5, impresiones: 2600, clics: 60, ventas: 0, entregadas: 0, devueltas: 0, ingreso: "0.00", descuentos: "0.00", costoPorConversacion: "1.63", costoPorVenta: null, gananciaNeta: "-13.00", roas: null },
+  ],
+  alertas: [
+    { id: 3, regla: "R2", idAnuncio: "120210000555", mensaje: "El anuncio «Zapatos 2x1» promociona «Zapatos 2x1», que ya terminó o está pausada.", creadaEn: ago(40) },
+    { id: 2, regla: "R4", idAnuncio: "120210000456", mensaje: "El anuncio «Lámpara LED» gastó $13.00 y no trajo ninguna venta.", creadaEn: ago(60 * 20) },
+  ],
+  acciones: [
+    { id: 1, idAnuncio: "120210000456", regla: "manual", motivo: "Pausado desde el panel", resultado: "hecho", detalle: null, creadaPor: "dueño", creadaEn: ago(60 * 19) },
+  ],
+});
+
 // Conexión con Meta (ficticia): GET /meta/estado y POST /meta/preparar. Nunca lleva el token.
 const estadoMeta = {
   tokenConfigurado: true, cuentaWhatsappConfigurada: true, datasetId: null, avisosActivos: false,
@@ -1201,6 +1387,15 @@ const estadoMeta = {
 function manejarMeta(req, res, p, send) {
   const listo = () => estadoMeta.tokenConfigurado && estadoMeta.cuentaWhatsappConfigurada && !!estadoMeta.datasetId;
   if (req.method === "GET" && p === "/meta/estado") return send({ ...estadoMeta, listo: listo() });
+  if (p === "/meta/cuenta") {
+    if (req.method === "GET") return send({ ...cuentaMeta, lecturaActiva: true });
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    return req.on("end", () => { const c = raw ? JSON.parse(raw) : {}; cuentaMeta.cuentaPublicitaria = (c.cuentaPublicitaria || "").replace(/^act_/, "") || null; send(cuentaMeta); });
+  }
+  if (req.method === "GET" && p === "/meta/anuncios") return send(tableroMeta());
+  if (req.method === "POST" && p === "/meta/anuncios/leer") return send({ estado: "ok", anuncios: 3, alertas: 0, pausados: 0 });
+  if (req.method === "POST" && /^\/meta\/anuncios\/\d+\/pausar$/.test(p)) return send({ mensaje: "Se pausó el anuncio. Para reactivarlo, hazlo tú en el Administrador de anuncios." });
   if (req.method === "POST" && p === "/meta/preparar") {
     estadoMeta.datasetId = "1234567890123456";
     return send({ datasetId: estadoMeta.datasetId });
@@ -1255,6 +1450,19 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    if ((m = p.match(/^\/conversaciones\/(\d+)\/datos-envio$/))) {
+      let raw = "";
+      req.on("data", (d) => (raw += d));
+      return req.on("end", () => {
+        const b = raw ? JSON.parse(raw) : {};
+        if (b.canton && /inventad/i.test(b.canton)) return send({ error: "La ciudad o la provincia no coinciden con el catálogo de entregas de Rocketfy.", sugerencias: ["Guayaquil"], bloqueos: ["Guayaquil"] }, 422);
+        const actual = envios[m[1]] || {};
+        envios[m[1]] = { ...actual, tipoEntrega: b.tipoEntrega ?? null, nombreCliente: b.nombreCliente || null, direccion: b.direccion || null, referencia: b.referencia || null,
+          indicacionesEntrega: b.indicacionesEntrega || null, canton: b.canton || null, provincia: b.provincia || null,
+          agenciaDefinidaEn: b.tipoEntrega === "agencia" && b.direccion ? new Date().toISOString() : null };
+        send({ status: "ok" });
+      });
+    }
     if (p.match(/^\/conversaciones\/\d+\/(mensajes|reactivar|tomar|continuar|notas)$/)) return send({ ok: true });
     if (p === "/pedidos" && req.method === "GET") {
       let items = pedidos;
@@ -1286,6 +1494,8 @@ const server = http.createServer((req, res) => {
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
     if (p.startsWith("/meta/")) return manejarMeta(req, res, p, send);
+    if (p.startsWith("/precios/")) return manejarPrecios(req, res, p, q, send);
+    if (p.startsWith("/aprendizaje")) return manejarAprendizaje(req, res, p, q, send);
     // Imita Supabase Storage: las fotos públicas se leen por su enlace; subir y borrar archivos responde que sí.
     if (p.startsWith("/storage/v1/object/public/")) { res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }); return res.end(svgFoto(p)); }
     if (p.startsWith("/storage/v1/object/")) { req.on("data", () => {}); return req.on("end", () => send(req.method === "DELETE" ? [] : { Key: p.replace("/storage/v1/object/", ""), Id: "mock" })); }

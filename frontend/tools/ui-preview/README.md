@@ -51,3 +51,12 @@ Notas:
 - No uses `pkill -f server.mjs` desde un comando que contenga ese mismo texto: se mata a sí mismo.
 - Multicanal (ADR-014): el servidor falso trae dos conversaciones de otros canales sin teléfono (Instagram y Messenger), el filtro `?canal=` y una solicitud de «Por gestionar» de un cliente de Instagram. En las pantallas se ve el canal y «Aún sin teléfono».
 - Leads (docs/PLAN_LEADS_CRM.md, F3): el servidor falso trae 26 leads de todas las temperaturas (también de Instagram y Messenger, uno «no contactar», uno de un cliente recurrente), `GET /leads`, `/leads/resumen`, `/leads/<id>`, `PATCH /leads/<id>` (cambia la temperatura y anota el historial) y `PUT /contactos/<id>/no-contactar`; los cambios viven en memoria (reinicia el servidor para volver a los datos originales). En el chat de prueba de Victoria, cada turno trae la herramienta `clasificar_lead` con su temperatura.
+- Precios, ofertas y anuncios de Meta (ADR-017): el servidor falso trae reglas de precio por producto (`GET/PUT /precios/productos/<sku>`; AUD-BT-001 con
+  precio por transferencia y regateo, PROP-0001 con «2 por $80» y envío gratis; un precio por transferencia menor a $15 devuelve el 409 de «bajo tu margen»),
+  el descuento del negocio (`/precios/negocio`), tres ofertas (a la venta, terminada y programada) con `POST/PUT /precios/ofertas[/<id>]` y
+  `PUT /precios/ofertas/<id>/anuncios/<id>` (409 si el anuncio ya vende otra cosa), la cuenta publicitaria (`/meta/cuenta`) y el tablero
+  (`GET /meta/anuncios`, con un anuncio sin vincular, alertas y pausas; `POST /meta/anuncios/leer` y `/meta/anuncios/<id>/pausar`). Todo en memoria.
+- Entrega en agencia y Aprendizaje (ADR-018): la conversación 294 (Santiago) tiene la agencia por definir (aviso y botón «Definir la agencia»;
+  `PUT /conversaciones/<id>/datos-envio`, con un 422 y sugerencia si la ciudad contiene «inventad»); las demás muestran entrega a domicilio
+  con referencia, y la 301 una ubicación compartida. `/aprendizaje` trae 6 casos de ejemplo (3 por revisar), `/aprendizaje/resumen` y
+  `PATCH /aprendizaje/<id>` (en memoria).

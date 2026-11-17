@@ -36,6 +36,8 @@ class CrearPedidoInputSchema(Schema):
     ip = fields.Str(data_key="ip", allow_none=True, load_default=None)
     latitud = fields.Float(data_key="latitud", allow_none=True, load_default=None)
     longitud = fields.Float(data_key="longitud", allow_none=True, load_default=None)
+    # Si el pedido se arma desde una conversación, queda unido a su venta (lead): Victoria ya no puede crear otro.
+    conversacion_id = fields.Int(data_key="conversacionId", allow_none=True, load_default=None)
 
 
 class ModificarPedidoInputSchema(Schema):

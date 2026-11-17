@@ -33,6 +33,7 @@ La única llamada de red real es la de la IA (Anthropic): sin ella no hay prueba
 """
 import json
 import logging
+from types import SimpleNamespace
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -44,8 +45,9 @@ from src.routes.gestion.services import ResultadoSolicitud
 from src.routes.gestion.tipos import tipo as tipo_de_solicitud
 from src.routes.leads.temperaturas import GANADO, TEMPERATURAS
 from src.routes.pedidos.services import PedidoService
-from src.routes.ventas.snapshot import armar_venta, ganancia_de
+from src.routes.ventas.snapshot import armar_venta, armar_venta_cotizada, ganancia_de
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
+from src.routes.aprendizaje.servicio import RegistroQueNoGuarda
 from src.routes.whatsapp.tools import HerramientasVictoria
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,8 @@ ID_PEDIDO_SIMULADO_INICIAL = 9_000_001
 CAMPOS_TEXTO = (
     "nombre_cliente", "direccion", "canton", "provincia", "producto_sku", "producto_nombre", "producto_variante",
     "entrega_nombre", "entrega_tipo",
+    # Entrega en agencia (entrada 0.0.140).
+    "tipo_entrega", "agencia_indicada", "referencia",
 )
 METODOS_DE_PAGO = ("contraentrega", "transferencia")
 ESTADOS_DEL_LEAD = ("recopilando_datos", "esperando_pago", "despachado", "por_gestionar")
@@ -259,6 +263,27 @@ class LeadsEnMemoria:
     def actualizar_despacho(self, lead_id, id_pedido_local, id_pedido_rocketfy) -> None:
         self.lead.update(estado="despachado", id_pedido_local=id_pedido_local, id_pedido_rocketfy=id_pedido_rocketfy)
 
+    def actualizar_referencia(self, lead_id, referencia) -> None:
+        if self.lead.get("referencia") != referencia:
+            self._reiniciar_confirmacion()
+            self.lead["referencia"] = referencia
+
+    def actualizar_tipo_entrega(self, lead_id, tipo, agencia_indicada) -> None:
+        # Igual que el UPDATE real: cambiar de opción obliga a confirmar otra vez y borra la agencia definida.
+        if self.lead.get("tipo_entrega") != tipo:
+            self._reiniciar_confirmacion()
+            self.lead.update(tipo_entrega=tipo, agencia_definida_en=None, agencia_definida_por=None)
+            self.lead["agencia_indicada"] = agencia_indicada if tipo == "agencia" else None
+        elif tipo == "agencia" and agencia_indicada:
+            self.lead["agencia_indicada"] = agencia_indicada
+
+    def guardar_precios(self, lead_id, campos) -> None:
+        # Igual que el UPDATE real (ADR-017): si cambia el total, el cliente tiene que volver a confirmar el resumen.
+        if "total" in campos and self.lead.get("total") is not None and campos["total"] is not None:
+            if Decimal(str(self.lead["total"])) != Decimal(str(campos["total"])):
+                self._reiniciar_confirmacion()
+        self.lead.update(campos)
+
 
 PREFIJO_DE_FOTO = "📷 Foto de "
 
@@ -375,11 +400,18 @@ class VentasEnEnsayo:
         self._conversaciones = conversaciones
         self.venta: Optional[Dict[str, Any]] = None
 
-    def registrar_venta_rocketfy(self, lead, producto, conversacion, entrega) -> None:
+    def registrar_venta_rocketfy(self, lead, producto, conversacion, entrega, productos=None) -> None:
         pass  # el pedido de Rocketfy ya se ve en «pedido»; la foto de la venta no se guarda en la prueba
 
-    def cerrar_manual(self, lead, producto, conversacion, entrega, controla_stock, detalle_solicitud) -> Dict[str, Any]:
-        venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", Decimal("0.00"))
+    def cerrar_manual(
+        self, lead, producto, conversacion, entrega, controla_stock, detalle_solicitud, productos=None, controla_por_sku=None
+    ) -> Dict[str, Any]:
+        if lead.get("cotizacion") and productos is not None:
+            venta, lineas = armar_venta_cotizada(
+                lead, lead["cotizacion"], productos, producto, conversacion, entrega, "por_gestionar", Decimal("0.00")
+            )
+        else:
+            venta, lineas = armar_venta(lead, producto, conversacion, entrega, "por_gestionar", Decimal("0.00"))
         self.venta = {**venta, "lineas": lineas, "ganancia": ganancia_de(venta)}
         stock = producto.get("stock_ultimo")
         restante = stock - int(lead.get("cantidad") or 1) if controla_stock and stock is not None else None
@@ -619,6 +651,8 @@ def simular_turno(
         gestion_service=gestion,
         ventas_service=ventas,
         imagen_repo=ImagenesEnEnsayo(imagenes),
+        # Una conversación de ensayo no deja casos en «Aprendizaje de Victoria».
+        aprendizaje=RegistroQueNoGuarda(),
     )
     cerebro = VictoriaConversationService(
         llm_client=llm,
@@ -634,6 +668,8 @@ def simular_turno(
         # La simulación SIEMPRE ofrece la foto, aunque en producción esté apagada
         # (parámetro «Enviar fotos»): así se puede ver cómo la usa Victoria antes de encenderla.
         enviar_fotos=True,
+        # La conversación de prueba no existe en la base: no se lee el anuncio de ninguna conversación real.
+        anuncios_repo=SimpleNamespace(llegadas_de=lambda conversacion_id: []),
     )
     respuesta = cerebro.procesar_turno(lead["conversacion_id"], mensaje)
 

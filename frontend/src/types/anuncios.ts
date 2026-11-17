@@ -7,6 +7,9 @@ export type Anuncio = {
   productoNombre: string | null;
   /** El nombre que le pusiste al vincularlo (útil antes de que llegue el primer cliente). */
   nombreVinculo: string | null;
+  /** Si el anuncio vende una oferta (combo o promo) en vez de un producto suelto (ADR-017). */
+  ofertaId: number | null;
+  ofertaNombre: string | null;
   titulo: string | null;
   texto: string | null;
   urlAnuncio: string | null;

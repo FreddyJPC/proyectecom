@@ -116,7 +116,7 @@ def respuesta_para_victoria(dicho: Optional[str], cualquiera: bool, cuentas: Lis
     if not cuentas:
         return (
             "Por ahora no hay cuentas para transferir configuradas. No inventes ninguna: dile al cliente con amabilidad que un asesor le "
-            "pasa los datos y usa escalar_a_humano."
+            "pasa los datos y usa pasar_a_asesor."
         )
     if cualquiera:
         # «Cualquiera»: la cuenta principal (la de menor orden), con todas las cuentas de ese mismo banco.

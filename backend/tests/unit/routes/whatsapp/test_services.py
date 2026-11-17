@@ -387,7 +387,7 @@ class TestReglasDeterministasDeEscalado:
 
     def test_por_defecto_victoria_atiende_al_cliente_que_ya_compro(self):
         """Pedido de Freddy: Victoria es la vendedora, atiende y da seguimiento al cliente recurrente; solo pasa a una persona lo
-        que no sabe o lo que es de un pedido anterior (eso lo decide ella con escalar_a_humano, no una regla fija)."""
+        que no sabe o lo que es de un pedido anterior (eso lo decide ella con pasar_a_asesor, no una regla fija)."""
         conv_repo = FakeConversacionRepository(
             existentes={"593987654321": {"id": 1, "telefono": "593987654321", "origen": "directo", "estado": "activa"}}
         )

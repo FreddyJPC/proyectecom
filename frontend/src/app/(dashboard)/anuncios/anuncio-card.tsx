@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatMoney, tiempoRelativo } from "@/lib/format";
 import type { Anuncio } from "@/types/anuncios";
+import type { Oferta } from "@/types/precios";
 import type { ProductoBotResumen } from "@/types/producto-bot";
 
 import { VincularAnuncioDialog } from "./vincular-dialog";
@@ -35,11 +36,11 @@ function Cifra({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Un anuncio: lo que Meta dijo de él, su producto y cuánto ha vendido. Aquí se vincula o se quita el vínculo. */
-export function AnuncioCard({ anuncio: a, productos, onCambio }: { anuncio: Anuncio; productos: ProductoBotResumen[]; onCambio: () => void }) {
+export function AnuncioCard({ anuncio: a, productos, ofertas = [], onCambio }: { anuncio: Anuncio; productos: ProductoBotResumen[]; ofertas?: Oferta[]; onCambio: () => void }) {
   const [imagenFalla, setImagenFalla] = useState(false);
   const [quitando, setQuitando] = useState(false);
   const imagen = a.miniaturaUrl ?? a.imagenUrl;
-  const vinculado = a.productoSku !== null;
+  const vinculado = a.productoSku !== null || a.ofertaId !== null;
   const nombre = a.titulo ?? a.nombreVinculo ?? `Anuncio ${a.idAnuncio}`;
 
   async function quitarVinculo() {
@@ -77,7 +78,14 @@ export function AnuncioCard({ anuncio: a, productos, onCambio }: { anuncio: Anun
             {a.ultimaLlegada ? <> · última llegada {tiempoRelativo(a.ultimaLlegada)}</> : <> · todavía no ha traído a nadie</>}
           </p>
           <p className="text-sm">
-            {vinculado ? (
+            {a.ofertaId !== null ? (
+              <>
+                Oferta:{" "}
+                <Link href={`/ofertas/${a.ofertaId}`} className="font-medium text-primary underline-offset-2 hover:underline">
+                  {a.ofertaNombre}
+                </Link>
+              </>
+            ) : vinculado ? (
               <>
                 Producto:{" "}
                 <Link href={`/catalogo/producto/${encodeURIComponent(a.productoSku!)}`} className="font-medium text-primary underline-offset-2 hover:underline">
@@ -106,11 +114,13 @@ export function AnuncioCard({ anuncio: a, productos, onCambio }: { anuncio: Anun
           productos={productos}
           idAnuncio={a.idAnuncio}
           productoActual={a.productoSku}
+          ofertas={ofertas}
+          ofertaActual={a.ofertaId}
           nombreActual={a.nombreVinculo}
           onVinculado={onCambio}
           trigger={
             <Button type="button" size="sm" variant={vinculado ? "outline" : "default"}>
-              <Link2 /> {vinculado ? "Cambiar producto" : "Vincular con un producto"}
+              <Link2 /> {vinculado ? "Cambiar lo que vende" : "Vincular"}
             </Button>
           }
         />

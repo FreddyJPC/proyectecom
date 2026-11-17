@@ -104,6 +104,7 @@ class BotWorker:
         segundos_espera: Optional[float] = None,
         telegram: Optional[TelegramNotifier] = None,
         pausas_reintento: Optional[tuple] = None,
+        aprendizaje=None,
     ):
         self._cola: "queue.Queue[TareaRespuestaDTO]" = queue.Queue()
         self._canales = canales
@@ -113,6 +114,7 @@ class BotWorker:
         # None = leer el parámetro en cada mensaje (se cambia desde la app); un número lo fija (tests).
         self._segundos_espera_fijo = segundos_espera
         self._telegram_fijo = telegram
+        self._aprendizaje_fijo = aprendizaje
         self._pausas_reintento = pausas_reintento if pausas_reintento is not None else PAUSAS_ENTRE_REINTENTOS
         self._esperando: Dict[int, _Espera] = {}
         self._candado = threading.Lock()
@@ -262,6 +264,20 @@ class BotWorker:
             return
         self._cola_repository.marcar_error(tarea.cola_mensajes_id, detalle)
         self._avisar_fallo(tarea, detalle)
+        self._anotar_fallo(tarea, detalle)
+
+    def _anotar_fallo(self, tarea: TareaRespuestaDTO, detalle: str) -> None:
+        """«Aprendizaje de Victoria»: un cliente sin respuesta por un fallo queda anotado (con lo que había escrito)."""
+        try:
+            if self._aprendizaje_fijo is None:
+                from src.routes.aprendizaje.servicio import RegistroAprendizaje  # perezoso: evita ciclos al arrancar
+
+                self._aprendizaje_fijo = RegistroAprendizaje(mensajes=self._mensaje_repository)
+            self._aprendizaje_fijo.anotar(
+                "error_sistema", "sistema", f"El cliente se quedó sin respuesta por un fallo: {detalle[:300]}", tarea.conversacion_id
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("No se pudo anotar el fallo en Aprendizaje", exc_info=True)
 
     def _avisar_fallo(self, tarea: TareaRespuestaDTO, detalle: str) -> None:
         """Avisa al dueño por Telegram que un cliente se quedó sin respuesta. Best-effort: nunca lanza."""

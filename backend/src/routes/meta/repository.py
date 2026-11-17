@@ -23,6 +23,21 @@ class MetaRepository:
                 cur.execute("update ajustes_negocio set meta_dataset_id = %s where id = 1", (dataset_id,))
 
     @staticmethod
+    def cuenta_publicitaria() -> Optional[str]:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select meta_cuenta_publicitaria from ajustes_negocio where id = 1")
+                fila = cur.fetchone()
+        valor = fila[0] if fila else None
+        return valor.strip() if isinstance(valor, str) and valor.strip() else None
+
+    @staticmethod
+    def guardar_cuenta_publicitaria(cuenta: Optional[str]) -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("update ajustes_negocio set meta_cuenta_publicitaria = %s where id = 1", (cuenta,))
+
+    @staticmethod
     def resumen_eventos() -> Dict[str, int]:
         """Cuántos eventos hay en cada estado (todos los estados aparecen, aunque sea con 0)."""
         with get_connection() as conn:

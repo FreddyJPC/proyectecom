@@ -21,7 +21,7 @@ from src.catalogs.ecuador_locations import EcuadorLocationsCatalog
 
 from .coincidencia import base, buscar
 
-_SI_NO_SE_ACLARA = "Si después de dos intentos no se aclara, no supongas ni inventes: usa escalar_a_humano."
+_SI_NO_SE_ACLARA = "Si después de dos intentos no se aclara, no supongas ni inventes: usa pasar_a_asesor."
 
 
 @dataclass

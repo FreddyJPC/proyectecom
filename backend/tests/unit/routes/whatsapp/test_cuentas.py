@@ -100,7 +100,7 @@ class TestLoQueRecibeVictoria:
 
     def test_sin_cuentas_configuradas_se_escala(self):
         r = respuesta_para_victoria("pichincha", False, [])
-        assert "escalar_a_humano" in r
+        assert "pasar_a_asesor" in r
 
 
 class _Cuentas:

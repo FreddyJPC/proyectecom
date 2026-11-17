@@ -1649,3 +1649,104 @@ anuncio» está en Control → Parámetros. Plan completo: `docs/PLAN_META_ADS.m
 
 **El botón «Preparar Meta» (Parámetros → Conexión con Meta).** Para recibir las ventas, Meta necesita un *dataset* (un buzón asociado a tu cuenta de WhatsApp). Se pide con el token, que vive solo en el servidor. En lugar de que alguien copie el token, el botón le pide a Meta el dataset desde el propio servidor y guarda su número. Es seguro repetirlo: según la documentación de Meta, si el dataset ya existe devuelve el mismo. Si algo falla, la pantalla muestra el motivo que dio Meta (sin el token).
 
+## 54. Precios, regateo y ofertas: tú pones las reglas, el código calcula, Victoria conversa
+
+**Para qué sirve.** Para vender como un negocio real (descuento por transferencia, «si llevas 2…», regateo, combos, promos con fecha)
+**sin regalar margen** y sin que la IA invente un precio. Reglas completas y su porqué: **ADR-017** en `PROGRESS.md`; diseño en
+`docs/PLAN_MODULO_ANUNCIOS.md`.
+
+**La cotización.** Cada vez que el pedido cambia (producto, cantidad, forma de pago, entrega, rebaja), el código arma una
+**cotización**: cada línea con su precio de lista, el precio que paga, el envío y el total, todo con `Decimal`. Victoria solo dice ese total.
+Queda guardada en el lead (`leads.cotizacion`) y, al cerrar, en la venta (`ventas.descuentos`, con el **motivo** de cada rebaja), para medir
+si los descuentos convienen. Código: `backend/src/routes/precios/` (`reglas.py`, `cotizacion.py`, `negociacion.py`).
+
+**El piso de margen.** Es el precio más bajo al que conviene vender una unidad:
+`(costo + envío estimado + gastos fijos) ÷ (1 − margen mínimo − otros %)`, con los valores de Catálogo → Ajustes de precios. **Ninguna** rebaja
+baja de ahí. Si al guardar una regla u oferta algo queda debajo, el panel avisa y pide confirmar «a propósito».
+
+**Tres niveles, gana el más específico:** **oferta** > **producto** (ficha → «Precios y descuentos») > **negocio** (Ofertas y combos →
+«Descuento por transferencia para todos»). Sin nada configurado, el total es **exactamente el de antes** (lo comprueba un test).
+
+**Cada regla, en una línea:**
+- **Precio por transferencia:** precio fijo, porcentaje o dólares menos por unidad. Victoria lo menciona sola cuando se habla del pago.
+- **Precio por cantidad:** «2 por $45». Victoria lo menciona una vez, cuando el cliente ya eligió producto.
+- **Regateo:** límite en % o en $ por unidad. Lo decide el código con la herramienta `negociar_precio`: la primera vez **contraoferta**
+  (punto medio, redondeado hacia arriba); si el cliente insiste y está dentro del límite, acepta; si pide menos que el límite, ofrece el mínimo.
+- **No se suman** regateo y transferencia: el cliente paga el menor de los dos.
+- **Envío gratis** desde cierta cantidad de unidades o cierto monto.
+- **Ofertas y combos:** varios productos a un precio, con fechas, cupo y veces por cliente. Por defecto la ve **solo quien llega por su anuncio**
+  y **no se regatea**. Si terminó o no hay cupo, Victoria lo explica y ofrece el precio normal.
+- **Varios productos en un pedido:** apagado de fábrica (parámetro). Nunca se mezclan productos de Rocketfy con productos propios.
+
+**Transferencia confirmada = pedido prepagado.** Si el dueño confirmó la transferencia, el pedido va a Rocketfy como **no contra entrega**
+(`not_COD = 1`): el repartidor no cobra nada. Antes iba como contra entrega por el total (se habría cobrado dos veces).
+
+## 55. Anuncios de Meta: gasto, ganancia neta y alertas
+
+**Para qué sirve.** Saber si cada anuncio **gana o pierde plata** y enterarte a tiempo cuando algo va mal (anuncio activo de un producto
+agotado, oferta vencida, gasto sin ventas), sin entrar al Administrador de anuncios.
+
+**Cómo funciona.** Un trabajo automático (`jobs/meta_anuncios`, cada hora, **apagado de fábrica**: «Leer mis anuncios de Meta») lee de la
+API de Marketing de Meta los anuncios de tu cuenta publicitaria y su gasto por día (`meta_anuncios`, `meta_metricas_diarias`). El tablero de
+Anuncios → «Gasto y rendimiento» junta ese gasto con **tus** ventas: costo por venta, retorno y **ganancia neta** (lo que dejan las ventas menos
+costos y menos lo gastado en el anuncio).
+
+**Alertas (R1–R9).** Por ejemplo: anuncio activo de algo agotado (R1), oferta terminada (R2), poco stock (R3), gasto sin ventas (R4), conversación
+cara (R5), pierde plata por venta (R6), anuncio sin producto ni oferta (R7), rechazado por Meta (R8), demasiadas ventas con regateo (R9). Cada alerta
+se avisa **una vez al día** como máximo (tabla `meta_alertas`). Los umbrales son parámetros (en 0 = apagados hasta tener números del piloto).
+
+**Pausar.** Desde el panel puedes pausar un anuncio con un botón (pide confirmar). La **pausa automática** solo actúa por **hechos** (sin stock u
+oferta terminada), viene **apagada**, hace como máximo 10 pausas al día y queda anotada (`meta_acciones`). El sistema **nunca** reactiva un
+anuncio, **nunca** cambia presupuestos ni crea anuncios. Si Meta no confirma una pausa, se anota como «dudosa» y se vuelve a leer el estado antes
+de intentar otra cosa.
+
+**Qué necesita.** El mismo token del aviso de ventas (`META_CAPI_TOKEN`, regla D5: un solo usuario del sistema) con los permisos `ads_read` y
+`ads_management`, el caso de uso de Marketing en la app de Meta y la cuenta publicitaria asignada al usuario del sistema. La cuenta se escribe en
+Parámetros → Conexión con Meta (respaldo: `META_AD_ACCOUNT_ID` en Railway).
+
+## 56. Entrega en agencia de Servientrega (versión 1): Victoria la ofrece, tú la defines
+
+**Para qué sirve.** Muchas entregas a domicilio fallan (dirección difícil, nadie en casa) y el paquete vuelve. Si llega a una agencia de
+Servientrega, el cliente lo retira con su cédula cuando puede. Reglas completas: **ADR-018** en `PROGRESS.md`.
+
+**Cómo fluye.**
+1. Cuando Victoria ya sabe la ciudad, recomienda **una sola vez** el retiro en agencia (solo si encendiste «Recomendar el retiro en agencia»
+   en Parámetros → Entregas; viene apagado). Si el cliente prefiere su casa, se respeta y Victoria pide la dirección y una **referencia**.
+2. Si quiere agencia, Victoria anota **lo que dijo tal cual** («una por el centro», un enlace, una foto…) y sigue pidiendo lo demás. **Nunca**
+   nombra ni confirma una agencia: no tiene una lista confiable y podría inventarla.
+3. Con todos los demás datos, el **sistema** (no la IA) te pasa la conversación y te avisa por Telegram: «Falta definir la agencia».
+4. En la conversación ves el aviso y el botón **«Definir la agencia»**: escribes la dirección de la agencia (y, si quieres, referencia e
+   indicaciones; viene propuesta «el cliente retira con su cédula»). Se revisa que la ciudad exista.
+5. Pulsas **«Que Victoria continúe»**: ella le muestra el resumen («Retiro en agencia Servientrega: …», «lleve su cédula»), el cliente
+   confirma y se crea el pedido en Rocketfy con la dirección de la agencia.
+
+**«Datos de envío».** Desde cualquier conversación con un pedido en curso puedes corregir nombre, dirección, referencia, ciudad, provincia,
+tipo de entrega e indicaciones. Si cambias algo que el cliente ya había confirmado, Victoria se lo vuelve a mostrar. Lo que no se corrige
+ahí: el producto, la cantidad y la forma de pago (los maneja Victoria con sus herramientas, que calculan el precio).
+
+**Lo que ahora recibe Rocketfy.** La referencia (`address_2`), las indicaciones al repartidor (`carrier_observations`) y, si el cliente
+compartió su ubicación 📍 y recibe en casa, sus coordenadas.
+
+**«Recogida en Agencia».** Es un estado que **Rocketfy nos avisa** (no lo pedimos nosotros): el paquete ya espera en una oficina de
+Servientrega. Te llega un aviso por Telegram para que le recuerdes al cliente retirarlo. El aviso automático al cliente es el pendiente #84.
+
+## 57. «Aprendizaje de Victoria»: guardar cada vez que se traba, para mejorarla
+
+**Para qué sirve.** Saber **en qué** falla Victoria con clientes reales (qué no entiende, qué preguntas no tiene en su información, qué
+piden que no se puede dar) y corregirlo: completar la ficha, ajustar sus instrucciones o un parámetro.
+
+**Qué se guarda** (tabla `victoria_aprendizaje`, pantalla Control → Aprendizaje de Victoria): el **tipo** (no entendió, no tenía la
+respuesta, fuera de las reglas, pidió un asesor, cliente molesto, problema de pago o de entrega, falta la agencia, cierre frenado, fallos,
+el dueño intervino…), el **motivo** en una frase, el **mensaje exacto del cliente**, en qué **etapa** de la venta iba, el producto y los
+**últimos 8 mensajes**. Se copian a propósito: los mensajes se pueden depurar y el caso tiene que entenderse meses después.
+
+**Cuándo se guarda.** Cada vez que Victoria pasa la conversación a un asesor (ella elige el tipo y explica el motivo), cada vez que una regla
+del código frena la venta o algo falla, y cuando **tú** tienes que tomar o escribir en una conversación que ella atendía (señal de que algo
+no iba bien). No se guardan las rutinas (verificar un pago) ni las pruebas de «Probar con Victoria».
+
+**Cómo se usa.** En la pantalla revisas cada caso, anotas el resultado (mejorado, revisado, descartado), qué se hizo y una nota. «Lo más
+frecuente» te dice qué conviene mejorar primero. Más adelante esta tabla sirve para armar pruebas con los mensajes reales que la marearon.
+
+**Victoria y los temas ajenos.** Solo habla del negocio: si le preguntan el clima o le piden traducir algo, no lo responde y vuelve con
+amabilidad a la compra. Nunca dice que es un bot ni que «le pasa con un humano»: dice que le comunica con un asesor. Si le preguntan en
+serio si es una persona o un sistema, no lo niega (breve) y sigue ayudando (ADR-018, regla 1).

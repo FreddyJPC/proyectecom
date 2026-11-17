@@ -118,7 +118,10 @@ class AnuncioServicio:
             raise ProductoNoExisteError(sku)
         actual = self._repo.vinculo_de(id_anuncio)
         if actual is not None and actual["producto_sku"] != sku and not reasignar:
-            raise AnuncioYaVinculadoError(id_anuncio, actual["producto_sku"], actual.get("producto_nombre"))
+            # Puede estar vinculado a otro producto o a una oferta (ADR-017): se pide confirmar el cambio igual.
+            raise AnuncioYaVinculadoError(
+                id_anuncio, actual["producto_sku"] or f"oferta {actual.get('oferta_id')}", actual.get("producto_nombre") or actual.get("oferta_nombre")
+            )
         nombre_limpio = (nombre or "").strip()[:_LARGO_NOMBRE] or None
         self._repo.vincular(id_anuncio, sku, nombre_limpio)
         return {"id_anuncio": id_anuncio, "producto_sku": sku, "producto_nombre": producto["nombre"]}

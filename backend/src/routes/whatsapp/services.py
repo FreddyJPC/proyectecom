@@ -184,7 +184,7 @@ class WebhookService:
         # marcar_escalada() (no actualizar_estado() genérico) para que
         # también limpie vista_en -- el módulo de Conversaciones del
         # dashboard necesita que CUALQUIER camino de escalado (este
-        # determinista, o el de Victoria vía escalar_a_humano) deje la
+        # determinista, o el de Victoria vía pasar_a_asesor) deje la
         # conversación como "sin revisar" otra vez.
         conversacion_id = conversacion["id"]
         self._conversaciones.marcar_escalada(conversacion_id)

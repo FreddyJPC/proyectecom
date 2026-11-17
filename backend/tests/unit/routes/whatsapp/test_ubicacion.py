@@ -91,7 +91,7 @@ class TestRevisarUbicacion:
 
     def test_el_mensaje_de_problema_manda_a_escalar_si_no_se_aclara(self):
         r = revisar_ubicacion(CATALOGO, "xyzxyz", "Pichincha")
-        assert r.hay_problema and "escalar_a_humano" in r.mensaje
+        assert r.hay_problema and "pasar_a_asesor" in r.mensaje
 
     def test_solo_provincia_se_guarda(self):
         r = revisar_ubicacion(CATALOGO, None, "Azuay")
@@ -144,7 +144,7 @@ class TestGuardarConUbicacion:
     def test_solo_una_ciudad_inexistente_dice_que_no_se_guardo(self):
         leads = FakeLeadRepository(leads={1: {}})
         respuesta = _guardar(_herramientas(lead_repo=leads), canton="xyzxyz")
-        assert respuesta.startswith("No se guardó la ubicación") and "escalar_a_humano" in respuesta
+        assert respuesta.startswith("No se guardó la ubicación") and "pasar_a_asesor" in respuesta
         assert "canton" not in leads.leads[1]
 
     def test_un_valor_bueno_ya_guardado_no_se_pisa_con_uno_dudoso(self):

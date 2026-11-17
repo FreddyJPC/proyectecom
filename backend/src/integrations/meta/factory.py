@@ -71,3 +71,35 @@ def get_cliente_para_dataset() -> Tuple[Optional[MetaConversionesClient], List[s
         ),
         [],
     )
+
+
+# ---------------------------------------------------------------------------
+# API de Marketing (ADR-017): leer anuncios y gasto, y pausar. Mismo token (regla D5).
+# ---------------------------------------------------------------------------
+VARIABLE_CUENTA = "META_AD_ACCOUNT_ID"
+
+
+def _cuenta_guardada() -> Optional[str]:
+    from src.routes.meta.repository import MetaRepository  # tardío: rutas dependen de integraciones, no al revés
+
+    return MetaRepository.cuenta_publicitaria()
+
+
+def cuenta_publicitaria(leer_guardada: Callable[[], Optional[str]] = _cuenta_guardada) -> Optional[str]:
+    """La guardada desde el panel («Conexión con Meta») o, si no hay, la variable del servidor (respaldo)."""
+    return (leer_guardada() or "").strip() or (os.getenv(VARIABLE_CUENTA) or "").strip() or None
+
+
+def get_marketing_client(leer_guardada: Callable[[], Optional[str]] = _cuenta_guardada):
+    """Devuelve (cliente, lo que falta). El cliente es None si falta el token o la cuenta publicitaria."""
+    from .marketing import MetaMarketingClient, normalizar_cuenta
+
+    cuenta = cuenta_publicitaria(leer_guardada)
+    ausentes = []
+    if not token_configurado():
+        ausentes.append(VARIABLE_TOKEN)
+    if not cuenta or not normalizar_cuenta(cuenta):
+        ausentes.append("cuenta publicitaria (guárdala en Conexión con Meta)")
+    if ausentes:
+        return None, ausentes
+    return MetaMarketingClient(os.environ[VARIABLE_TOKEN].strip(), cuenta), []

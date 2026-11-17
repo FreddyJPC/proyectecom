@@ -43,7 +43,7 @@ class TestHistorialDelCliente:
         texto_ = formatear_historial([_previo()], 1, "Ana", AHORA)
         assert "Es un cliente conocido: ya compró una vez" in texto_ and "Su nombre es Ana" in texto_
         assert "Audífonos (lo compró hace 2 meses)" in texto_
-        assert "escalar_a_humano" in texto_  # lo del pedido anterior lo resuelve una persona
+        assert "pasar_a_asesor" in texto_  # lo del pedido anterior lo resuelve una persona
 
     def test_un_cliente_que_solo_pregunto_antes_no_se_dice_que_compro(self):
         texto_ = formatear_historial([_previo("Zapatos", "perdido", "precio", 120, 110)], 0, None, AHORA)

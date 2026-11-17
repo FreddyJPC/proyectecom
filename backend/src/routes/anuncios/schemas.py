@@ -10,6 +10,8 @@ class AnuncioSchema(Schema):
     producto_sku = fields.Str(data_key="productoSku", allow_none=True)
     producto_nombre = fields.Str(data_key="productoNombre", allow_none=True)
     nombre_vinculo = fields.Str(data_key="nombreVinculo", allow_none=True)
+    oferta_id = fields.Int(data_key="ofertaId", allow_none=True)
+    oferta_nombre = fields.Str(data_key="ofertaNombre", allow_none=True)
     titulo = fields.Str(allow_none=True)
     texto = fields.Str(allow_none=True)
     url_anuncio = fields.Str(data_key="urlAnuncio", allow_none=True)
