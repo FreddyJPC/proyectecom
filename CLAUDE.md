@@ -118,7 +118,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2570 tests pasando**.
+   desde `backend/`. Estado actual: **2571 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -283,17 +283,18 @@ posible y rotarlos.
 - **Confirmar pago y «Que Victoria continúe» + Servientrega (entrada 0.0.127) — desplegado 2026-11-10 (PR #35; sin migración nueva; 42 parámetros): el dueño confirma una transferencia con un botón del panel y Victoria sigue cerrando la venta; `rol = 'sistema'` en `mensajes` guarda los avisos internos al bot. **Aún no probados de punta a punta con la IA real ni con un pedido real** (pendiente #76).
 - **Recordatorios de chats sin atender (pendiente #76, entrada 0.0.129) — desplegado 2026-11-10 (PR #36):** migración **030** (`conversaciones.pendiente_desde`, `recordatorios_enviados`, `ultimo_recordatorio_en`) aplicada en Supabase (30 migraciones); 49 parámetros; trabajo `jobs/recordatorios` que avisa por Telegram al dueño. **La base de datos se limpió de todo dato de prueba el 2026-11-10** (se conservó la configuración: cuentas, parámetros, ajustes, proveedores) y los contadores de ids NO se reiniciaron a propósito (Rocketfy usa `pedidos.id_local` como identificador).
 - **Aviso de ventas a Meta y «Preparar Meta» (ADR-016, entradas 0.0.132 a 0.0.135) — desplegado 2026-11-15 (PR #37):** migraciones **031** (`eventos_meta`) y **032** (`ajustes_negocio.meta_dataset_id`) aplicadas en Supabase (32 migraciones); 54 parámetros; trabajo `jobs/eventos_meta` (cada 15 min) con el interruptor `meta.activo` **APAGADO**; pantalla Parámetros → Conexión con Meta con el botón «Preparar Meta». Meta: cuenta publicitaria nueva **AzoShop** (`1445728047079452`, dueña: portafolio AzoShop), `META_CAPI_TOKEN` ya está en Railway (solo el nombre es visible). **Falta:** pulsar «Preparar Meta» (crea el dataset), probar con un clic real y encender el aviso; nada se ha enviado a Meta. Plan: `docs/PLAN_META_ADS.md`.
-- **Precios, regateo, ofertas y anuncios de Meta (ADR-017, entrada 0.0.138) — CONSTRUIDO 2026-11-16, SIN DESPLEGAR:** migraciones **033**
+- **Precios, regateo, ofertas y anuncios de Meta (ADR-017, entrada 0.0.138) — DESPLEGADO 2026-11-17 (PR #38, entrada 0.0.141):** migraciones **033**
   (reglas por producto, escalas, ofertas, líneas y cotización del lead, descuentos de la venta) y **034** (anuncios y gasto de Meta, alertas, acciones)
-  solo en la base local de pruebas; **72 parámetros**; trabajo `meta_anuncios` (cada hora, **apagado**). El código calcula todo precio (cotización con
+  aplicadas en Supabase (35 migraciones en total); **72 parámetros**; trabajo `meta_anuncios` (cada hora, **apagado**). El código calcula todo precio (cotización con
   `Decimal`, piso de margen) y Victoria regatea con `negociar_precio`. **Incluye el arreglo urgente F0a:** una transferencia confirmada va a Rocketfy como
-  prepagada (`not_COD=1`); **hasta desplegarlo, en producción sigue yendo como contra entrega**. Pantallas: ficha → «Precios y descuentos», «Ofertas y
-  combos», tablero en Anuncios. Para leer anuncios falta F0b en Meta (permisos `ads_read`/`ads_management`, caso de uso de Marketing). Pendientes #81
-  (desplegar) y #82 (pruebas reales, lista en `docs/PLAN_MODULO_ANUNCIOS.md` §12).
-- **Entrega en agencia (versión 1), «Aprendizaje de Victoria» y trato como parte del equipo (ADR-018, entrada 0.0.140) — CONSTRUIDO 2026-11-16,
-  SIN DESPLEGAR:** migración **035** (datos de entrega en `leads`, tabla `victoria_aprendizaje`) solo en la base local; **76 parámetros**
+  prepagada (`not_COD=1`), ya en producción. Pantallas: ficha → «Precios y descuentos», «Ofertas y
+  combos», tablero en Anuncios. Para leer anuncios falta F0b en Meta (permisos `ads_read`/`ads_management`, caso de uso de Marketing). Pendiente
+  #82 (pruebas reales, lista en `docs/PLAN_MODULO_ANUNCIOS.md` §12).
+- **Entrega en agencia (versión 1), «Aprendizaje de Victoria» y trato como parte del equipo (ADR-018, entrada 0.0.140) — DESPLEGADO 2026-11-17
+  (PR #38, entrada 0.0.141):** migración **035** (datos de entrega en `leads`, tabla `victoria_aprendizaje`) aplicada en Supabase; **76 parámetros**
   (grupo «Entregas», el interruptor de agencia viene apagado); pantalla **Aprendizaje de Victoria** y «Datos de envío» en cada conversación.
-  Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla) y #85 (pruebas).
+  Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla), #85 (pruebas) y #86 (corregir producto, cantidad y pago desde el panel).
+  Reversa: Railway `41b95694` (commit `f5cee97`); Vercel `dpl_6g2MC4HaqFrdndaY4VoDQLTV5ogU`.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
