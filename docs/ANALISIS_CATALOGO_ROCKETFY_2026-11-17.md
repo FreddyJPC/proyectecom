@@ -53,3 +53,20 @@ aire acondicionado de pared, hidrolavadora, vaporizador (electrodomésticos: má
 1. Primer producto de prueba: **#1 (set 3 en 1)**; segundo, para comparar: **#2 (luz solar ×2)**. Un «producto de estabilidad» (#5) para una segunda fase.
 2. En la compra de prueba de punta a punta (pendiente #87) **no cancelarla**: recibir la unidad permite ver calidad y empaque (cuesta ≈ $6 + envío).
 3. Para ofrecer el pack o el descuento por transferencia, usar «Ofertas y combos» del panel (el código calcula los precios; Victoria no inventa descuentos).
+
+## Anexo: la lista anterior (2026-11-11) y cómo se combina con esta
+El 2026-11-11 se hizo otro análisis, con otros criterios (stock ≥ 200, costo $4–25, precio $25–70, peso ≤ 1,5 kg, **ganancia neta ≥ 35 %**).
+No quedó escrito en el repositorio; se recuperó del historial de la sesión. El de hoy **partió de cero** con los apuntes de la clase
+(hogar + combos) y no se comparó con aquél. Los seis favoritos de entonces (precios/stock de hoy):
+
+| Producto | SKU | Costo → sugerido | Ganancia neta est. | Stock | Estado |
+|---|---|---|---|---|---|
+| Mega linterna LED recargable | `MEGALINTERNALEDRECARGABLE` | $19,50 → $59,99 | ≈ $35,49 | 968 | Apuesta de **margen**: mayor colchón (con 80 % de entrega y $5 de envío, ≈ $27 por pedido enviado; cierre mínimo ≈ 2,7 %) |
+| Depilador de mujer 2 en 1 | `DEPILADORMUJER21` | $6,75 → $29,99 | ≈ $18,24 | 1 684 | Apuesta de **volumen**: 0,15 kg |
+| Sellador al vacío | `SELLADORALVACIO` | $6,83 → $29,99 | ≈ $18,16 | 305 | Se explica en 10 s de video; stock justo |
+| Mochila impermeable con USB | `MOCHILAIMPERMEABLEUSB` | $8,25 → $29,99 | ≈ $16,74 | 548 | Pocas devoluciones |
+| Aspiradora inalámbrica | `10-ASPIR-INALAM` | $9,75 → $29,99 | ≈ $15,24 | 1 323 | Se demuestra bien |
+| ~~Cepillo secador para mascotas~~ | — | — | — | — | **Descartado**: productos para animales están en la lista de infracciones de WhatsApp (#80) |
+
+Aquella estrategia proponía **tres productos en paralelo** (la linterna, el depilador y la mochila o el sellador) y escalar solo el ganador.
+Los cuatro primeros también aparecen en el análisis de hoy (cumplen los filtros); simplemente no se priorizaron porque hoy se buscó hogar + combo.
