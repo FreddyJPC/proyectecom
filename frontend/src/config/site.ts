@@ -5,10 +5,10 @@ import { AlertTriangle, BarChart3, Boxes, ClipboardList, GraduationCap, LayoutDa
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
  * barra inferior, migas de pan) se define acá, no se repite. */
 export const SITE = {
-  name: "PROYECTECOM",
+  name: "AzoShop App",
   /** Nombre corto para espacios chicos (logo, barra móvil). */
-  short: "P",
-  title: "PROYECTECOM · Panel",
+  short: "A",
+  title: "AzoShop App · Panel",
   description: "Panel operativo del negocio: pedidos, incidencias, stock y métricas.",
 } as const;
 

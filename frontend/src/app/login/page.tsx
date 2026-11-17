@@ -63,7 +63,7 @@ export default function LoginPage() {
         />
 
         <div className="relative flex items-center gap-3">
-          <BrandMark className="size-10 bg-white/15 from-white/20 to-white/10 text-base ring-1 ring-white/25" />
+          <BrandMark className="size-12" />
           <span className="text-lg font-semibold tracking-tight">{SITE.name}</span>
         </div>
 
@@ -92,7 +92,7 @@ export default function LoginPage() {
       <main className="flex items-center justify-center px-5 py-10 sm:px-8">
         <div className="w-full max-w-sm space-y-8">
           <div className="space-y-4">
-            <BrandMark className="size-11 text-lg lg:hidden" />
+            <BrandMark className="size-12 lg:hidden" />
             <div className="space-y-1.5">
               <h1 className="text-2xl font-semibold tracking-tight">Inicia sesión</h1>
               <p className="text-sm text-muted-foreground">Accede al panel operativo de {SITE.name}.</p>

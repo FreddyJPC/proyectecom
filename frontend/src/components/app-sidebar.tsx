@@ -45,7 +45,7 @@ export function AppSidebar() {
           aria-label={`${SITE.name}: ir al resumen`}
           className="flex items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
         >
-          <BrandMark className="size-8" />
+          <BrandMark className="size-9" />
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold tracking-tight">{SITE.name}</p>
             <p className="text-xs text-muted-foreground">Panel operativo</p>
