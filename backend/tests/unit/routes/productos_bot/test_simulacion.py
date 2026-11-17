@@ -243,6 +243,27 @@ class TestEstadoDeLaPrueba:
         assert lead == esperado
         assert lead["telefono"] == TELEFONO_DE_PRUEBA  # el teléfono nunca viene de afuera
 
+    def test_ningun_campo_del_estado_se_pierde_en_el_viaje_por_la_app(self):
+        # Hallazgo 2026-11-17 (revisión antes del primer anuncio): la referencia y la entrega en agencia salían hacia la app
+        # pero el esquema de entrada no las conocía y se descartaban; en el turno siguiente Victoria veía la referencia vacía,
+        # volvía a pedir la confirmación y el pedido de prueba salía sin referencia. Se prueba el camino COMPLETO: salida →
+        # camelCase (lo que ve la app) → esquema de entrada → lead.
+        from src.routes.productos_bot.pruebas import _estado_a_camel
+        from src.routes.productos_bot.schemas import probar_input_schema
+
+        lead = lead_inicial()
+        lead.update(
+            nombre_cliente="Ana", direccion="Calle 1", canton="Quito", provincia="Pichincha", referencia="Frente al parque",
+            tipo_entrega="agencia", agencia_indicada="la del centro", producto_sku=SKU, producto_nombre="Audifonos",
+            producto_variante="Negro", entrega_nombre="Envío", entrega_tipo="domicilio", metodo_pago="contraentrega",
+            total=Decimal("24.99"), subtotal=Decimal("24.99"), entrega_opcion_id=3, datos_confirmacion_pedida_en=1,
+        )
+        salida = estado_desde_lead(lead)
+        cargado = probar_input_schema.load({"mensaje": "hola", "estado": _estado_a_camel(salida)})["estado"]
+        perdidos = {campo for campo, valor in salida.items() if valor is not None and campo not in cargado}
+        assert perdidos == set()
+        assert estado_desde_lead(lead_desde_estado(cargado)) == salida
+
     def test_estado_vacio_o_nulo_es_una_venta_nueva(self):
         assert lead_desde_estado(None) == lead_inicial() == lead_desde_estado({})
 

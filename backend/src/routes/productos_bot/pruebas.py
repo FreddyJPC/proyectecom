@@ -62,6 +62,8 @@ _A_CAMEL = {
     "id_pedido_rocketfy": "idPedidoRocketfy",
     "datos_confirmacion_pedida_en": "datosConfirmacionPedidaEn",
     "datos_confirmados_en": "datosConfirmadosEn",
+    "tipo_entrega": "tipoEntrega",
+    "agencia_indicada": "agenciaIndicada",
 }
 
 

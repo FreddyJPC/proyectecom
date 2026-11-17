@@ -448,6 +448,11 @@ class EstadoDeLaPruebaSchema(Schema):
     entrega_opcion_id = fields.Int(data_key="entregaOpcionId", allow_none=True)
     entrega_nombre = fields.Str(data_key="entregaNombre", allow_none=True)
     entrega_tipo = fields.Str(data_key="entregaTipo", allow_none=True)
+    # Entrega en agencia y referencia (entrada 0.0.140): sin estos campos se perdían entre un turno y otro de la prueba y
+    # Victoria volvía a pedir la confirmación (la referencia «cambiaba» de vacía a escrita) y el pedido salía sin referencia.
+    tipo_entrega = fields.Str(data_key="tipoEntrega", allow_none=True)
+    agencia_indicada = fields.Str(data_key="agenciaIndicada", allow_none=True)
+    referencia = fields.Str(allow_none=True)
     metodo_pago = fields.Str(data_key="metodoPago", allow_none=True)
     estado = fields.Str(allow_none=True)
     id_pedido_local = fields.Int(data_key="idPedidoLocal", allow_none=True)
