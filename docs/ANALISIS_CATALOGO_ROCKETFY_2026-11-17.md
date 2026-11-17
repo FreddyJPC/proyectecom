@@ -70,3 +70,71 @@ No quedó escrito en el repositorio; se recuperó del historial de la sesión. E
 
 Aquella estrategia proponía **tres productos en paralelo** (la linterna, el depilador y la mochila o el sellador) y escalar solo el ganador.
 Los cuatro primeros también aparecen en el análisis de hoy (cumplen los filtros); simplemente no se priorizaron porque hoy se buscó hogar + combo.
+
+---
+
+# Decisión: los 3 productos para la estrategia de prueba (2026-11-17, segunda parte)
+
+Pedido de Freddy: unir las dos listas (11-nov y 17-nov) y elegir **3 productos ganadores** para la estrategia planteada el 11-nov
+(piloto con el mejor producto, luego prueba de los tres en paralelo y escalar solo al ganador). Se evaluaron 12 candidatos (los 5 de la lista
+anterior sin mascotas + los de hoy + la lámpara solar de pared).
+
+## Método
+1. **Economía** con el mismo modelo del 11-nov: ganancia esperada por pedido hecho = `0,8·(venta − costo − envío) − 0,2·envío`
+   (el no entregado pierde el envío), envío $5, costo por conversación $0,75 ($0,60 anuncio + $0,15 IA; supuestos, no medidos).
+   Se calcula el **cierre mínimo** (% de conversaciones que deben terminar en pedido para no perder) en dos escenarios:
+   base y **estrés** (precio −15 %, entrega 70 %, envío +$2).
+2. **Cinco criterios calificados 1–5**, con evidencia revisada en la ficha y las fotos reales: riesgo operativo y de devoluciones,
+   políticas de Meta y promesas, facilidad de anuncio y de conversación, calidad de la ficha de Rocketfy (descripción, fotos usables, stock)
+   y encaje con la clase/portafolio (hogar, combo, ticket).
+3. **Cuatro ponderaciones** (balanceada, margen, riesgo y clase) para ver si el resultado depende de mis preferencias.
+
+## Resultado (puntaje /100; entre paréntesis, posición)
+| Producto | Cierre mín. base / estrés | Balanceado | Margen | Riesgo | Clase | Rango medio |
+|---|---|---|---|---|---|---|
+| Set 3 en 1 bowl+colador+rallador | 5,2 % / 11,1 % | 78,2 (1) | 71,3 (5) | 82,1 (1) | 84,1 (1) | **2,00** |
+| Lámpara solar de pared decorativa | 4,7 % / 9,2 % | 78,1 (2) | 74,8 (3) | 78,7 (2) | 80,7 (2) | **2,25** |
+| Set de ollas 13 pzs | 3,4 % / 6,5 % | 75,9 (3) | 78,1 (2) | 75,2 (4) | 76,2 (4) | 3,25 |
+| Tendedero de pared inoxidable | 4,7 % / 9,2 % | 75,1 (4) | 72,8 (4) | 76,7 (3) | 77,7 (3) | 3,50 |
+| Mega linterna LED recargable | **2,7 % / 5,0 %** | 72,6 (5) | **81,3 (1)** | 65,7 (8) | 69,7 (7) | 5,25 |
+| Cinta anti grietas | 6,0 % / 13,1 % | 69,7 (6) | 60,8 (6) | 73,1 (5) | 75,1 (5) | 5,50 |
+| Sellador al vacío | 5,5 % / 12,4 % | 66,6 (7) | 60,0 (7) | 70,4 (6) | 71,4 (6) | 6,50 |
+| Luz LED solar ×2 | 5,5 % / 12,1 % | 63,0 (8) | 56,8 (8) | 66,7 (7) | 67,7 (8) | 7,75 |
+| Depilador 2 en 1 | 5,5 % / 12,3 % | 51,8 (9) | 48,2 (9) | 54,5 (10) | 50,5 (10) | 9,50 |
+| Aspiradora inalámbrica | 6,7 % / 18,7 % | 50,2 (11) | 44,3 (11) | 54,1 (11) | 57,1 (9) | 10,50 |
+| Mochila impermeable USB | 6,1 % / 14,8 % | 50,4 (10) | 42,4 (12) | 61,0 (9) | 49,0 (12) | 10,75 |
+| Almohada para parejas | 6,1 % / 17,1 % | 47,4 (12) | 44,4 (10) | 49,0 (12) | 50,0 (11) | 11,25 |
+
+Hallazgos que pesaron en el puntaje (verificados en las fichas):
+- La foto principal de la **mochila, la aspiradora y la luz solar ×2** es un **banner de Rocketfy con su logo y su teléfono**; no se puede usar en anuncios ni en WhatsApp.
+  La mochila y la aspiradora **no tienen descripción**.
+- El **depilador** es un producto muy repetido en Latinoamérica (señal débil de precios bajos en otros países: no verificado para Ecuador) y sus anuncios
+  chocan con promesas de piel («indolora», «sin irritaciones»).
+- Las fotos de la **linterna** muestran un haz retocado: riesgo de «no es como se ve» (devoluciones) y de reclamos engañosos en Meta.
+- El **set 3 en 1** declara 0,15 kg: parece poco para tres piezas de acero de 23 cm; **verificar el peso real** (afecta el envío).
+- Señal débil de precio: en tiendas de Perú se vio un set 3 en 1 equivalente a ~S/ 39 (≈ $10, conversión mía, sin verificar); el precio de $30 puede
+  chocar con la percepción de valor. Probar también $24,99.
+
+## Los 3 ganadores y el orden
+| Orden | Producto | SKU | Rol | Precio de partida | Cierre mín. (base) |
+|---|---|---|---|---|---|
+| **1 (piloto)** | Set 3 en 1 bowl+colador+rallador | `2067-BOWL-COLADORRALLADOR` | Estabilidad/volumen: el de menor riesgo, mejor ficha, hogar + combo | $29,99 (probar $24,99) | 5,2 % |
+| **2** | Lámpara solar de pared decorativa | `LAMP-SOLA-PARE-DECO` | Impacto visual: el mejor material para anuncio (3 fotos de calidad); margen alto con costo de $3,87 | $29,99 | 4,7 % |
+| **3** | Mega linterna LED recargable | `MEGALINTERNALEDRECARGABLE` | Apuesta de **margen**: sobrevive a un cierre bajo de Victoria; pide cuidado con las promesas | $49,99 (el sugerido es $59,99) | 2,7 % (3,9 % a $49,99) |
+
+De reserva, en este orden: set de ollas 13 pzs (`SET-OLLA-13PC`, solo 1 foto y 293 de stock) y tendedero de pared (`TEND-PARE-INOX`).
+Salen de la lista anterior: depilador, mochila y aspiradora (puntajes ≈ 50: ficha pobre, banners de Rocketfy y/o margen más fino); el sellador queda reserva lejana.
+
+## Plan (adaptado del 11-nov) y reglas propuestas
+1. **Antes de publicar** (por producto): confirmar que no es «Black» en Rocketfy; precio de la competencia en Ecuador; peso real; subir 3–5 fotos propias
+   a la galería (sin banners de Rocketfy); tiempo de entrega, preguntas frecuentes y «Ajustes de precios» confirmados; «Probar con Victoria».
+2. **Piloto (3 días, $10 al día, solo el producto 1; ≈ $30):** medir el cierre real de Victoria y arreglar fallos de la conversación.
+3. **Prueba (5 días, $15 al día por producto, los 3 a la vez; ≈ $225):** una campaña por producto, 3 anuncios con enfoques distintos.
+4. **Reglas propuestas (derivadas de la tabla, no medidas):** parar un producto si tras ≥ 60 conversaciones el cierre es < 3 %; mantenerlo si es ≥ 6 %;
+   entre 3 % y 6 %, extender 2 días. Escalar solo al ganador, y solo si el cierre supera su mínimo con holgura.
+5. **La tasa de entrega NO se mide en esos 5 días:** a $15 diarios se necesitan ~2 semanas por producto para llegar a 20 pedidos y luego varios días de
+   entrega. La prueba mide cierre y costo por pedido; la entrega se valida con el ganador (regla de los 20 pedidos de la clase).
+
+## Lo que sigue sin saberse
+Demanda real y tasa de entrega; precios de la competencia en Ecuador; qué es «Black»; el envío real por ciudad y peso; los supuestos de
+$0,60 por conversación, 8 % de cierre y 80 % de entrega (la clase habla de un CPA de $2–4, que no se pudo comparar con este modelo).
