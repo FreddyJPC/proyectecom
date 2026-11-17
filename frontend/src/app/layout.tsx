@@ -25,6 +25,8 @@ export const metadata: Metadata = {
   title: SITE.title,
   description: SITE.description,
   applicationName: SITE.name,
+  // iPhone: abrir a pantalla completa (Safari ignora parte del manifest). Su ícono es app/apple-icon.png.
+  appleWebApp: { capable: true, title: "AzoShop", statusBarStyle: "default" },
 };
 
 // `viewportFit: cover` deja que la barra inferior respete el "notch" de los
