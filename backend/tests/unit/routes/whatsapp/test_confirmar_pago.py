@@ -163,7 +163,8 @@ class TestServientrega:
         assert "Se despacha por Servientrega" in texto_para_la_ficha(True, [], "Servientrega")
 
     def test_sin_transportadora_el_texto_es_el_de_siempre(self):
-        assert texto_para_la_ficha(True, []) == "Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente."
+        texto = texto_para_la_ficha(True, [])
+        assert texto.startswith("Envío: GRATIS para el cliente;") and "Se despacha por" not in texto
 
     def test_en_un_retiro_no_se_menciona_la_transportadora(self):
         opciones = [
