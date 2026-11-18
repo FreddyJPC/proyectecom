@@ -395,7 +395,7 @@ HERRAMIENTAS_VICTORIA = [
     HerramientaLLM(
         nombre="registrar_entrega",
         descripcion=(
-            "Solo para productos cuyo envío NO está incluido en el precio (lo dice su ficha). Sin parámetros "
+            "Solo para productos cuyo envío se cobra aparte (lo dice su ficha). Sin parámetros "
             "te devuelve las opciones de entrega que le aplican al cliente según su cantón y provincia, con "
             "su costo: ofrécele esas y NO otras. Cuando el cliente elija una, vuelve a llamarla con `opcion` "
             "(el número de la lista o el nombre) y te devuelve el TOTAL final con el envío, que es el único "
@@ -2032,7 +2032,7 @@ class HerramientasVictoria:
             return f"Ese producto ya no está disponible. {self._texto_catalogo_disponible()}"
         if producto.get("envio_incluido", True):
             return (
-                f"Este producto tiene envío GRATIS para el cliente: no hay nada que elegir (no le digas que «está incluido en el precio»). "
+                f"Este producto tiene envío GRATIS para el cliente: no hay nada que elegir. "
                 f"El total a cobrar es ${Decimal(str(lead['total'])):.2f}."
             )
         if not (lead.get("canton") or lead.get("provincia")):

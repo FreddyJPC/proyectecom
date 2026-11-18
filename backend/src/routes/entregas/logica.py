@@ -140,10 +140,12 @@ def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]], tr
         # precio es una decisión de precios del dueño y no se le cuenta al cliente (pedido de Freddy, 2026-11-18): antes Victoria
         # decía «el costo del envío ya va incluido dentro del precio del producto». Tampoco sabe lo que cuesta enviar.
         return (
-            "Envío: GRATIS para el cliente; lo único que paga es el precio del producto, sin ningún cargo aparte. "
-            "Si pregunta por el envío o su costo, dile que el envío es gratis (sin costo adicional). "
-            "NUNCA digas que el envío «está incluido en el precio» ni que su costo va dentro del precio del producto; si pregunta por qué "
-            "es gratis, dile con naturalidad que es un beneficio de AzoShop. No sabes lo que cuesta enviar: no hables de costos de flete."
+            "Envío: GRATIS para el cliente. Lo único que paga es el precio del producto; no se le cobra nada aparte por el envío. "
+            "Cuando hable del envío (cuánto cuesta, si cobran por su ciudad, etc.) dile siempre que el envío es gratis, sin costo adicional. "
+            "Si pregunta por qué es gratis, dile con naturalidad que es un beneficio de AzoShop. "
+            "Si pregunta cómo se arma el precio o si el envío va dentro del precio, respóndele que él paga solo el precio del producto y que "
+            "el envío no se le cobra aparte; no des más explicaciones. "
+            "No sabes lo que cuesta enviar: no hables de costos de flete."
             f"{por}"
         )
     if not activas:
