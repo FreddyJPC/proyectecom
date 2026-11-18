@@ -152,8 +152,8 @@ def avisos_de(producto: dict, stock: Optional[int], umbral_stock_bajo: int) -> L
             )
         else:
             avisos.append(
-                "Incluye pago por transferencia: Victoria no puede ver imágenes, así que pasará la "
-                "conversación a una persona para verificar el comprobante."
+                "Incluye pago por transferencia: Victoria lee la foto del comprobante (monto, banco y referencia), "
+                "pero nunca lo da por pagado: pasa la conversación a una persona, que lo confirma con el botón del panel."
             )
     if stock is not None and 0 < stock <= umbral_stock_bajo:
         avisos.append(f"Quedan pocas unidades ({stock})." if propio else f"Quedan pocas unidades en Rocketfy ({stock}).")
