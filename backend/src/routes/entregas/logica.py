@@ -136,7 +136,16 @@ def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]], tr
     if envio_incluido:
         # Las opciones solo existen cuando el envío se cobra aparte: con el envío incluido no hay nada que elegir.
         por = f" Se despacha por {transportadora}." if transportadora else ""
-        return f"Envío: INCLUIDO en el precio; no se le cobra nada aparte al cliente.{por}"
+        # Para el cliente el envío es GRATIS: lo único que paga es el precio del producto. Que el costo del flete esté dentro del
+        # precio es una decisión de precios del dueño y no se le cuenta al cliente (pedido de Freddy, 2026-11-18): antes Victoria
+        # decía «el costo del envío ya va incluido dentro del precio del producto». Tampoco sabe lo que cuesta enviar.
+        return (
+            "Envío: GRATIS para el cliente; lo único que paga es el precio del producto, sin ningún cargo aparte. "
+            "Si pregunta por el envío o su costo, dile que el envío es gratis (sin costo adicional). "
+            "NUNCA digas que el envío «está incluido en el precio» ni que su costo va dentro del precio del producto; si pregunta por qué "
+            "es gratis, dile con naturalidad que es un beneficio de AzoShop. No sabes lo que cuesta enviar: no hables de costos de flete."
+            f"{por}"
+        )
     if not activas:
         return "Envío: este producto todavía no tiene opciones de entrega definidas; si el cliente pregunta, usa pasar_a_asesor."
     lineas = [

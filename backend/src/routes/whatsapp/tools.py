@@ -1589,7 +1589,7 @@ class HerramientasVictoria:
                 continue
             incluye = ", ".join(f"{i.get('cantidad') or 1} x {i.get('producto_nombre') or i['producto_sku']}" for i in oferta.get("items") or [])
             texto = f"- #{oferta['id']} {oferta['nombre']}: ${dinero(oferta['precio']):.2f} (incluye {incluye})"
-            texto += "; envío incluido" if oferta.get("envio_incluido", True) else "; el envío se cobra aparte"
+            texto += "; envío gratis para el cliente" if oferta.get("envio_incluido", True) else "; el envío se cobra aparte"
             if oferta.get("hasta"):
                 texto += f"; válida hasta el {oferta['hasta'].astimezone(timezone(timedelta(hours=-5))):%d/%m %H:%M}"
             if oferta.get("descripcion"):
@@ -2032,7 +2032,7 @@ class HerramientasVictoria:
             return f"Ese producto ya no está disponible. {self._texto_catalogo_disponible()}"
         if producto.get("envio_incluido", True):
             return (
-                f"Este producto incluye el envío en el precio: no hay nada que elegir. "
+                f"Este producto tiene envío GRATIS para el cliente: no hay nada que elegir (no le digas que «está incluido en el precio»). "
                 f"El total a cobrar es ${Decimal(str(lead['total'])):.2f}."
             )
         if not (lead.get("canton") or lead.get("provincia")):

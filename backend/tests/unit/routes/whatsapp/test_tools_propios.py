@@ -191,7 +191,7 @@ class TestRegistrarEntrega:
     def test_con_envio_incluido_no_hay_nada_que_elegir(self):
         e = Escena(producto={**PROPIO, "envio_incluido": True})
         e.registrar_producto(cantidad=1)
-        assert "incluye el envío" in e.usar("registrar_entrega")
+        assert "envío GRATIS" in e.usar("registrar_entrega")
 
     def test_cambiar_de_canton_despues_de_elegir_borra_la_entrega_que_ya_no_aplica(self):
         e = Escena()
@@ -469,4 +469,4 @@ class TestMetodoDePagoYFicha:
     def test_ver_ficha_de_rocketfy_no_habla_de_cierre_manual(self):
         e = Escena(producto=ROCKETFY, entregas=[])
         ficha = e.usar("ver_ficha_producto", producto_sku="R-1")
-        assert "INCLUIDO en el precio" in ficha and "MANUAL" not in ficha
+        assert "GRATIS para el cliente" in ficha and "MANUAL" not in ficha
