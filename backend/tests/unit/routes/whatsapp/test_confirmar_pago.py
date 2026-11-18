@@ -164,7 +164,7 @@ class TestServientrega:
 
     def test_sin_transportadora_el_texto_es_el_de_siempre(self):
         texto = texto_para_la_ficha(True, [])
-        assert texto.startswith("Envío: GRATIS para el cliente;") and "Se despacha por" not in texto
+        assert texto.startswith("Envío: GRATIS para el cliente.") and "Se despacha por" not in texto
 
     def test_en_un_retiro_no_se_menciona_la_transportadora(self):
         opciones = [

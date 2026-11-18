@@ -463,8 +463,8 @@ CATALOGO: Tuple[Parametro, ...] = (
         nombre="Cliente que envía una imagen mientras se espera el pago",
         para_que_sirve=(
             "Lo que se responde cuando el cliente manda una imagen estando su pedido en espera de pago (casi seguro, el "
-            "comprobante de la transferencia). Victoria todavía no puede ver imágenes: el sistema envía este mensaje y "
-            "avisa a una persona para que confirme el pago."
+            "comprobante de la transferencia) y «Que Victoria vea las fotos del cliente» está APAGADO: el sistema envía este mensaje "
+            "y avisa a una persona para que confirme el pago. Con esa opción encendida, Victoria lee la foto y responde ella."
         ),
         tipo=TIPO_TEXTO,
         defecto="¡Gracias! Ya recibimos tu comprobante, en un momento uno de nuestros asesores lo confirma ✅",
