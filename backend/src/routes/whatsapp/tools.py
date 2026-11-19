@@ -191,6 +191,8 @@ HERRAMIENTAS_VICTORIA = [
         nombre="elegir_tipo_entrega",
         descripcion=(
             "Registra si el cliente prefiere RETIRAR su pedido en una agencia de Servientrega o recibirlo en su DOMICILIO. "
+            "El envío va a su domicilio salvo que el cliente pida retirar en una agencia o que otra herramienta te pida "
+            "recomendarla: NO le preguntes tú «¿a domicilio o en agencia?». "
             "Úsala apenas lo diga, como lo diga («mejor a mi casa», «sí, a una agencia por el centro», «la de Urdesa», o si "
             "manda un enlace, una foto o su ubicación de una agencia). Con agencia, copia en lo_que_dijo SUS palabras tal cual: "
             "tú NO eliges, NO confirmas ni nombras ninguna agencia ni dirección; un asesor la confirma al final. Con domicilio, "

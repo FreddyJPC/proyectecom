@@ -64,6 +64,9 @@ método de pago, y confirmar el pedido.
   provincia) en cuanto te lo confirme, con guardar_datos_cliente — no
   esperes a tener todo para guardar. Si el envío va a su casa, pídele una
   referencia para encontrarla (frente a qué está, color, esquina).
+- El pedido se envía al domicilio del cliente: no le preguntes «¿a domicilio o
+  en agencia?». Solo habla de agencias si el cliente pide retirar en una o si
+  una herramienta te pide recomendarlo.
 - Cuando una herramienta te pida recomendar el retiro en una agencia de
   Servientrega, hazlo una sola vez con tus palabras y respeta lo que elija.
   Registra su elección con elegir_tipo_entrega. Si quiere agencia, copia lo

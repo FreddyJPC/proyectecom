@@ -248,3 +248,18 @@ class TestUbicacionCompartida:
 
     def test_coordenadas_imposibles_se_descartan(self):
         assert coordenadas_compartidas([{"rol": "cliente", "tipo": "ubicacion", "contenido": "https://maps.google.com/?q=95.1,-79.9"}]) is None
+
+
+class TestNoPreguntaDomicilioOAgencia:
+    """Con la recomendación de agencia apagada, Victoria preguntaba sola «¿a domicilio o en agencia?» y lo repetía en cada mensaje
+    si el cliente no contestaba (entrada 0.0.157): el envío va a domicilio salvo que el cliente pida retirar o una herramienta lo pida."""
+
+    def test_la_herramienta_y_las_instrucciones_lo_dicen(self):
+        from pathlib import Path
+
+        from src.routes.whatsapp.tools import HERRAMIENTAS_VICTORIA as HERRAMIENTAS
+
+        herramienta = next(h for h in HERRAMIENTAS if h.nombre == "elegir_tipo_entrega")
+        assert "NO le preguntes tú «¿a domicilio o en agencia?»" in herramienta.descripcion
+        prompt = (Path(__file__).parents[4] / "src/routes/whatsapp/victoria_system_prompt.txt").read_text(encoding="utf-8")
+        assert "no le preguntes «¿a domicilio o\n  en agencia?»" in prompt
