@@ -401,3 +401,15 @@ class TestConfirmacionDeDatos:
         r2 = turno(llm2, mensaje="No, la dirección es Calle Nueva 5", historial=historial, estado=r1.estado)
         assert r2.pedido is None and r2.estado["datos_confirmados_en"] is None
         assert "debe confirmar" in r2.herramientas[-1]["resultado"]
+
+
+class TestLaPruebaVeElMismoProducto:
+    def test_la_ficha_de_la_prueba_trae_todas_las_columnas_que_lee_victoria(self):
+        # «Probar con Victoria» lee el producto con la consulta del panel; la Victoria real, con la suya. Si a la del panel le
+        # falta una columna, la prueba simula otro producto: pasó con el descuento por transferencia (entrada 0.0.155).
+        from src.routes.productos_bot.repository import _COLUMNAS_TABLA
+        from src.routes.whatsapp.repository import _COLUMNAS_PRODUCTO_BOT
+
+        panel = {c.strip() for c in _COLUMNAS_TABLA.split(",")}
+        victoria = {c.strip() for c in _COLUMNAS_PRODUCTO_BOT.split(",")}
+        assert victoria - panel == set()

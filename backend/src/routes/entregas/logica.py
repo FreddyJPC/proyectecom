@@ -145,8 +145,11 @@ def texto_para_la_ficha(envio_incluido: bool, opciones: List[Dict[str, Any]], tr
             "Si pregunta por qué es gratis, respóndele algo como: «En AzoShop el envío de este producto no tiene costo para usted; "
             "paga solo el precio del producto». No lo presentes como una promoción, ni como algo temporal o limitado, ni lo uses para "
             "apurarlo; no inventes razones. "
-            "Si pregunta cómo se arma el precio o si el envío va dentro del precio, respóndele que él paga solo el precio del producto y que "
-            "el envío no se le cobra aparte; no des más explicaciones. "
+            "Si pregunta cómo se arma el precio o si el envío va dentro del precio, no lo confirmes ni lo niegues: respóndele que él paga "
+            "solo el precio del producto y que el envío no se le cobra aparte; no des más explicaciones. "
+            # Con solo la instrucción positiva, la IA real seguía diciendo «el envío va incluido en el precio» (entrada 0.0.155).
+            "Cómo se arma el precio es información interna de AzoShop: nunca digas que el envío está «incluido», «metido» o «dentro» "
+            "del precio, ni que el precio «ya incluye» el envío; di simplemente que el envío es gratis. "
             "No sabes lo que cuesta enviar: no hables de costos de flete."
             f"{por}"
         )

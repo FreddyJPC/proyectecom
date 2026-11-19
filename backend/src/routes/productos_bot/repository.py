@@ -27,7 +27,11 @@ _COLUMNAS_TABLA = (
     "costo_rocketfy, precio_sugerido_rocketfy, stock_ultimo, stock_actualizado_en, "
     "peso_kg, imagen_url, notas_internas, publicado_en, publicado_por, "
     "precio_competencia, proveedor_id, categoria_id, costo_propio, controla_stock, "
-    "envio_incluido, costo_flete_estimado, creado_en, actualizado_en"
+    "envio_incluido, costo_flete_estimado, "
+    # ADR-017: reglas de precio. Sin ellas «Probar con Victoria» simulaba el producto SIN descuento por transferencia,
+    # regateo ni envío gratis por cantidad (la Victoria real sí las lee: `whatsapp/repository.py`). Entrada 0.0.155.
+    "transferencia_tipo, transferencia_valor, regateo_tipo, regateo_valor, envio_gratis_desde_unidades, envio_gratis_desde_monto, "
+    "creado_en, actualizado_en"
 )
 
 

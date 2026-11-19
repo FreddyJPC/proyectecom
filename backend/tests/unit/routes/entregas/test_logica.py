@@ -102,9 +102,11 @@ class TestTextos:
         assert "GRATIS para el cliente" in texto and "registrar_entrega" not in texto
         # Pedido de Freddy (2026-11-18): al cliente no se le dice que el costo del envío está dentro del precio. Una prohibición con esas
         # palabras no sirvió (Victoria las repetía), así que la ficha no las contiene: solo dice qué responder.
-        assert "incluid" not in texto.lower() and "no hables de costos de flete" in texto
+        assert "no hables de costos de flete" in texto
         # Con «beneficio de AzoShop» Victoria inventó «la promo que manejamos por ahora… aprovéchelo que no siempre está así» (urgencia falsa).
         assert "ni como algo temporal" in texto
+        # Ni con la respuesta modelo dejaba de decir «incluido en el precio»: ahora está prohibido con todas las letras.
+        assert "no lo confirmes ni lo niegues" in texto and "información interna" in texto
 
     def test_con_envio_incluido_las_opciones_guardadas_no_se_listan(self):
         assert texto_para_la_ficha(True, OPCIONES) == texto_para_la_ficha(True, [])
