@@ -351,6 +351,21 @@ class TestLoQueVictoriaVe:
         assert "2 por $45.00" in texto and "transferencia: $20.00 por unidad" in texto and "negociar_precio" in texto
         assert "mínimo" not in texto  # el límite del regateo nunca se le muestra
 
+    def test_el_descuento_por_transferencia_se_ofrece_una_vez_y_como_oportunidad(self):
+        producto = _producto("LIN", "Linterna", "25.00", transferencia_tipo="monto", transferencia_valor=D("5"))
+        texto = Escena(productos=(producto,)).herramientas.reglas_para_victoria(producto)
+        assert "descuento especial" in texto and "UNA sola vez" in texto and "prefiere pagar al recibir" in texto
+        assert "sin volver a mencionar" in texto
+
+    def test_con_el_interruptor_apagado_solo_lo_dice_si_preguntan(self, monkeypatch):
+        from src.routes.whatsapp import tools
+
+        original = tools.parametros.valor
+        monkeypatch.setattr(tools.parametros, "valor", lambda clave, *a, **k: False if clave == "precios.mencionar_transferencia" else original(clave, *a, **k))
+        producto = _producto("LIN", "Linterna", "25.00", transferencia_tipo="monto", transferencia_valor=D("5"))
+        texto = Escena(productos=(producto,)).herramientas.reglas_para_victoria(producto)
+        assert "UNA sola vez" not in texto and "si el cliente pregunta" in texto
+
     def test_la_oferta_del_anuncio_va_primero_con_su_texto(self):
         precios = PreciosEnMemoria(
             ofertas={7: _oferta(texto_anuncio="Linterna + cargador a solo $30"), 9: _oferta(id=9, nombre="Pack doble", visibilidad="publica")},
