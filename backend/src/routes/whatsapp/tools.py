@@ -557,6 +557,16 @@ def herramientas_de_victoria(enviar_fotos: bool) -> List[HerramientaLLM]:
     return [*HERRAMIENTAS_VICTORIA, HERRAMIENTA_FOTO] if enviar_fotos else list(HERRAMIENTAS_VICTORIA)
 
 
+# Cómo ofrece Victoria el descuento por transferencia: una vez, como oportunidad y con el total que calcula el sistema. Sin
+# insistir: si el cliente prefiere pagar al recibir, se sigue con eso (el dueño quiere que la gente lo conozca, no presionarla).
+OFERTA_TRANSFERENCIA = (
+    "Es un descuento especial por el método de pago: ofrécelo tú, aunque el cliente no pregunte, en el momento en que le "
+    "preguntes cómo va a pagar, con entusiasmo y UNA sola vez. Dilo con tus palabras, por ejemplo: «Por el momento tenemos un "
+    "descuento especial si paga por transferencia: en vez de pagar al recibir, le quedaría en $X. ¿Le interesa llevarlo así o "
+    "prefiere pagar al recibir?». Usa el total exacto que te dé el sistema (si pide más de una unidad, el total de registrar_producto). "
+    "Si prefiere pagar al recibir, sigue con eso sin volver a mencionar el descuento ni insistir."
+)
+
 class HerramientasVictoria:
     def __init__(
         self,
@@ -1555,6 +1565,7 @@ class HerramientasVictoria:
         transferencia = precio_transferencia(precio, 1, tipo, valor)
         if transferencia is not None and transferencia < precio:
             lineas.append(f"- Pagando por transferencia: ${transferencia:.2f} por unidad (contra entrega ${precio:.2f}).")
+            lineas.append(OFERTA_TRANSFERENCIA if parametros.valor("precios.mencionar_transferencia") else "  (Solo dilo si el cliente pregunta por descuentos o por transferencia.)")
         if not producto.get("envio_incluido", True):
             if producto.get("envio_gratis_desde_unidades"):
                 lineas.append(f"- Envío gratis desde {producto['envio_gratis_desde_unidades']} unidades.")
@@ -1697,7 +1708,7 @@ class HerramientasVictoria:
             pistas.append(f"Precio por cantidad de este producto: {texto}. {como}")
         if cotizacion.hay_precio_por_transferencia and metodo != "transferencia":
             como = (
-                "Menciónaselo cuando hablen del pago."
+                OFERTA_TRANSFERENCIA
                 if parametros.valor("precios.mencionar_transferencia")
                 else "Dilo solo si el cliente pregunta."
             )
