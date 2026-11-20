@@ -263,3 +263,14 @@ class TestNoPreguntaDomicilioOAgencia:
         assert "NO le preguntes tú «¿a domicilio o en agencia?»" in herramienta.descripcion
         prompt = (Path(__file__).parents[4] / "src/routes/whatsapp/victoria_system_prompt.txt").read_text(encoding="utf-8")
         assert "no le preguntes «¿a domicilio o\n  en agencia?»" in prompt
+
+
+class TestPromocionesSeBuscanEnLaFicha:
+    """Entrada 0.0.165: sin venir de un anuncio, Victoria solo ve la lista corta de productos; a «¿hasta cuándo es el Black
+    Friday?» respondió que no había promoción sin abrir la ficha, donde sí estaba."""
+
+    def test_las_instrucciones_piden_abrir_la_ficha_antes_de_negar_una_promocion(self):
+        from pathlib import Path
+
+        prompt = (Path(__file__).parents[4] / "src/routes/whatsapp/victoria_system_prompt.txt").read_text(encoding="utf-8")
+        assert "Nunca digas que no hay una promoción sin haber\n  revisado las fichas." in prompt
