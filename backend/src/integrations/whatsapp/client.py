@@ -133,6 +133,15 @@ class WhatsAppClient:
         }
         return self._post(payload)
 
+    def enviar_video(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
+        """POST .../messages, type=video con un enlace público (`link`), igual que una imagen (entrada 0.0.163). Meta solo
+        acepta MP4 o 3GP (video H.264 + audio AAC) de hasta 16 MB; si no puede bajarlo o no le sirve, el fallo llega después
+        por el webhook de estados."""
+        video = {"link": url}
+        if descripcion:
+            video["caption"] = descripcion
+        return self._post({"messaging_product": "whatsapp", "to": telefono, "type": "video", "video": video})
+
     def enviar_plantilla(
         self, telefono: str, nombre_plantilla: str, variables: Optional[List[str]] = None, idioma: str = "es"
     ) -> dict:

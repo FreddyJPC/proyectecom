@@ -286,6 +286,7 @@ class LeadsEnMemoria:
 
 
 PREFIJO_DE_FOTO = "📷 Foto de "
+PREFIJO_DE_VIDEO = "🎬 Video de "
 
 
 class MensajesEnMemoria:
@@ -306,17 +307,19 @@ class MensajesEnMemoria:
     def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None) -> Dict[str, str]:
         fila = {"rol": rol, "contenido": contenido, "tipo": tipo, "creado_en": len(self.filas) + 1}
         self.filas.append(fila)
-        if tipo == "imagen":
+        if tipo in ("imagen", "video"):
             self.fotos_de_este_turno.append(contenido)
         return fila
 
     def contar_fotos(self, conversacion_id: int, sku: str) -> int:
-        # El historial que manda la app no trae el tipo: una foto se reconoce por su texto,
-        # que lo escribe `tools.py` («📷 Foto de <nombre> (<sku>)»).
+        # El historial que manda la app no trae el tipo: una foto o un video se reconoce por su texto,
+        # que lo escribe `tools.py` («📷 Foto de <nombre> (<sku>)» / «🎬 Video de …»).
         return sum(
             1
             for f in self.filas
-            if f["rol"] == "bot" and f"({sku})" in f["contenido"] and (f["tipo"] == "imagen" or f["contenido"].startswith(PREFIJO_DE_FOTO))
+            if f["rol"] == "bot"
+            and f"({sku})" in f["contenido"]
+            and (f["tipo"] in ("imagen", "video") or f["contenido"].startswith((PREFIJO_DE_FOTO, PREFIJO_DE_VIDEO)))
         )
 
 
@@ -476,7 +479,11 @@ class WhatsAppGrabador:
         return self
 
     def enviar_imagen(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
-        self.enviadas.append({"url": url, "descripcion": descripcion or ""})
+        self.enviadas.append({"url": url, "descripcion": descripcion or "", "tipo": "imagen"})
+        return {"messages": [{"id": "wamid.ensayo"}]}
+
+    def enviar_video(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
+        self.enviadas.append({"url": url, "descripcion": descripcion or "", "tipo": "video"})
         return {"messages": [{"id": "wamid.ensayo"}]}
 
 
@@ -689,7 +696,7 @@ def simular_turno(
         venta_manual=_venta_para_mostrar(ventas.venta),
         solicitudes=gestion.solicitudes,
         fotos=[
-            {"mensaje": mensaje_de_la_foto, "url": enviada["url"], "descripcion": enviada["descripcion"]}
+            {"mensaje": mensaje_de_la_foto, "url": enviada["url"], "descripcion": enviada["descripcion"], "tipo": enviada["tipo"]}
             for mensaje_de_la_foto, enviada in zip(mensajes.fotos_de_este_turno, whatsapp.enviadas)
         ],
     )

@@ -53,9 +53,11 @@ export type OpcionEntregaInput = Omit<OpcionEntrega, "id">;
 export type ImagenProducto = {
   id: number;
   url: string;
-  /** Ruta dentro del bucket: `<sku>/<archivo>.jpg`. */
+  /** Ruta dentro del bucket: `<sku>/<archivo>.jpg` (o `.mp4` si es un video). */
   storagePath: string;
   orden: number;
+  /** «imagen» o «video»: todo es material del producto y Victoria lo manda completo (entrada 0.0.163). */
+  tipo?: "imagen" | "video";
 };
 
 export type Verificacion = {
@@ -371,6 +373,8 @@ export type FotoSimulada = {
   mensaje: string;
   url: string;
   descripcion: string;
+  /** «imagen» o «video» (entrada 0.0.163). */
+  tipo?: "imagen" | "video";
 };
 
 /** La venta de un producto PROPIO que se habría guardado al cerrarla (no se guardó nada). */

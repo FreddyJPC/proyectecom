@@ -195,11 +195,12 @@ class AvisoSimuladoDTO:
 
 @dataclass
 class FotoSimuladaDTO:
-    """La foto que Victoria habría enviado por WhatsApp (no se envió nada)."""
+    """La foto o el video que Victoria habría enviado por WhatsApp (no se envió nada)."""
 
     mensaje: str
     url: str
     descripcion: str
+    tipo: str = "imagen"
 
 
 @dataclass

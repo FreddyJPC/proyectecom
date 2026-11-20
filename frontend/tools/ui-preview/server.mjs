@@ -536,7 +536,7 @@ const svgFoto = (ruta) => {
 };
 let siguienteIdImagen = 1;
 let siguienteIdEntrega = 10;
-const nuevaImagen = (carpeta, orden) => { const storagePath = `${carpeta}/foto-${siguienteIdImagen}.jpg`; return { id: siguienteIdImagen++, url: urlFoto(storagePath), storagePath, orden }; };
+const nuevaImagen = (carpeta, orden, video = false) => { const storagePath = `${carpeta}/${video ? "video" : "foto"}-${siguienteIdImagen}.${video ? "mp4" : "jpg"}`; return { id: siguienteIdImagen++, url: urlFoto(storagePath), storagePath, orden, tipo: video ? "video" : "imagen" }; };
 const categorias = [{ id: 1, nombre: "Calzado", activo: true }, { id: 2, nombre: "Ropa", activo: true }, { id: 3, nombre: "Accesorios", activo: true }];
 let siguienteIdCategoria = 4;
 const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? null;
@@ -560,7 +560,7 @@ zapatos.entregas = [
   { id: 2, nombre: "Retiro en el local", tipo: "retiro", costoCliente: "0.00", costoNegocio: null, cantones: [], provincias: [], restoDelPais: false, direccionRetiro: "Av. Remigio Crespo 3-45, Cuenca", tiempoEntrega: "Hoy mismo", activo: true },
   { id: 3, nombre: "Envío al resto del país", tipo: "envio", costoCliente: "5.00", costoNegocio: "4.20", cantones: [], provincias: [], restoDelPais: true, direccionRetiro: null, tiempoEntrega: "3 a 5 días", activo: true },
 ];
-zapatos.imagenes = [nuevaImagen(zapatos.carpetaFotos, 0), nuevaImagen(zapatos.carpetaFotos, 1)];
+zapatos.imagenes = [nuevaImagen(zapatos.carpetaFotos, 0), nuevaImagen(zapatos.carpetaFotos, 1), nuevaImagen(zapatos.carpetaFotos, 2, true)];
 const camiseta = propio("PROP-0002", "Camiseta de algodón", "borrador", "12.00", "5.50", null, {
   descripcion: "Camiseta de algodón peinado, corte regular.", tiempoEntrega: "2 a 3 días", variantes: "S, M, L, XL", categoriaId: 2, controlaStock: false, envioIncluido: true,
   costoFleteEstimado: "3.50", actualizadoEn: ago(30), historial: [{ accion: "creado", usuario: "freddy@azoshop.ec", cambios: { desde: "propio" }, creadoEn: ago(30) }],
@@ -918,16 +918,16 @@ function turnoVictoria(f, b) {
   else if (propia && e.productoSku && !f.envioIncluido && !e.entregaOpcionId && datosCompletos() && !/soy\s/.test(bajo)) elegirEntrega(msg);
   else if (/garant|cuotas|tarjeta|factura/.test(bajo)) { escalar("El cliente pregunta algo que no está en la ficha del producto"); respuesta = "Eso no lo tengo confirmado, así que te paso con un asesor que te lo aclara enseguida 🙋"; }
   else if (/persona|asesor|humano/.test(bajo)) { escalar("El cliente pidió hablar con una persona"); respuesta = "¡Claro! Ya te conecto con un asesor humano 🙋"; }
-  else if (/foto|imagen|c[oó]mo se ve/.test(bajo)) {
-    const yaEnviada = (b.historial || []).some((h) => h.rol === "bot" && h.contenido.includes(`(${f.sku})`) && h.contenido.startsWith("📷"));
+  else if (/foto|imagen|video|c[oó]mo se ve/.test(bajo)) {
+    const yaEnviada = (b.historial || []).some((h) => h.rol === "bot" && h.contenido.includes(`(${f.sku})`) && (h.contenido.startsWith("📷") || h.contenido.startsWith("🎬")));
     if (yaEnviada) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Ya le enviaste la foto de este producto a este cliente: no la repitas."); respuesta = "¡Ya te la mandé arriba! Si quieres otro detalle, dime 😊"; }
     else if (!f.imagenes.length && !f.imagenUrl) { usar("enviar_foto_producto", { producto_sku: f.sku }, "Este producto no tiene fotos disponibles. Dile al cliente que por el momento no hay imágenes y descríbeselo con la información de su ficha; no le prometas fotos."); respuesta = `Por el momento no hay imágenes de este producto, pero te lo describo: ${f.descripcion}`; }
     else {
-      // Galería propia (hasta el máximo por envío, 3 por defecto); si no hay, la foto de Rocketfy.
-      const urls = f.imagenes.length ? f.imagenes.slice(0, 3).map((i) => i.url) : [f.imagenUrl];
-      urls.forEach((url, i) => fotos.push({ mensaje: `📷 Foto${urls.length > 1 ? ` ${i + 1} de ${urls.length}` : ""} de ${f.nombre} (${f.sku})`, url, descripcion: f.nombre }));
-      usar("enviar_foto_producto", { producto_sku: f.sku }, `${urls.length === 1 ? "Foto enviada" : urls.length + " fotos enviadas"} al cliente. Puedes decirle que ya se las mandaste.`);
-      respuesta = `¡Claro! Te acabo de enviar ${urls.length === 1 ? "la foto" : "unas fotos"} 📷 ¿Te gustaría pedirlo?`;
+      // Todo el material de la galería (fotos y videos, entrada 0.0.163); si no hay, la foto de Rocketfy.
+      const material = f.imagenes.length ? f.imagenes.map((i) => ({ url: i.url, tipo: i.tipo || "imagen" })) : [{ url: f.imagenUrl, tipo: "imagen" }];
+      material.forEach((m) => fotos.push({ mensaje: `${m.tipo === "video" ? "🎬 Video" : "📷 Foto"} de ${f.nombre} (${f.sku})`, url: m.url, descripcion: f.nombre, tipo: m.tipo }));
+      usar("enviar_foto_producto", { producto_sku: f.sku }, `Ya le enviaste ${material.length} archivos. Puedes decirle que se lo mandaste.`);
+      respuesta = "¡Claro! Te acabo de enviar las fotos y el video 📷 ¿Te gustaría pedirlo?";
     }
   }
   else if (/env[ií]o|demora|llega/.test(bajo) && !/soy\s/.test(bajo)) { respuesta = `La entrega es en ${f.tiempoEntrega || "el plazo que acordemos"}. Sobre el costo del envío no tengo información confirmada, ¿quieres que lo consulte con un asesor?`; }
@@ -1026,7 +1026,7 @@ function manejarProductosBot(req, res, p, q, send) {
       }
       if (sub[2] === "imagenes" && !sub[3] && req.method === "POST") {
         if (!String(body.storagePath || "").startsWith(`${f.carpetaFotos}/`)) return send({ error: "La foto debe estar en la carpeta de este producto." }, 422);
-        if (f.imagenes.length >= 8) return send({ error: "Máximo 8 fotos por producto." }, 409);
+        if (f.imagenes.length >= 12) return send({ error: "Máximo 12 fotos y videos por producto." }, 409);
         f.imagenes.push({ id: siguienteIdImagen++, url: urlFoto(body.storagePath), storagePath: body.storagePath, orden: f.imagenes.length });
         hist(f, "editado", { fotos: [f.imagenes.length - 1, f.imagenes.length] });
         return send(detalleBot(f));

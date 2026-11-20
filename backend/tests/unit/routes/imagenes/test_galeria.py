@@ -12,6 +12,7 @@ from src.routes.imagenes.logica import (
     carpeta_de,
     galeria_para_enviar,
     url_publica,
+    tipo_de,
     validar_ruta,
 )
 from src.routes.imagenes.repository import ImagenRepository as Repo, ImagenYaRegistradaError
@@ -34,7 +35,7 @@ class TestReglas:
     def test_la_ruta_con_espacios_o_acentos_se_codifica(self):
         assert url_publica("https://abc.supabase.co", "SKU 1/foto.png").endswith("/productos/SKU%201/foto.png")
 
-    @pytest.mark.parametrize("ruta", ["p7/abc.jpg", "p7/a-b_c.1.JPEG", "p7/z.png"])
+    @pytest.mark.parametrize("ruta", ["p7/abc.jpg", "p7/a-b_c.1.JPEG", "p7/z.png", "p7/uso.mp4", "p7/v.3gp"])
     def test_rutas_validas(self, ruta):
         assert validar_ruta("p7", ruta) == ruta
 
@@ -44,7 +45,9 @@ class TestReglas:
     @pytest.mark.parametrize(
         "ruta",
         ["", "x.jpg", "p8/a.jpg", "p7/sub/a.jpg", "p7/../a.jpg", "p7/..jpg",
-         "p7/a.gif", "p7/a.webp", "p7/a", "p7/a b.jpg", "/p7/a.jpg", "p7/" + "x" * 130 + ".jpg"],
+         "p7/a.gif", "p7/a.webp", "p7/a", "p7/a b.jpg", "/p7/a.jpg", "p7/" + "x" * 130 + ".jpg",
+         # Videos que WhatsApp no envía (el .mov del iPhone, webm, avi).
+         "p7/a.mov", "p7/a.webm", "p7/a.avi"],
     )
     def test_rutas_que_no_se_aceptan(self, ruta):
         with pytest.raises(RutaDeImagenInvalida):
@@ -52,7 +55,13 @@ class TestReglas:
 
     def test_la_galeria_a_enviar_son_las_subidas_en_su_orden(self):
         subidas = [{"url": "https://a/1.jpg"}, {"url": "https://a/2.jpg"}]
-        assert galeria_para_enviar(subidas) == ["https://a/1.jpg", "https://a/2.jpg"]
+        assert galeria_para_enviar(subidas) == [{"url": "https://a/1.jpg", "tipo": "imagen"}, {"url": "https://a/2.jpg", "tipo": "imagen"}]
+
+    def test_los_videos_se_reconocen_por_su_extension(self):
+        # Entrada 0.0.163: fotos y videos son material del producto; el tipo sale de la extensión.
+        subidas = [{"url": "https://a/1.jpg", "storage_path": "p7/1.jpg"}, {"url": "https://a/uso.mp4", "storage_path": "p7/uso.mp4"}]
+        assert [m["tipo"] for m in galeria_para_enviar(subidas)] == ["imagen", "video"]
+        assert tipo_de("p7/X.MP4") == "video" and tipo_de("p7/x.3gp") == "video" and tipo_de("p7/x.png") == "imagen"
 
     def test_sin_subidas_queda_vacia_y_nunca_cae_en_la_de_rocketfy(self):
         assert galeria_para_enviar([]) == []
@@ -177,7 +186,7 @@ class TestServicio:
         detalle = servicio.registrar_imagen("PROP-0001", "p2/a.jpg", "freddy@azoshop.com")
 
         esperada = f"{SUPABASE_URL}/storage/v1/object/public/productos/p2/a.jpg"
-        assert detalle.imagenes == [{"id": 1, "url": esperada, "storage_path": "p2/a.jpg", "orden": 0}]
+        assert detalle.imagenes == [{"id": 1, "url": esperada, "storage_path": "p2/a.jpg", "orden": 0, "tipo": "imagen"}]
         assert repo.historial[-1]["cambios"] == {"fotos": ["0 fotos", "1 foto"]}
 
     def test_rutas_de_otro_producto_o_formatos_raros_se_rechazan(self):

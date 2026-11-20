@@ -1772,3 +1772,21 @@ salida}». Si `leido_de_cache` queda en 0 mensaje tras mensaje, algo cambió el 
 
 **Límite.** El caché dura 5 minutos desde el último uso: si el cliente tarda más en contestar, ese mensaje vuelve a pagar la
 escritura. Dentro de un mismo mensaje (Victoria usa 2 a 4 herramientas) siempre se aprovecha.
+
+## 59. Material del producto: fotos y videos que Victoria manda completos
+
+**Qué es (entrada 0.0.163).** La galería de cada producto guarda fotos **y videos**: todo es «material del producto». Cuando un
+cliente pide fotos o videos (cualquiera de los dos), Victoria le manda **todo** el material, en el orden de la galería, sin
+repetir lo que ya le mandó a ese mismo cliente.
+
+**Por qué los videos tienen reglas.** WhatsApp solo envía videos **MP4 o 3GP** (con video H.264 y audio AAC) de **hasta 16 MB**.
+Un video `.MOV` del iPhone no sirve: hay que convertirlo a MP4 o grabarlo con otra app. Si pesa mucho, se graba más corto o en
+720p. Las fotos, en cambio, se reducen y pasan a JPG solas al subirlas.
+
+**Cómo está armado.** El tipo (foto o video) sale de la extensión del archivo (`imagenes/logica.py::tipo_de`); la tabla
+`imagenes_producto` no cambió. La migración 036 deja que el bucket `productos` acepte MP4/3GP y archivos de hasta 16 MB. Victoria
+manda cada foto con `enviar_imagen` y cada video con `enviar_video` (WhatsApp, por enlace público). En el historial queda
+«📷 Foto de …» o «🎬 Video de …» con el SKU, y así se cuenta lo ya enviado.
+
+**Parámetros.** «Enviar fotos y videos del producto» (`bot.enviar_fotos`) enciende o apaga el envío; «Material por envío»
+(`bot.max_fotos_por_envio`, 12 por defecto) es cuántos archivos manda de una vez: con 12 se manda todo.

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, FlaskConical, Image as ImageIcon, Info, Loader2, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-react";
+import { CircleCheck, Clapperboard, FlaskConical, Image as ImageIcon, Info, Loader2, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { InfoAviso, InfoButton } from "@/components/app/info-button";
@@ -29,7 +29,7 @@ const ESCENARIOS = [
   { id: "fuera", label: "Pregunta fuera de la ficha", texto: "¿Tiene garantía de 5 años y puedo pagarlo en 12 cuotas con tarjeta de crédito?", esperado: "Debe pasar la conversación a una persona en vez de inventar una respuesta." },
   { id: "dos", label: "Quiero 2 unidades", texto: "Quiero 2 unidades", esperado: "Debe respetar el máximo de unidades por pedido: si pasa del máximo, se lo explica al cliente." },
   { id: "persona", label: "Quiero hablar con una persona", texto: "Prefiero hablar con una persona, por favor", esperado: "Debe pasar la conversación a una persona enseguida." },
-  { id: "foto", label: "Quiero ver una foto", texto: "¿Tienes fotos? Quiero ver cómo se ve", esperado: "Si el producto tiene fotos, Victoria envía unas pocas (y las siguientes si pides más, sin repetir); si no tiene, dice que por ahora no hay imágenes sin prometerlas." },
+  { id: "foto", label: "Quiero ver una foto", texto: "¿Tienes fotos? Quiero ver cómo se ve", esperado: "Si el producto tiene fotos o videos, Victoria envía todo el material (pidas fotos o videos), sin repetirlo; si no tiene, dice que por ahora no hay material sin prometerlo." },
 ] as const;
 
 /** Escenarios de un producto PROPIO: el pedido no se crea solo, pasa al dueño. */
@@ -51,7 +51,7 @@ const NOMBRE_DE_HERRAMIENTA: Record<string, string> = {
   cerrar_venta: "Intentó cerrar la venta",
   pasar_a_asesor: "Pasó la conversación a un asesor",
   elegir_tipo_entrega: "Anotó cómo quiere recibir el pedido",
-  enviar_foto_producto: "Envió fotos del producto",
+  enviar_foto_producto: "Envió fotos y videos del producto",
   registrar_entrega: "Ofreció / registró la entrega",
   solicitar_gestion: "Avisó al dueño",
   clasificar_lead: "Clasificó al cliente (temperatura)",
@@ -490,12 +490,16 @@ export function ProbarConVictoria({
                       {t.fotos.map((foto, j) => (
                         <div key={j} className="flex flex-col items-start">
                           <p className="flex max-w-[90%] items-start gap-2 rounded-2xl rounded-bl-sm border bg-card px-3.5 py-2 text-sm">
-                            <ImageIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            {foto.tipo === "video" ? (
+                              <Clapperboard className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            ) : (
+                              <ImageIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            )}
                             <span className="min-w-0">
                               <span className="sr-only">Victoria: </span>
-                              Foto enviada: {foto.descripcion}{" "}
+                              {foto.tipo === "video" ? "Video enviado" : "Foto enviada"}: {foto.descripcion}{" "}
                               <a href={foto.url} target="_blank" rel="noopener noreferrer" className="rounded-sm text-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-                                ver imagen
+                                {foto.tipo === "video" ? "ver video" : "ver imagen"}
                               </a>
                               <span className="block text-xs text-muted-foreground">Vista previa: no se envió.</span>
                             </span>

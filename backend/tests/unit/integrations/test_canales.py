@@ -26,6 +26,8 @@ def test_whatsapp_envia_usando_el_identificador_del_cliente_como_telefono():
 
     cliente.enviar_texto.assert_called_once_with(telefono="593987654321", mensaje="Hola")
     cliente.enviar_imagen.assert_called_once_with(telefono="593987654321", url="https://x/y.jpg", descripcion="Un reloj")
+    canal.enviar_video("593987654321", "https://x/uso.mp4", None)
+    cliente.enviar_video.assert_called_once_with(telefono="593987654321", url="https://x/uso.mp4", descripcion=None)
 
 
 def test_el_registro_encamina_por_canal_y_asume_whatsapp_si_no_se_dice():
