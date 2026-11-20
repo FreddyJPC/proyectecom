@@ -52,7 +52,7 @@ from .coincidencia import base, buscar
 from .confirmacion import datos_que_faltan, texto_de_confirmacion
 from .cuentas import respuesta_para_victoria
 from .ubicacion import revisar_ubicacion
-from src.routes.imagenes.logica import galeria_para_enviar
+from src.routes.imagenes.logica import TIPO_VIDEO, galeria_para_enviar
 from src.routes.imagenes.repository import ImagenRepository
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
 from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
@@ -529,17 +529,26 @@ HERRAMIENTAS_VICTORIA = [
     ),
 ]
 
+# Cómo queda en el historial cada archivo enviado (y cómo se cuentan después: `contar_fotos` busca el SKU entre paréntesis).
+PREFIJO_FOTO = "📷 Foto de "
+PREFIJO_VIDEO = "🎬 Video de "
+
+
+def _cuantos(n: int, singular: str, plural: str) -> str:
+    return "" if n == 0 else (f"1 {singular}" if n == 1 else f"{n} {plural}")
+
+
 # Fase G2: no va en HERRAMIENTAS_VICTORIA porque se puede apagar (parámetro «Enviar fotos»,
 # `bot.enviar_fotos`): ver `herramientas_de_victoria()`.
 HERRAMIENTA_FOTO = HerramientaLLM(
     nombre="enviar_foto_producto",
     descripcion=(
-        "Envía al cliente, por este mismo WhatsApp, las fotos del producto (unas pocas a la vez). Úsala "
-        "SOLO cuando el cliente pida ver fotos o imágenes, o dude de cómo luce el "
-        "producto. No la uses para otra cosa. Si el cliente pide más, vuelve a llamarla: manda las "
-        "siguientes sin repetir, y cuando ya no quedan el sistema te lo dirá. producto_sku debe ser el SKU "
-        "exacto del producto que aparece en tu información. Si el producto no tiene fotos, no prometas "
-        "una: dile con naturalidad que por el momento no hay imágenes y descríbelo con lo que dice su ficha."
+        "Envía al cliente, por este mismo WhatsApp, TODO el material del producto: sus fotos y sus videos, juntos. Úsala "
+        "cuando el cliente pida ver fotos, imágenes o videos, o dude de cómo luce o cómo funciona el producto: pida lo que "
+        "pida (solo fotos o solo videos), se le manda todo el material. No la uses para otra cosa. Si ya se lo enviaste, "
+        "el sistema te lo dirá: no lo repitas. producto_sku debe ser el SKU exacto del producto que aparece en tu "
+        "información. Si el producto no tiene material, no lo prometas: dile con naturalidad que por el momento no hay "
+        "fotos ni videos y descríbelo con lo que dice su ficha."
     ),
     parametros={
         "type": "object",
@@ -847,11 +856,11 @@ class HerramientasVictoria:
         return formatear_ficha_producto(producto, self._entregas.listar(producto["sku"], solo_activas=True))
 
     def _handle_enviar_foto_producto(self, lead_id: int, conversacion_id: int, entrada: dict) -> str:
-        """Fase G2 + ADR-012. Solo se envían fotos de un producto ACTIVO del catálogo (las URLs salen de la
-        base, nunca de lo que escriba el modelo), en tandas de «Fotos por envío» (parámetro
-        `bot.max_fotos_por_envio`) y sin repetir las que ya se mandaron en esta conversación. La galería
-        son SOLO las fotos que el dueño subió a la ficha (nunca la de Rocketfy). Cualquier fallo
-        se le explica a Victoria y no escala: no tener fotos no es motivo para pasar a una persona."""
+        """Fase G2 + ADR-012 + entrada 0.0.163. Envía el MATERIAL del producto (fotos y videos que el dueño subió a la ficha,
+        nunca la foto de Rocketfy): pida el cliente fotos o videos, se manda todo, en el orden de la galería, hasta «Material
+        por envío» (`bot.max_fotos_por_envio`) y sin repetir lo que ya se mandó en esta conversación. Solo de un producto
+        ACTIVO (las URLs salen de la base, nunca de lo que escriba el modelo). Cualquier fallo se le explica a Victoria y no
+        escala: no tener material no es motivo para pasar a una persona."""
         consulta = (entrada.get("producto_sku") or "").strip()
         producto = self._productos.obtener_por_sku(consulta) if consulta else None
         if producto is None and consulta:
@@ -859,56 +868,61 @@ class HerramientasVictoria:
         if not self._esta_activo(producto):
             return f"No encontré ese producto entre los disponibles. {self._texto_catalogo_disponible()}"
 
-        # Solo las fotos que el dueño subió a la ficha (Supabase Storage); la foto de Rocketfy no se envía.
         galeria = galeria_para_enviar(self._imagenes.listar(producto["sku"]))
         if not galeria:
             # Meta solo descarga enlaces https públicos.
             return (
-                "Este producto todavía no tiene fotos para enviar. Dile al cliente con naturalidad que por el momento "
-                "no hay imágenes disponibles, descríbele el producto con la información de su ficha y no le prometas fotos."
+                "Este producto todavía no tiene fotos ni videos para enviar. Dile al cliente con naturalidad que por el momento "
+                "no hay material disponible, descríbele el producto con la información de su ficha y no le prometas fotos ni videos."
             )
         ya_enviadas = self._mensajes.contar_fotos(conversacion_id, producto["sku"])
         pendientes = galeria[ya_enviadas:]
         if not pendientes:
-            if len(galeria) == 1:
-                return "Ya le enviaste la foto de este producto a este cliente: no la repitas. Descríbeselo con su ficha."
             return (
-                f"Ya le enviaste las {len(galeria)} fotos de este producto a este cliente: no las repitas. "
+                "Ya le enviaste todo el material de este producto (fotos y videos) a este cliente: no lo repitas. "
                 "Descríbeselo con su ficha."
             )
 
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         tanda = pendientes[: parametros.valor("bot.max_fotos_por_envio")]
-        enviadas = 0
-        for posicion, url in enumerate(tanda):
+        canal = self._registro_canales().para(conversacion["canal"])
+        fotos = videos = 0
+        for posicion, archivo in enumerate(tanda):
+            es_video = archivo["tipo"] == TIPO_VIDEO
+            descripcion = producto["nombre"] if ya_enviadas + posicion == 0 else None
             try:
-                self._registro_canales().para(conversacion["canal"]).enviar_imagen(
-                    conversacion["id_externo"], url, producto["nombre"] if ya_enviadas + posicion == 0 else None
-                )
+                if es_video:
+                    canal.enviar_video(conversacion["id_externo"], archivo["url"], descripcion)
+                else:
+                    canal.enviar_imagen(conversacion["id_externo"], archivo["url"], descripcion)
             except Exception:
                 logger.warning(
-                    "No se pudo enviar la foto %s de '%s'", ya_enviadas + posicion + 1, producto["sku"],
+                    "No se pudo enviar el archivo %s de '%s'", ya_enviadas + posicion + 1, producto["sku"],
                     exc_info=True, extra={"lead_id": lead_id, "conversacion_id": conversacion_id},
                 )
                 break
             self._mensajes.crear(
                 conversacion_id=conversacion_id,
                 rol="bot",
-                contenido=f"📷 Foto de {producto['nombre']} ({producto['sku']})",
-                tipo="imagen",
+                contenido=f"{PREFIJO_VIDEO if es_video else PREFIJO_FOTO}{producto['nombre']} ({producto['sku']})",
+                tipo=TIPO_VIDEO if es_video else "imagen",
                 wamid=None,
             )
-            enviadas += 1
+            if es_video:
+                videos += 1
+            else:
+                fotos += 1
+        enviadas = fotos + videos
         if enviadas == 0:
             return (
-                "No se pudieron enviar las fotos en este momento. Díselo con naturalidad al cliente y descríbele el "
+                "No se pudo enviar el material en este momento. Díselo con naturalidad al cliente y descríbele el "
                 "producto con la información de su ficha."
             )
         quedan = len(galeria) - ya_enviadas - enviadas
-        resto = f" Quedan {quedan} más: si el cliente quiere ver más, vuelve a usar esta herramienta." if quedan > 0 else ""
-        parcial = " (solo se pudieron enviar algunas)" if enviadas < len(tanda) else ""
-        unidad = "la foto" if enviadas == 1 else f"{enviadas} fotos"
-        return f"Ya le enviaste {unidad}{parcial}. Puedes decirle que se las mandaste.{resto}"
+        resto = f" Quedan {quedan} archivos más: si el cliente quiere ver más, vuelve a usar esta herramienta." if quedan > 0 else ""
+        parcial = " (solo se pudo enviar una parte)" if enviadas < len(tanda) else ""
+        partes = [p for p in (_cuantos(fotos, "foto", "fotos"), _cuantos(videos, "video", "videos")) if p]
+        return f"Ya le enviaste {' y '.join(partes)}{parcial}. Puedes decirle que se lo mandaste.{resto}"
 
     def _registro_canales(self):
         if self._canales is None:

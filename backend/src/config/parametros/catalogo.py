@@ -236,17 +236,18 @@ CATALOGO: Tuple[Parametro, ...] = (
     Parametro(
         clave="bot.max_fotos_por_envio",
         grupo="victoria",
-        nombre="Fotos por envío",
+        nombre="Material por envío",
         para_que_sirve=(
-            "Cuántas fotos manda Victoria de una vez cuando el cliente pide ver el producto. Si el cliente quiere "
-            "más, Victoria manda las siguientes de la galería (sin repetir). Muchas fotos juntas pueden ser "
-            "abrumadoras en WhatsApp; con una sola, el cliente ve poco."
+            "Cuántos archivos (fotos y videos) del producto manda Victoria de una vez cuando el cliente pide fotos o videos. "
+            "Pida lo que pida, se manda todo el material de la galería en su orden, hasta este número; si quedan más y el "
+            "cliente quiere verlos, Victoria manda los siguientes (sin repetir). Con el máximo se manda todo de una vez."
         ),
         tipo=TIPO_ENTERO,
-        defecto=3,
+        # Pedido de Freddy (2026-11-20): todo lo que se sube es material del producto y se manda completo.
+        defecto=12,
         minimo=1,
-        maximo=8,
-        unidad="fotos",
+        maximo=12,
+        unidad="archivos",
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(
@@ -382,12 +383,12 @@ CATALOGO: Tuple[Parametro, ...] = (
     Parametro(
         clave="bot.enviar_fotos",
         grupo="victoria",
-        nombre="Enviar fotos del producto",
+        nombre="Enviar fotos y videos del producto",
         para_que_sirve=(
-            "Si está encendido, Victoria puede mandar por WhatsApp las fotos del producto cuando el cliente las pide. "
-            "Salen únicamente de la galería del producto (las que subes en su ficha); la foto de Rocketfy nunca se "
-            "envía. Si el producto no tiene fotos subidas, Victoria le dice al cliente "
-            "que por ahora no hay imágenes. «Probar con Victoria» siempre simula las fotos, esté o no encendido."
+            "Si está encendido, Victoria puede mandar por WhatsApp el material del producto (fotos y videos) cuando el cliente "
+            "pide fotos o videos. Sale únicamente de la galería del producto (lo que subes en su ficha); la foto de Rocketfy "
+            "nunca se envía. Si el producto no tiene material subido, Victoria le dice al cliente "
+            "que por ahora no hay fotos ni videos. «Probar con Victoria» siempre simula el envío, esté o no encendido."
         ),
         tipo=TIPO_BOOLEANO,
         defecto=False,

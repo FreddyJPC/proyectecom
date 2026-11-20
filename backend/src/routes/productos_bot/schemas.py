@@ -288,6 +288,8 @@ class ImagenSchema(Schema):
     url = fields.Str()
     storage_path = fields.Str(data_key="storagePath")
     orden = fields.Int()
+    # «imagen» o «video» (entrada 0.0.163): la app muestra un reproductor para los videos.
+    tipo = fields.Str()
 
 
 class RegistrarImagenInputSchema(Schema):
@@ -510,6 +512,7 @@ class FotoSimuladaSchema(Schema):
     mensaje = fields.Str()
     url = fields.Str()
     descripcion = fields.Str()
+    tipo = fields.Str()
 
 
 class VentaManualSimuladaSchema(Schema):

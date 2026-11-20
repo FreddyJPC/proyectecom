@@ -152,6 +152,28 @@ class TestMarcarComoLeido:
         }
 
 
+class TestEnviarVideo:
+    """Entrada 0.0.163: los videos de la galería se mandan por enlace, igual que las fotos."""
+
+    @responses.activate
+    def test_manda_el_enlace_y_la_descripcion(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.VID"}]}, status=200)
+        data = client.enviar_video(telefono="593987654321", url="https://cdn.ejemplo.com/uso.mp4", descripcion="Set 3 en 1")
+        assert data["messages"][0]["id"] == "wamid.VID"
+        assert json.loads(responses.calls[0].request.body) == {
+            "messaging_product": "whatsapp",
+            "to": "593987654321",
+            "type": "video",
+            "video": {"link": "https://cdn.ejemplo.com/uso.mp4", "caption": "Set 3 en 1"},
+        }
+
+    @responses.activate
+    def test_sin_descripcion_no_manda_caption(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.VID"}]}, status=200)
+        client.enviar_video(telefono="593987654321", url="https://cdn.ejemplo.com/uso.mp4")
+        assert json.loads(responses.calls[0].request.body)["video"] == {"link": "https://cdn.ejemplo.com/uso.mp4"}
+
+
 class TestEnviarImagen:
     @responses.activate
     def test_manda_el_enlace_y_la_descripcion(self, client):

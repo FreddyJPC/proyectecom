@@ -322,7 +322,7 @@ for (const theme of ["light", "dark"]) {
       }
       // Ficha de un producto propio: la galería con fotos y una prueba completa con su cierre manual.
       if (r === "/catalogo/producto/PROP-0001") {
-        await page.getByText("Fotos del producto").first().waitFor();
+        await page.getByText("Fotos y videos del producto").first().waitFor();
         await page.getByRole("button", { name: "Abrir la prueba" }).click();
         await page.getByRole("button", { name: "Quiero comprarlo" }).click();
         await page.getByText("Herramientas que usó").first().waitFor();

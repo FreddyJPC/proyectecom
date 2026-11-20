@@ -66,6 +66,12 @@ class WhatsAppFalso:
         self.enviadas.append({"telefono": telefono, "url": url, "descripcion": descripcion})
         return {"messages": [{"id": "wamid.X"}]}
 
+    def enviar_video(self, telefono, url, descripcion=None):
+        if self.error is not None:
+            raise self.error
+        self.enviadas.append({"telefono": telefono, "url": url, "descripcion": descripcion, "video": True})
+        return {"messages": [{"id": "wamid.V"}]}
+
 
 def armar(productos=None, mensajes=None, whatsapp=None, enviar_fotos=True, galeria=None):
     productos = productos if productos is not None else {"DEMO-1": producto()}
@@ -101,7 +107,7 @@ class TestEnviarFoto:
         assert mensajes.creados == [
             {"conversacion_id": 7, "rol": "bot", "contenido": "📷 Foto de Reloj deportivo (DEMO-1)", "tipo": "imagen", "wamid": None}
         ]
-        assert "Ya le enviaste la foto" in respuesta and "Quedan" not in respuesta
+        assert "Ya le enviaste 1 foto" in respuesta and "Quedan" not in respuesta
 
     def test_la_url_sale_de_la_base_no_de_lo_que_diga_el_modelo(self):
         h, _, whatsapp, _ = armar()
@@ -117,7 +123,7 @@ class TestEnviarFoto:
         h, _, whatsapp, _ = armar()
         enviar(h)
         segunda = enviar(h)
-        assert len(whatsapp.enviadas) == 1 and "no la repitas" in segunda
+        assert len(whatsapp.enviadas) == 1 and "no lo repitas" in segunda
 
     def test_en_otra_conversacion_si_se_envia(self):
         h, _, whatsapp, _ = armar()
@@ -139,7 +145,7 @@ class TestEnviarFoto:
     def test_sin_fotos_subidas_no_envia_y_no_promete_aunque_el_producto_tenga_foto_de_rocketfy(self):
         h, mensajes, whatsapp, _ = armar(galeria={})
         respuesta = enviar(h)
-        assert "todavía no tiene fotos" in respuesta and "por el momento no hay imágenes" in respuesta
+        assert "todavía no tiene fotos ni videos" in respuesta and "por el momento no hay material" in respuesta
         assert "no le prometas" in respuesta
         assert whatsapp.enviadas == [] and mensajes.creados == []
 
@@ -147,7 +153,7 @@ class TestEnviarFoto:
     def test_si_whatsapp_falla_se_le_explica_a_victoria_y_no_se_registra_ni_escala(self, error):
         h, mensajes, _, telegram = armar(whatsapp=WhatsAppFalso(error=error))
         respuesta = enviar(h)
-        assert "No se pudieron enviar las fotos" in respuesta
+        assert "No se pudo enviar el material" in respuesta
         assert mensajes.creados == []  # no quedó registrada: se puede volver a intentar
         telegram.notificar_escalado.assert_not_called()
 
@@ -189,18 +195,24 @@ class TestGaleria:
         assert [m["contenido"] for m in mensajes.creados] == ["📷 Foto de Reloj deportivo (DEMO-1)"] * 2
         assert all(m["tipo"] == "imagen" and m["rol"] == "bot" for m in mensajes.creados)
 
-    def test_manda_por_tandas_y_la_siguiente_sigue_donde_quedo(self):
+    def test_por_defecto_manda_todo_el_material_de_una_vez(self):
+        # Pedido de Freddy (2026-11-20): todo lo que se sube es material del producto y se manda completo.
         h, _, whatsapp, _ = armar(galeria={"DEMO-1": [URL_A, URL_B, URL_C, URL_D]})
-
         primera = enviar(h)
-        assert [e["url"] for e in whatsapp.enviadas] == [URL_A, URL_B, URL_C]  # el valor por defecto son 3
-        assert "Quedan 1 más" in primera
+        assert [e["url"] for e in whatsapp.enviadas] == [URL_A, URL_B, URL_C, URL_D] and "Quedan" not in primera
+        segunda = enviar(h)
+        assert len(whatsapp.enviadas) == 4 and "no lo repitas" in segunda
 
+    def test_con_tandas_mas_chicas_la_siguiente_sigue_donde_quedo(self, monkeypatch):
+        from src.config.parametros import parametros
+
+        original = parametros.valor
+        monkeypatch.setattr(parametros, "valor", lambda clave, *a, **k: 3 if clave == "bot.max_fotos_por_envio" else original(clave, *a, **k))
+        h, _, whatsapp, _ = armar(galeria={"DEMO-1": [URL_A, URL_B, URL_C, URL_D]})
+        primera = enviar(h)
+        assert [e["url"] for e in whatsapp.enviadas] == [URL_A, URL_B, URL_C] and "Quedan 1 archivos más" in primera
         segunda = enviar(h)
         assert [e["url"] for e in whatsapp.enviadas][3:] == [URL_D] and "Quedan" not in segunda
-
-        tercera = enviar(h)
-        assert len(whatsapp.enviadas) == 4 and "no las repitas" in tercera
 
     def test_el_tamano_de_la_tanda_es_un_parametro_que_se_cambia_desde_la_app(self, monkeypatch):
         from src.config.parametros import parametros
@@ -223,13 +235,13 @@ class TestGaleria:
         h, mensajes, whatsapp, _ = armar(whatsapp=FallaLaSegunda(), galeria={"DEMO-1": [URL_A, URL_B]})
         respuesta = enviar(h)
         assert len(whatsapp.enviadas) == 1 and len(mensajes.creados) == 1
-        assert "solo se pudieron enviar algunas" in respuesta
+        assert "solo se pudo enviar una parte" in respuesta
         assert [e["url"] for e in whatsapp.enviadas] == [URL_A]
         assert enviar(h) and whatsapp.enviadas[-1]["url"] == URL_B  # el reintento sigue en la que faltaba
 
     def test_una_foto_subida_que_no_es_https_se_ignora_y_no_cae_en_la_de_rocketfy(self):
         h, _, whatsapp, _ = armar(galeria={"DEMO-1": ["http://inseguro.example/a.jpg"]})
-        assert "todavía no tiene fotos" in enviar(h)
+        assert "todavía no tiene fotos ni videos" in enviar(h)
         assert whatsapp.enviadas == []
 
     def test_la_foto_de_rocketfy_nunca_se_envia(self):
@@ -277,7 +289,7 @@ class TestInterruptor:
         assert "Herramienta desconocida" in enviar(h) and whatsapp.enviadas == []
 
         monkeypatch.setenv("BOT_ENVIAR_FOTOS", "true")  # equivale a encenderla en Parámetros
-        assert "Ya le enviaste la foto" in enviar(h) and len(whatsapp.enviadas) == 1
+        assert "Ya le enviaste 1 foto" in enviar(h) and len(whatsapp.enviadas) == 1
 
 
 # ----------------------------------------------------------------------
@@ -347,3 +359,32 @@ class TestElProductoDelBotTraeLaImagen:
             assert ProductoBotRepository.obtener_por_sku(SKU_REAL)["imagen_url"] == URL
         finally:
             _limpiar_base()
+
+
+URL_VIDEO = "https://xyz.supabase.co/storage/v1/object/public/productos/DEMO-1/uso.mp4"
+
+
+class TestVideos:
+    """Entrada 0.0.163: la galería también tiene videos y, pida el cliente fotos o videos, se manda todo el material."""
+
+    def test_manda_fotos_y_videos_juntos_en_su_orden_cada_uno_por_su_via(self):
+        h, mensajes, whatsapp, _ = armar(galeria={"DEMO-1": [URL_A, URL_VIDEO, URL_B]})
+        respuesta = enviar(h)
+        assert [(e["url"], e.get("video", False)) for e in whatsapp.enviadas] == [(URL_A, False), (URL_VIDEO, True), (URL_B, False)]
+        assert [m["tipo"] for m in mensajes.creados] == ["imagen", "video", "imagen"]
+        assert mensajes.creados[1]["contenido"] == "🎬 Video de Reloj deportivo (DEMO-1)"
+        assert "2 fotos y 1 video" in respuesta
+
+    def test_solo_videos(self):
+        h, _, whatsapp, _ = armar(galeria={"DEMO-1": [URL_VIDEO]})
+        respuesta = enviar(h)
+        assert whatsapp.enviadas[0]["video"] and whatsapp.enviadas[0]["descripcion"] == "Reloj deportivo"
+        assert "Ya le enviaste 1 video" in respuesta
+
+    def test_los_videos_cuentan_para_no_repetir(self):
+        h, _, whatsapp, _ = armar(galeria={"DEMO-1": [URL_VIDEO, URL_A]})
+        enviar(h)
+        assert "no lo repitas" in enviar(h) and len(whatsapp.enviadas) == 2
+
+    def test_la_herramienta_dice_que_se_manda_todo_pida_lo_que_pida(self):
+        assert "fotos y sus videos" in HERRAMIENTA_FOTO.descripcion and "se le manda todo el material" in HERRAMIENTA_FOTO.descripcion

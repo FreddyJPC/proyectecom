@@ -33,7 +33,7 @@ from src.routes.ajustes.services import AjustesService
 from src.routes.categorias.repository import CategoriaRepository
 from src.routes.entregas.logica import limpiar_y_validar
 from src.routes.entregas.repository import EntregaRepository
-from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, carpeta_de, url_publica, validar_ruta
+from src.routes.imagenes.logica import MAXIMO_POR_PRODUCTO, RutaDeImagenInvalida, carpeta_de, tipo_de, url_publica, validar_ruta
 from src.routes.imagenes.repository import ImagenRepository, ImagenYaRegistradaError
 from src.routes.productos.exceptions import SkuNoExisteEnRocketfyError
 from src.routes.productos.repository import SkuMonitoreadoRepository
@@ -431,7 +431,7 @@ class ProductosBotService:
             raise DatosDeProductoInvalidosError([str(exc)]) from exc
         cuantas = len(self._imagenes.listar(actual["sku"]))
         if cuantas >= MAXIMO_POR_PRODUCTO:
-            raise DatosDeProductoInvalidosError([f"Máximo {MAXIMO_POR_PRODUCTO} fotos por producto: quita alguna antes de subir otra."])
+            raise DatosDeProductoInvalidosError([f"Máximo {MAXIMO_POR_PRODUCTO} fotos y videos por producto: quita alguno antes de subir otro."])
         try:
             self._imagenes.agregar(actual["sku"], url_publica(load_settings().supabase_url, ruta), ruta, usuario)
         except ImagenYaRegistradaError as exc:
@@ -697,7 +697,7 @@ class ProductosBotService:
             costo_flete_estimado=_dinero(fila.get("costo_flete_estimado")),
             entregas=[self._entrega_a_dto(e) for e in entregas],
             imagenes=[
-                {"id": i["id"], "url": i["url"], "storage_path": i["storage_path"], "orden": i["orden"]}
+                {"id": i["id"], "url": i["url"], "storage_path": i["storage_path"], "orden": i["orden"], "tipo": tipo_de(i["storage_path"])}
                 for i in self._imagenes.listar(fila["sku"])
             ],
             carpeta_fotos=carpeta_de(fila["id"]),

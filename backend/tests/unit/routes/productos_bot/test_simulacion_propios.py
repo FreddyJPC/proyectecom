@@ -166,4 +166,4 @@ class TestGaleriaEnLaPrueba:
             producto=ficha_propia(imagen_url=None), mensaje="¿Tienes fotos?", historial=[], estado=None, desde_anuncio=False,
             llm=llm, entregas=ENTREGAS, imagenes=[],
         )
-        assert r.fotos == [] and "por el momento no hay imágenes" in r.herramientas[0]["resultado"]
+        assert r.fotos == [] and "por el momento no hay material" in r.herramientas[0]["resultado"]

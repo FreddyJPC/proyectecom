@@ -194,7 +194,7 @@ class PruebasService:
             if turno.pedido
             else None,
             avisos=[AvisoSimuladoDTO(canal=a["canal"], texto=a["texto"]) for a in turno.avisos],
-            fotos=[FotoSimuladaDTO(mensaje=f["mensaje"], url=f["url"], descripcion=f["descripcion"]) for f in turno.fotos],
+            fotos=[FotoSimuladaDTO(mensaje=f["mensaje"], url=f["url"], descripcion=f["descripcion"], tipo=f.get("tipo", "imagen")) for f in turno.fotos],
             venta_manual=turno.venta_manual,
             solicitudes=turno.solicitudes,
             uso=UsoPruebasDTO(

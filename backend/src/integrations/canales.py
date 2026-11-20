@@ -53,6 +53,9 @@ class CanalWhatsApp:
     def enviar_imagen(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
         return self._cliente.enviar_imagen(telefono=id_externo, url=url, descripcion=descripcion)
 
+    def enviar_video(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:
+        return self._cliente.enviar_video(telefono=id_externo, url=url, descripcion=descripcion)
+
     def descargar_media(self, media_id: str, max_bytes: int = 8 * 1024 * 1024):
         """Baja una foto, audio o documento que mandó el cliente. Devuelve (bytes, tipo_mime)."""
         return self._cliente.descargar_media(media_id, max_bytes=max_bytes)

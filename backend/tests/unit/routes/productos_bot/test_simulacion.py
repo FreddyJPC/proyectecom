@@ -312,12 +312,24 @@ class TestFotoDelProducto:
     def test_la_foto_queda_a_la_vista_y_no_se_envia_nada(self):
         r = turno(LLMGuionado(herramientas(FOTO), texto("Te la mando.")), mensaje="Tienes fotos?", imagenes=[FOTO_SUBIDA])
         assert [h["nombre"] for h in r.herramientas] == ["enviar_foto_producto"]
-        assert "Ya le enviaste la foto" in r.herramientas[0]["resultado"]
+        assert "Ya le enviaste 1 foto" in r.herramientas[0]["resultado"]
         assert r.fotos == [{
             "mensaje": f"📷 Foto de Audifonos Bluetooth ({SKU})",
             "url": FOTO_SUBIDA["url"],
             "descripcion": "Audifonos Bluetooth",
+            "tipo": "imagen",
         }]
+
+    def test_el_video_se_simula_igual_y_cuenta_para_no_repetir(self):
+        # Entrada 0.0.163: el material incluye videos; en la prueba se ven con su tipo y no se envía nada.
+        video = {"id": 2, "url": "https://xyz.supabase.co/storage/v1/object/public/productos/p1/uso.mp4", "orden": 1, "storage_path": "p1/uso.mp4"}
+        r = turno(LLMGuionado(herramientas(FOTO), texto("Te lo mando.")), mensaje="Tienes un video?", imagenes=[FOTO_SUBIDA, video])
+        assert [(f["tipo"], f["mensaje"]) for f in r.fotos] == [
+            ("imagen", f"📷 Foto de Audifonos Bluetooth ({SKU})"), ("video", f"🎬 Video de Audifonos Bluetooth ({SKU})"),
+        ]
+        historial = [{"rol": "bot", "contenido": f["mensaje"]} for f in r.fotos]
+        r2 = turno(LLMGuionado(herramientas(FOTO), texto("Ya.")), mensaje="otra vez", historial=historial, imagenes=[FOTO_SUBIDA, video])
+        assert r2.fotos == [] and "no lo repitas" in r2.herramientas[0]["resultado"]
 
     def test_sin_fotos_subidas_no_hay_foto_aunque_la_ficha_tenga_la_de_rocketfy(self):
         r = turno(LLMGuionado(herramientas(FOTO), texto("No tengo foto.")), producto=ficha(imagen_url="https://cdn.rocketfy.example/audifonos.png"))
@@ -330,7 +342,7 @@ class TestFotoDelProducto:
             {"rol": "bot", "contenido": "Te la mande."},
         ]
         r = turno(LLMGuionado(herramientas(FOTO), texto("Ya te la mande.")), mensaje="Otra vez?", historial=historial, imagenes=[FOTO_SUBIDA])
-        assert r.fotos == [] and "no la repitas" in r.herramientas[0]["resultado"]
+        assert r.fotos == [] and "no lo repitas" in r.herramientas[0]["resultado"]
 
     def test_la_foto_se_ve_en_el_historial_que_recibe_el_modelo(self):
         llm = LLMGuionado(texto("ok"))
