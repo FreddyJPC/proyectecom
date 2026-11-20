@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from src.integrations.llm.contratos import (
+    BloqueSistema,
     HerramientaLLM,
     LlamadaHerramienta,
     MensajeLLM,
@@ -238,3 +239,42 @@ class TestHerramientaForzada:
                 system="s", mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=[self._herramienta()],
                 forzar_herramienta="entregar_borrador",
             )
+
+
+class TestCacheDeInstrucciones:
+    """Entrada 0.0.161: con las instrucciones en trozos y alguno marcado, se activa el caché de Anthropic. Con un texto, no."""
+
+    HERRAMIENTAS = [
+        HerramientaLLM(nombre="a", descripcion="A", parametros={"type": "object", "properties": {}}),
+        HerramientaLLM(nombre="b", descripcion="B", parametros={"type": "object", "properties": {}}),
+    ]
+
+    def _llamar(self, system):
+        provider, cliente = _provider_con_cliente_falso()
+        cliente.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="ok")], stop_reason="end_turn",
+            usage=SimpleNamespace(input_tokens=120, cache_creation_input_tokens=0, cache_read_input_tokens=9000, output_tokens=40),
+        )
+        respuesta = provider.generar_respuesta(system=system, mensajes=[MensajeLLM(rol="user", texto="hola")], herramientas=self.HERRAMIENTAS)
+        return cliente.messages.create.call_args.kwargs, respuesta
+
+    def test_con_trozos_marca_herramientas_instrucciones_y_conversacion(self):
+        kwargs, respuesta = self._llamar([BloqueSistema("Fijo ", cachear=True), BloqueSistema("Cliente: Ana")])
+        assert kwargs["system"] == [
+            {"type": "text", "text": "Fijo ", "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": "Cliente: Ana"},
+        ]
+        assert "cache_control" not in kwargs["tools"][0] and kwargs["tools"][-1]["cache_control"] == {"type": "ephemeral"}
+        assert kwargs["cache_control"] == {"type": "ephemeral"}
+        assert respuesta.uso == {"entrada": 120, "escrito_en_cache": 0, "leido_de_cache": 9000, "salida": 40}
+
+    def test_con_un_texto_no_hay_cache(self):
+        # Una llamada suelta (redactar una ficha) pagaría el recargo de escritura sin volver a leerlo.
+        kwargs, _ = self._llamar("prompt del sistema")
+        assert kwargs["system"] == "prompt del sistema" and "cache_control" not in kwargs
+        assert all("cache_control" not in h for h in kwargs["tools"])
+
+    def test_solo_una_marca_en_las_instrucciones_aunque_haya_varios_trozos_fijos(self):
+        # El máximo son 4 marcas por llamada: la del último trozo fijo ya cubre todo lo anterior.
+        kwargs, _ = self._llamar([BloqueSistema("A", cachear=True), BloqueSistema("B", cachear=True), BloqueSistema("C")])
+        assert [("cache_control" in b) for b in kwargs["system"]] == [False, True, False]

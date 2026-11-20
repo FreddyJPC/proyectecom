@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from src.config.parametros import parametros
-from src.integrations.llm.contratos import AdjuntoLLM, LLMProvider, MensajeLLM
+from src.integrations.llm.contratos import AdjuntoLLM, BloqueSistema, LLMProvider, MensajeLLM
 from src.integrations.llm.factory import get_llm_client
 from src.routes.entregas.repository import EntregaRepository
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
@@ -56,6 +56,24 @@ _MESES_ES = [
 def _fecha_legible_ecuador() -> str:
     momento = datetime.now(_ZONA_ECUADOR)
     return f"{momento.day} de {_MESES_ES[momento.month - 1]} de {momento.year}"
+
+
+# Lo que cambia en CADA mensaje: lo que se sabe del cliente y la fecha. Todo lo que va antes en la plantilla (instrucciones y ficha
+# del producto) se repite igual entre mensajes y se guarda en caché (entrada 0.0.161).
+_PARTES_QUE_CAMBIAN = ("contexto_lead_actual", "fecha_actual")
+_CORTE = "\x00CORTE\x00"
+
+
+def armar_instrucciones(plantilla: str, **valores: str) -> List[BloqueSistema]:
+    """Las instrucciones de Victoria en dos trozos: [lo fijo (en caché), lo que cambia]. Pegados son EXACTAMENTE el texto de
+    `plantilla.format(**valores)`: Victoria lee lo mismo que antes; solo cambia cuánto cobra el proveedor por releerlo.
+    El corte va justo antes de la primera parte que cambia, esté donde esté en la plantilla (se puede editar desde la app)."""
+    marcados = {k: (_CORTE + v if k in _PARTES_QUE_CAMBIAN else v) for k, v in valores.items()}
+    texto = plantilla.format(**marcados)
+    if _CORTE not in texto:
+        return [BloqueSistema(texto=texto, cachear=True)]
+    fijo, resto = texto.split(_CORTE, 1)
+    return [BloqueSistema(texto=fijo, cachear=True), BloqueSistema(texto=resto.replace(_CORTE, ""))]
 
 
 class VictoriaConversationService:
@@ -127,7 +145,8 @@ class VictoriaConversationService:
 
         producto_contexto = self._resolver_producto_contexto(lead, conversacion)
         plantilla = self._plantilla_fija if self._plantilla_fija is not None else instrucciones_vigentes.plantilla()
-        system_prompt = plantilla.format(
+        system_prompt = armar_instrucciones(
+            plantilla,
             contexto_producto=self._aviso_producto_no_disponible(lead, producto_contexto)
             + self._formatear_contexto_producto(producto_contexto)
             + self._contexto_de_precios(lead, conversacion, producto_contexto),

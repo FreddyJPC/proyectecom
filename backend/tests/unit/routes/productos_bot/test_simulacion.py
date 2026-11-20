@@ -10,7 +10,7 @@ from decimal import Decimal
 import pytest
 import responses
 
-from src.integrations.llm.contratos import LlamadaHerramienta, LLMProvider, RespuestaLLM
+from src.integrations.llm.contratos import LlamadaHerramienta, LLMProvider, RespuestaLLM, texto_del_system
 from src.routes.productos_bot import simulacion
 from src.routes.productos_bot.simulacion import (
     TELEFONO_DE_PRUEBA,
@@ -43,7 +43,7 @@ class LLMGuionado(LLMProvider):
         self.llamadas = []
 
     def generar_respuesta(self, system, mensajes, herramientas, max_tokens=1024, forzar_herramienta=None):
-        self.llamadas.append({"system": system, "mensajes": list(mensajes), "herramientas": herramientas})
+        self.llamadas.append({"system": texto_del_system(system), "mensajes": list(mensajes), "herramientas": herramientas})
         return self._respuestas.pop(0)
 
 

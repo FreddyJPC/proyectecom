@@ -14,7 +14,7 @@ recién existe desde 3.10 (PEP 604) y rompería en tiempo de import acá.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 
 @dataclass
@@ -29,6 +29,21 @@ class HerramientaLLM:
     nombre: str
     descripcion: str
     parametros: dict
+
+
+@dataclass
+class BloqueSistema:
+    """Un trozo de las instrucciones (system). Las instrucciones se pueden mandar en varios trozos que, pegados, dan EXACTAMENTE
+    el mismo texto: así el proveedor puede guardar en caché la parte fija (`cachear=True`) y cobrar a precio completo solo la
+    parte que cambia en cada mensaje (estado del cliente, fecha). Ver docs/CONCEPTOS_TECNICOS.md, «caché de instrucciones»."""
+
+    texto: str
+    cachear: bool = False
+
+
+def texto_del_system(system: Union[str, List["BloqueSistema"]]) -> str:
+    """Las instrucciones como un solo texto (los trozos pegados), sea cual sea la forma en que se mandaron."""
+    return system if isinstance(system, str) else "".join(b.texto for b in system)
 
 
 @dataclass
@@ -80,6 +95,9 @@ class RespuestaLLM:
     texto: str
     llamadas_herramientas: List[LlamadaHerramienta]
     razon_de_parada: Literal["fin", "necesita_herramientas", "limite_alcanzado"]
+    # Tokens que cobró el proveedor en esta llamada (entrada a precio completo, escritos en caché, leídos de caché, salida).
+    # Solo informativo: sirve para medir el costo real; None si el proveedor no lo informa.
+    uso: Optional[dict] = None
 
 
 class LLMProvider(ABC):
@@ -92,7 +110,7 @@ class LLMProvider(ABC):
     @abstractmethod
     def generar_respuesta(
         self,
-        system: str,
+        system: Union[str, List[BloqueSistema]],
         mensajes: List[MensajeLLM],
         herramientas: List[HerramientaLLM],
         max_tokens: int = 1024,
@@ -102,5 +120,9 @@ class LLMProvider(ABC):
         modelo DEBE invocar. Sirve para recibir JSON con un esquema fijo (los
         argumentos de la herramienta) en vez de texto libre: así la salida se
         puede validar con código. Con None (lo normal en la conversación de
-        Victoria) el modelo decide solo si usa una herramienta o responde."""
+        Victoria) el modelo decide solo si usa una herramienta o responde.
+
+        `system` puede ser un texto o una lista de `BloqueSistema`: con una lista y algún bloque `cachear=True`, el proveedor
+        guarda en caché las herramientas y esos bloques (se cobran mucho más baratos en las llamadas siguientes). Con un texto
+        no se usa caché (una llamada suelta, como redactar una ficha, pagaría el recargo de escritura sin aprovecharlo)."""
         ...

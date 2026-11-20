@@ -1750,3 +1750,25 @@ frecuente» te dice qué conviene mejorar primero. Más adelante esta tabla sirv
 **Victoria y los temas ajenos.** Solo habla del negocio: si le preguntan el clima o le piden traducir algo, no lo responde y vuelve con
 amabilidad a la compra. Nunca dice que es un bot ni que «le pasa con un humano»: dice que le comunica con un asesor. Si le preguntan en
 serio si es una persona o un sistema, no lo niega (breve) y sigue ayudando (ADR-018, regla 1).
+
+## 58. Caché de instrucciones (prompt caching): pagar menos por lo que Victoria relee
+
+**Qué es.** Cada vez que Victoria contesta, la IA vuelve a leer todo: sus instrucciones, la ficha del producto, la lista de
+herramientas y la conversación. Antes se cobraba completo cada vez (unos 28 mil tokens por respuesta). Con el caché, Anthropic
+guarda esa parte repetida unos minutos y, en las llamadas siguientes, la cobra a una fracción del precio (alrededor de una décima
+parte; escribirla en el caché la primera vez cuesta un 25 % más).
+
+**Cómo está armado (entrada 0.0.161).** Las instrucciones se mandan en dos trozos que, pegados, son exactamente el mismo texto
+de siempre: lo fijo (instrucciones + ficha, en caché) y lo que cambia en cada mensaje (estado del cliente y fecha). Se marcan
+tres puntos de caché: la última herramienta, el final de lo fijo y la conversación (que se reaprovecha entre las vueltas de
+herramientas de un mismo mensaje). Todo vive en `integrations/llm/providers/anthropic_provider.py` y
+`whatsapp/conversation_service.py::armar_instrucciones`.
+
+**Lo que NO cambia.** Lo que Victoria lee y responde: el texto es idéntico byte a byte. Una llamada suelta (redactar una ficha)
+no usa caché, porque pagaría el recargo de escritura sin aprovecharlo.
+
+**Cómo se mide.** Cada llamada deja en los logs de Railway una línea «Uso de la IA: {entrada, escrito_en_cache, leido_de_cache,
+salida}». Si `leido_de_cache` queda en 0 mensaje tras mensaje, algo cambió el principio de las instrucciones y el caché se rompió.
+
+**Límite.** El caché dura 5 minutos desde el último uso: si el cliente tarda más en contestar, ese mensaje vuelve a pagar la
+escritura. Dentro de un mismo mensaje (Victoria usa 2 a 4 herramientas) siempre se aprovecha.
