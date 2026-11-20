@@ -10,6 +10,7 @@ from src.integrations.llm.contratos import (
     LLMProvider,
     ResultadoHerramienta,
     RespuestaLLM,
+    texto_del_system,
 )
 from src.routes.whatsapp.conversation_service import VictoriaConversationService
 
@@ -20,7 +21,7 @@ class LLMProviderFalso(LLMProvider):
         self.llamadas = []
 
     def generar_respuesta(self, system, mensajes, herramientas, max_tokens=1024):
-        self.llamadas.append({"system": system, "mensajes": list(mensajes), "herramientas": herramientas})
+        self.llamadas.append({"system": texto_del_system(system), "mensajes": list(mensajes), "herramientas": herramientas})
         return self._respuestas.pop(0)
 
 
@@ -734,3 +735,35 @@ class TestContextoDeConfirmacion:
 
     def test_sin_nada_no_dice_nada_de_confirmacion(self):
         assert "confirm" not in VictoriaConversationService._formatear_contexto_lead({"nombre_cliente": "Ana"})
+
+
+class TestInstruccionesEnDosTrozos:
+    """Entrada 0.0.161: las instrucciones se mandan en [lo fijo (caché), lo que cambia]. Pegadas deben ser EXACTAMENTE el texto de
+    siempre: el caché solo cambia cuánto se cobra, nunca lo que Victoria lee."""
+
+    PLANTILLA = "Eres Victoria.\n## Producto\n{contexto_producto}\n## Reglas\n...\n## Lead\n{contexto_lead_actual}\n## Fecha\n{fecha_actual}\n"
+    VALORES = dict(contexto_producto="Set 3 en 1 {sin formato}", contexto_lead_actual="Nombre: Ana", fecha_actual="20 de noviembre de 2026")
+
+    def test_pegadas_dan_el_mismo_texto_y_el_corte_va_antes_del_cliente(self):
+        from src.routes.whatsapp.conversation_service import armar_instrucciones
+
+        bloques = armar_instrucciones(self.PLANTILLA, **self.VALORES)
+        assert texto_del_system(bloques) == self.PLANTILLA.format(**self.VALORES)
+        fijo, cambia = bloques
+        assert fijo.cachear and not cambia.cachear
+        assert "Set 3 en 1" in fijo.texto and "Nombre: Ana" not in fijo.texto
+        assert cambia.texto.startswith("Nombre: Ana") and "20 de noviembre" in cambia.texto
+
+    def test_el_corte_sigue_a_la_primera_parte_que_cambia_aunque_se_reordene_la_plantilla(self):
+        from src.routes.whatsapp.conversation_service import armar_instrucciones
+
+        plantilla = "Hoy: {fecha_actual}\n{contexto_producto}\n{contexto_lead_actual}"
+        bloques = armar_instrucciones(plantilla, **self.VALORES)
+        assert texto_del_system(bloques) == plantilla.format(**self.VALORES)
+        assert bloques[0].texto == "Hoy: " and "Set 3 en 1" in bloques[1].texto
+
+    def test_sin_partes_que_cambian_todo_va_en_cache(self):
+        from src.routes.whatsapp.conversation_service import armar_instrucciones
+
+        bloques = armar_instrucciones("Solo {contexto_producto}", contexto_producto="x")
+        assert len(bloques) == 1 and bloques[0].cachear and bloques[0].texto == "Solo x"

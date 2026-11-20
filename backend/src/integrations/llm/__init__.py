@@ -1,4 +1,5 @@
 from .contratos import (
+    BloqueSistema,
     HerramientaLLM,
     LlamadaHerramienta,
     LLMProvider,
@@ -10,6 +11,7 @@ from .exceptions import LLMAuthError, LLMError, LLMRateLimitError, LLMRequestErr
 from .factory import get_llm_client
 
 __all__ = [
+    "BloqueSistema",
     "HerramientaLLM",
     "LlamadaHerramienta",
     "LLMProvider",
