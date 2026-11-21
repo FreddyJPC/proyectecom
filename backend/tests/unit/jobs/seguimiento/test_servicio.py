@@ -22,7 +22,7 @@ from tests.helpers_db import borrar_conversaciones_de_prueba
 TELEFONOS = [f"59390000{n:04d}" for n in range(6001, 6009)]
 T1, T2, T3 = TELEFONOS[:3]
 DUENO = "test@ejemplo.com"
-TEXTO_EMPUJON = "Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊"
+TEXTO_EMPUJON = "Hola, ¿le quedó alguna duda sobre el producto? Con gusto le ayudo."
 TEXTO_PLANTILLA = "Hola 👋 Soy Victoria, de AzoShop. ¿Sigue interesado(a)? Si necesita ayuda, escríbame y con gusto le atiendo."
 
 

@@ -819,9 +819,12 @@ CATALOGO: Tuple[Parametro, ...] = (
         clave="seguimiento.texto_empujon",
         grupo="seguimiento",
         nombre="Texto del empujón",
-        para_que_sirve="El mensaje corto que recibe el cliente que dejó de contestar, dentro de las 24 horas. Trátalo de usted, como Victoria.",
+        para_que_sirve=(
+            "El mensaje corto que recibe el cliente que dejó de contestar, dentro de las 24 horas. Trátalo de usted, como Victoria, sin "
+            "emojis y sin dar por hecho que ya compró (entrada 0.0.169)."
+        ),
         tipo=TIPO_TEXTO,
-        defecto="Hola 👋 ¿Sigue interesado(a)? Cuénteme y lo terminamos en un momento 😊",
+        defecto="Hola, ¿le quedó alguna duda sobre el producto? Con gusto le ayudo.",
         largo_maximo=400,
         aplica=APLICA_PROXIMA_CORRIDA,
     ),
