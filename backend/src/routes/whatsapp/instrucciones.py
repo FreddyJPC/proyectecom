@@ -66,6 +66,11 @@ SECCIONES = (
         "Cómo habla Victoria: tono, largo de los mensajes, uso de emojis y qué dice si le preguntan si es un bot.", True, 2000,
     ),
     Seccion(
+        "conversacion", "Cómo llevas la conversación", "Cómo lleva la conversación",
+        "El ritmo de la charla: dar la información de a poco, qué hacer con el mensaje que ya viene escrito desde el anuncio y "
+        "cuándo recién pedir los datos del pedido (entrada 0.0.167).", True, 2500,
+    ),
+    Seccion(
         "objetivo", "Tu objetivo", "Objetivo y proceso de venta",
         "Qué busca Victoria y los pasos naturales de una venta, de saludar a confirmar el pedido.", True, 1500,
     ),

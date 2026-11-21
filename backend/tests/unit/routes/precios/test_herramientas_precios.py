@@ -351,6 +351,13 @@ class TestLoQueVictoriaVe:
         assert "2 por $45.00" in texto and "transferencia: $20.00 por unidad" in texto and "negociar_precio" in texto
         assert "mínimo" not in texto  # el límite del regateo nunca se le muestra
 
+    def test_el_precio_por_cantidad_solo_se_dice_si_preguntan(self):
+        # Entrada 0.0.167: «💡 Dato: si lleva 2…» sin que el cliente lo pidiera satura y suena a bot.
+        producto = _producto("LIN", "Linterna", "25.00")
+        e = Escena(productos=(producto,), precios=PreciosEnMemoria(escalas={"LIN": [{"cantidad": 2, "precio_total": D("45")}]}))
+        texto = e.herramientas.reglas_para_victoria(producto)
+        assert "2 por $45.00" in texto and "Solo dilo si el cliente pregunta por llevar más de uno" in texto
+
     def test_el_descuento_por_transferencia_se_ofrece_una_vez_y_como_oportunidad(self):
         producto = _producto("LIN", "Linterna", "25.00", transferencia_tipo="monto", transferencia_valor=D("5"))
         texto = Escena(productos=(producto,)).herramientas.reglas_para_victoria(producto)

@@ -335,7 +335,7 @@ class TestReglasDeterministasDeEscalado:
         bot_worker.encolar.assert_called_once()
         kwargs = bot_worker.encolar.call_args.kwargs
         assert kwargs["modo"] == "fijo"
-        assert "conecto" in kwargs["texto_fijo"].lower()
+        assert "asesor" in kwargs["texto_fijo"].lower()
 
     def test_imagen_con_lead_esperando_pago_escala_sin_invocar_al_llm(self, monkeypatch):
         # Con «Que Victoria vea las fotos» APAGADO se mantiene la regla de siempre.

@@ -93,7 +93,7 @@ def texto_de_cuentas(cuentas: List[Dict[str, Any]], total: Any = None) -> str:
     """El mensaje que se le manda al cliente con los datos para transferir. Lo escribe el código, no la IA."""
     bloques = []
     for c in cuentas:
-        lineas = [f"🏦 {c['banco']}", f"Tipo de cuenta: {c['tipo_cuenta']}", f"Número: {c['numero']}", f"Titular: {c['titular']}"]
+        lineas = [f"Banco: {c['banco']}", f"Tipo de cuenta: {c['tipo_cuenta']}", f"Número: {c['numero']}", f"Titular: {c['titular']}"]
         if c.get("identificacion"):
             lineas.append(f"Cédula: {c['identificacion']}")
         bloques.append("\n".join(lineas))
@@ -101,7 +101,7 @@ def texto_de_cuentas(cuentas: List[Dict[str, Any]], total: Any = None) -> str:
     monto = _dinero(total) if total is not None else None
     if monto:
         partes.append(f"Valor a transferir: ${monto}")
-    partes.append("Cuando la haga, envíeme por favor la foto del comprobante 🙏")
+    partes.append("Cuando la haga, envíeme por favor la foto del comprobante.")
     return "\n\n".join(partes)
 
 

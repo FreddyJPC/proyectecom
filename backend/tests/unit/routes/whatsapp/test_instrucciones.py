@@ -34,10 +34,23 @@ def _validas(**cambios):
 
 
 class TestElArchivoOriginal:
-    def test_tiene_las_diez_secciones_que_el_codigo_espera(self):
-        assert [s.id for s in SECCIONES] == ["intro", "personalidad", "objetivo", "producto", "reglas", "herramientas", "variantes", "clasificacion", "estado", "fecha"]
+    def test_tiene_las_once_secciones_que_el_codigo_espera(self):
+        assert [s.id for s in SECCIONES] == ["intro", "personalidad", "conversacion", "objetivo", "producto", "reglas", "herramientas", "variantes", "clasificacion", "estado", "fecha"]
         # Si alguien renombra un título del archivo, esto avisa antes de llegar a producción.
         assert ins._trozos().keys() == {s.id for s in SECCIONES}
+
+    def test_el_original_no_tiene_emojis_ni_le_pide_usarlos(self):
+        # Entrada 0.0.167: los emojis hacen que Victoria parezca un bot. Si las instrucciones traen uno de ejemplo, lo copia.
+        import re
+
+        texto = texto_original()
+        assert not re.search("[\U0001F300-\U0001FAFF☀-➿]", texto)
+        assert "No usas emojis" in texto
+
+    def test_el_mensaje_que_viene_del_anuncio_no_es_una_compra_decidida(self):
+        texto = texto_original()
+        assert "Eso es interés, no una\n  compra decidida" in texto
+        assert "Nunca contestes por el cliente" in texto
 
     def test_ensamblar_sin_cambios_devuelve_el_archivo_idéntico_byte_a_byte(self):
         assert ensamblar() == texto_original()
@@ -67,7 +80,7 @@ class TestEnsamblar:
         armado = ensamblar(_validas(personalidad="Eres muy amable."))
         assert "Eres muy amable." in armado
         assert "Hablas como una persona real" not in armado
-        assert "## Tu personalidad\nEres muy amable.\n\n## Tu objetivo" in armado
+        assert "## Tu personalidad\nEres muy amable.\n\n## Cómo llevas la conversación" in armado
         # lo demás queda como estaba
         assert cuerpo_fijo("herramientas") in armado and "## Reglas que nunca rompes" in armado
 

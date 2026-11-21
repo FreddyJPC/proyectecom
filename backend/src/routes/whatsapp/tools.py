@@ -1573,6 +1573,9 @@ class HerramientasVictoria:
         escalas = [e for e in self._cotizador.escalas_de_producto(producto["sku"]) if e.cantidad <= maximo]
         if escalas:
             lineas.append("- Precio por cantidad: " + ", ".join(f"{e.cantidad} por ${e.precio_total:.2f}" for e in escalas) + ".")
+            # Entrada 0.0.167: soltarlo de entrada satura al cliente («💡 Dato: si lleva 2…» sin que lo pidiera).
+            if not parametros.valor("precios.mencionar_por_cantidad"):
+                lineas.append("  (Solo dilo si el cliente pregunta por llevar más de uno o por descuentos, o si pide más de una unidad.)")
         precio = dinero(producto["precio"])
         tipo, valor = producto.get("transferencia_tipo"), producto.get("transferencia_valor")
         if not tipo:
