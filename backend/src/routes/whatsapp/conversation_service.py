@@ -182,9 +182,12 @@ class VictoriaConversationService:
             if respuesta.razon_de_parada in ("fin", "limite_alcanzado"):
                 break
 
-            # necesita_herramientas
+            # necesita_herramientas. Lo que Victoria escribió ANTES de usar la herramienta no se le manda al cliente (ver
+            # _texto_para_el_cliente), así que tampoco queda en lo que ella cree haber dicho: si quedara, al volver con el
+            # resultado se respondería sola («¿Lo quiere llevar?» … «¡Perfecto! Registré su pedido») o daría por dicho algo
+            # que el cliente nunca leyó. Con solo la llamada, escribe su respuesta completa una vez, ya con el resultado.
             mensajes.append(
-                MensajeLLM(rol="assistant", texto=respuesta.texto, llamadas_herramientas=respuesta.llamadas_herramientas)
+                MensajeLLM(rol="assistant", texto="", llamadas_herramientas=respuesta.llamadas_herramientas)
             )
 
             resultados = []
@@ -231,9 +234,7 @@ class VictoriaConversationService:
             )
             partes_de_texto = [parametros.valor("bot.texto_limite_alcanzado")]
 
-        # Lo que Victoria escribe antes y después de usar una herramienta («Un momento…» / «¡Listo!…») sale como
-        # UN solo mensaje: se junta con un renglón en blanco, no pegado («Un momento…¡Listo!»).
-        texto_final = "\n\n".join(p.strip() for p in partes_de_texto if p and p.strip())
+        texto_final = self._texto_para_el_cliente(partes_de_texto)
         if not texto_final:
             # La IA terminó sin escribir nada. Un mensaje vacío no se puede enviar, y callar dejaría al cliente
             # esperando: se pasa la conversación a una persona y se le avisa.
@@ -250,6 +251,17 @@ class VictoriaConversationService:
 
         self._guardar_respuesta(conversacion_id, texto_final, ultima_leida=filas[-1] if filas else None)
         return texto_final
+
+    @staticmethod
+    def _texto_para_el_cliente(partes_de_texto: List[str]) -> str:
+        """El mensaje que recibe el cliente: lo ÚLTIMO que escribió Victoria en el turno (entrada 0.0.167).
+
+        Antes se pegaba todo lo que escribía antes y después de cada herramienta, y salían cosas como «¿Lo quiere llevar?
+        ¡Perfecto! Registré su pedido» en un mismo mensaje: una persona no se responde sola. Como lo de antes de la herramienta
+        ya no queda en lo que ella cree haber dicho, su último texto es la respuesta completa. Si al final no escribió nada
+        (pasa raras veces), se usa lo último que sí escribió antes, para no dejar al cliente sin respuesta."""
+        escritos = [p.strip() for p in partes_de_texto if p and p.strip()]
+        return escritos[-1] if escritos else ""
 
     def _guardar_respuesta(self, conversacion_id: int, texto: str, ultima_leida: Optional[dict]) -> None:
         """Guarda la respuesta del bot. Si el cliente escribió OTRO mensaje mientras Victoria redactaba, la

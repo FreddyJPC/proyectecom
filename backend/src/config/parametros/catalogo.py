@@ -454,7 +454,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "el sistema envía este mensaje y avisa a una persona para que lo atienda."
         ),
         tipo=TIPO_TEXTO,
-        defecto="¡Hola de nuevo! Ya te conecto con nuestro equipo de atención, en un momento te responden 🙋",
+        defecto="¡Hola de nuevo! Ya le comunico con un asesor, en un momento le responden.",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
@@ -468,7 +468,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "y avisa a una persona para que confirme el pago. Con esa opción encendida, Victoria lee la foto y responde ella."
         ),
         tipo=TIPO_TEXTO,
-        defecto="¡Gracias! Ya recibimos tu comprobante, en un momento uno de nuestros asesores lo confirma ✅",
+        defecto="¡Gracias! Ya recibimos su comprobante, en un momento uno de nuestros asesores lo confirma.",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
@@ -481,7 +481,7 @@ CATALOGO: Tuple[Parametro, ...] = (
             "con herramientas») y la conversación se pasa a una persona."
         ),
         tipo=TIPO_TEXTO,
-        defecto="Disculpe la demora — ya le comunico con un asesor que le ayuda enseguida 🙋",
+        defecto="Disculpe la demora, ya le comunico con un asesor que le ayuda enseguida.",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
@@ -1049,11 +1049,12 @@ CATALOGO: Tuple[Parametro, ...] = (
         grupo="precios",
         nombre="Victoria ofrece el precio por cantidad",
         para_que_sirve=(
-            "Si un producto tiene precio por cantidad («2 por $45»), Victoria lo menciona una vez, cuando el cliente ya eligió el producto. "
-            "Apagado, solo lo dice si el cliente pregunta."
+            "Si un producto tiene precio por cantidad («2 por $45»), encendido Victoria lo menciona una vez, cuando el cliente ya eligió el "
+            "producto. Apagado (lo normal desde la entrada 0.0.167), solo lo dice si el cliente pregunta por llevar más de uno o por "
+            "descuentos: soltarlo de entrada satura al cliente."
         ),
         tipo=TIPO_BOOLEANO,
-        defecto=True,
+        defecto=False,
         aplica=APLICA_SIGUIENTE_MENSAJE,
     ),
     Parametro(

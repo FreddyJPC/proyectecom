@@ -114,7 +114,7 @@ class TestLoopDeHerramientas:
 
         resultado = servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Quiero el producto X")
 
-        assert resultado == "Un momento...\n\n¡Listo! Ya registré tu producto."
+        assert resultado == "¡Listo! Ya registré tu producto."
         assert len(llm.llamadas) == 2
         assert len(ejecutor.llamadas) == 1
         assert ejecutor.llamadas[0]["nombre"] == "registrar_producto"
@@ -155,7 +155,8 @@ class TestLoopDeHerramientas:
 
         resultado = servicio.procesar_turno(conversacion_id=1, mensaje_cliente="Quiero hablar con una persona")
 
-        assert resultado == "Ya te conecto con un asesor.\n\n¡Que tengas un buen día!"
+        # Solo sale la despedida: lo de antes de pasar_a_asesor no queda en su historial, así que la despedida es completa.
+        assert resultado == "¡Que tengas un buen día!"
         assert len(llm.llamadas) == 2
         assert len(ejecutor.llamadas) == 1
         assert ejecutor.llamadas[0]["nombre"] == "pasar_a_asesor"
@@ -710,18 +711,49 @@ class TestRespuestaVacia:
         # Lo que se guarda y se envía es el aviso, no un mensaje vacío.
         assert mensajes.filas[-1]["rol"] == "bot" and mensajes.filas[-1]["contenido"] == resultado
 
-    def test_el_texto_de_antes_y_de_despues_de_una_herramienta_sale_separado_por_un_renglon(self):
+    def test_solo_sale_lo_ultimo_que_escribe_no_lo_de_antes_de_la_herramienta(self):
+        # Caso real del 21/11: «¿Lo quiere llevar?» y, en el mismo mensaje, «¡Perfecto! Registré su pedido».
         llm = LLMProviderFalso([
             RespuestaLLM(
-                texto="Un momento, lo reviso.",
+                texto="¿Lo quiere llevar?",
+                llamadas_herramientas=[LlamadaHerramienta(id="t1", nombre="ver_ficha_producto", entrada={"producto_sku": "X"})],
+                razon_de_parada="necesita_herramientas",
+            ),
+            _fin("Cuesta $20. ¿Tiene alguna duda?"),
+        ])
+        servicio = _servicio_con(llm, MensajesConId([{"rol": "cliente", "contenido": "¿Cuánto cuesta?"}]))
+
+        assert servicio.procesar_turno(1, "¿Cuánto cuesta?") == "Cuesta $20. ¿Tiene alguna duda?"
+
+    def test_lo_de_antes_de_la_herramienta_no_queda_como_dicho_para_victoria(self):
+        # Si quedara en su historial, creería que el cliente ya leyó esa pregunta y se respondería sola.
+        llm = LLMProviderFalso([
+            RespuestaLLM(
+                texto="¿Lo quiere llevar?",
                 llamadas_herramientas=[LlamadaHerramienta(id="t1", nombre="ver_ficha_producto", entrada={"producto_sku": "X"})],
                 razon_de_parada="necesita_herramientas",
             ),
             _fin("Cuesta $20."),
         ])
         servicio = _servicio_con(llm, MensajesConId([{"rol": "cliente", "contenido": "¿Cuánto cuesta?"}]))
+        servicio.procesar_turno(1, "¿Cuánto cuesta?")
 
-        assert servicio.procesar_turno(1, "¿Cuánto cuesta?") == "Un momento, lo reviso.\n\nCuesta $20."
+        segunda_llamada = llm.llamadas[1]["mensajes"]
+        con_herramienta = [m for m in segunda_llamada if m.llamadas_herramientas]
+        assert len(con_herramienta) == 1 and con_herramienta[0].texto == ""
+
+    def test_si_al_final_no_escribe_nada_se_usa_lo_ultimo_que_si_escribio(self):
+        llm = LLMProviderFalso([
+            RespuestaLLM(
+                texto="Cuesta $20.",
+                llamadas_herramientas=[LlamadaHerramienta(id="t1", nombre="clasificar_lead", entrada={"temperatura": "tibio"})],
+                razon_de_parada="necesita_herramientas",
+            ),
+            _fin(""),
+        ])
+        servicio = _servicio_con(llm, MensajesConId([{"rol": "cliente", "contenido": "¿Cuánto cuesta?"}]))
+
+        assert servicio.procesar_turno(1, "¿Cuánto cuesta?") == "Cuesta $20."
 
 
 class TestContextoDeConfirmacion:
