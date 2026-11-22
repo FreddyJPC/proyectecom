@@ -269,3 +269,13 @@ class TestInstruccionesVigentes:
         assert vigentes.plantilla() == texto_original()  # todavía recuerda
         vigentes.invalidar()
         assert "Sin variantes por ahora." in vigentes.plantilla()
+
+
+
+def test_la_garantia_antes_de_comprar_se_contesta_con_la_ficha():
+    """Una pregunta por la garantía antes de comprar es una duda normal: Victoria responde con la ficha y no escala (conv. del
+    2026-11-22). Solo hacer VÁLIDA una garantía, devolver o cambiar algo recibido pasa a un asesor."""
+    texto = texto_original()
+    assert "pregunta ANTES de comprar qué garantía" in texto
+    assert "devoluciones, garantías, o problemas con un\n  pedido anterior, usa pasar_a_asesor" not in texto
+    assert "hacer válida una garantía" in texto

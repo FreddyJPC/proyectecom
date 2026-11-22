@@ -151,6 +151,15 @@ class EnviarMensajeInputSchema(Schema):
     contenido = fields.Str(required=True, validate=validate.Length(min=1))
 
 
+class EnviarMaterialInputSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    sku = fields.Str(required=True, validate=validate.Length(min=1, max=120))
+    # Los archivos de la galería que eligió el dueño; vacío = todos.
+    imagen_ids = fields.List(fields.Int(strict=True), data_key="imagenIds", load_default=list, validate=validate.Length(max=50))
+
+
 class NotasInputSchema(Schema):
     class Meta:
         unknown = EXCLUDE
@@ -170,6 +179,7 @@ conversacion_lista_schema = ListaConversacionesSchema()
 conversacion_detalle_schema = DetalleCompletoSchema()
 mensaje_schema = MensajeSchema()
 enviar_mensaje_input_schema = EnviarMensajeInputSchema()
+enviar_material_input_schema = EnviarMaterialInputSchema()
 notas_input_schema = NotasInputSchema()
 continuar_input_schema = ContinuarInputSchema()
 datos_envio_input_schema = DatosEnvioInputSchema(unknown=EXCLUDE)

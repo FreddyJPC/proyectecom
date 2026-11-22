@@ -10,6 +10,7 @@ import responses
 
 from src.app import create_app
 from src.routes.conversaciones.exceptions import (
+    SinMaterialError,
     SinPedidoEnCursoError,
     ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
@@ -218,3 +219,36 @@ class TestArchivoDeUnMensaje:
 
     def test_sin_iniciar_sesion_no_se_entrega_nada(self):
         assert _client().get("/conversaciones/1/mensajes/10/archivo").status_code == 401
+
+
+class TestEnviarMaterial:
+    @responses.activate
+    def test_envia_y_devuelve_cuantos(self):
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.enviar_material.return_value = {"fotos": 2, "videos": 1}
+            resp = _client().post("/conversaciones/5/material", json={"sku": "SET-1", "imagenIds": [3, 4]}, headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        assert resp.get_json() == {"fotos": 2, "videos": 1}
+        MockService.return_value.enviar_material.assert_called_once_with(5, "SET-1", [3, 4])
+
+    @responses.activate
+    def test_errores(self):
+        mock_login_ok()
+        casos = [
+            (SinMaterialError("sin fotos"), 422),
+            (VentanaMensajeriaCerradaError("cerrada"), 409),
+            (EnvioWhatsAppFallidoError("falló"), 502),
+            (ConversacionNoEncontradaError("no"), 404),
+        ]
+        for error, codigo in casos:
+            with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+                MockService.return_value.enviar_material.side_effect = error
+                resp = _client().post("/conversaciones/5/material", json={"sku": "SET-1"}, headers=AUTH_HEADER)
+            assert resp.status_code == codigo
+
+    @responses.activate
+    def test_sin_sku_es_422(self):
+        mock_login_ok()
+        resp = _client().post("/conversaciones/5/material", json={}, headers=AUTH_HEADER)
+        assert resp.status_code == 422

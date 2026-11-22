@@ -21,6 +21,10 @@ EXTENSIONES_VIDEO = ("mp4", "3gp")
 EXTENSIONES = EXTENSIONES_FOTO + EXTENSIONES_VIDEO
 TIPO_FOTO = "imagen"
 TIPO_VIDEO = "video"
+# Cómo queda en el historial cada archivo enviado, lo mande Victoria o el dueño desde el panel (y cómo se cuentan después:
+# `contar_fotos` busca el SKU entre paréntesis).
+PREFIJO_FOTO = "📷 Foto de "
+PREFIJO_VIDEO = "🎬 Video de "
 _NOMBRE_DE_ARCHIVO = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
 
 

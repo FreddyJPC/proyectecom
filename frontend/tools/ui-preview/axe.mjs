@@ -231,6 +231,15 @@ for (const theme of ["light", "dark"]) {
         await page.getByText("Instrucciones originales").first().waitFor();
         await page.waitForTimeout(300);
       }
+      // Enviar fotos y videos desde el panel (botón junto al campo de respuesta).
+      if (r === "/conversaciones/301") {
+        await page.getByRole("button", { name: "Enviar fotos y videos del producto" }).click();
+        await page.getByRole("dialog", { name: "Enviar fotos y videos" }).waitFor();
+        await page.waitForTimeout(800);
+        await auditar(r + " [enviar fotos y videos]");
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+      }
       // Entrega en agencia: el aviso «Falta definir la agencia» y el cuadro «Datos de envío» (en el celular, dentro de «Datos del cliente»).
       if (r === "/conversaciones/294") {
         if (vn === "movil") {

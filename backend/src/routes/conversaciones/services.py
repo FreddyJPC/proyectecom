@@ -8,13 +8,15 @@ módulo necesita: listar/contar para el dashboard, marcar_vista,
 actualizar_notas, marcar_esperando_pago).
 """
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from src.integrations.canales import CanalNoDisponibleError, RegistroCanales, get_registro_canales
 from src.integrations.whatsapp import WhatsAppBusinessError, WhatsAppRequestError
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO as ESTADOS_QUE_ESPERAN_AL_DUENO
-from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository, MensajeRepository
+from src.routes.imagenes.logica import PREFIJO_FOTO, PREFIJO_VIDEO, TIPO_VIDEO, galeria_para_enviar
+from src.routes.imagenes.repository import ImagenRepository
+from src.routes.whatsapp.repository import ConversacionRepository, LeadRepository, MensajeRepository, ProductoBotRepository
 
 from .dto import (
     AnuncioDTO,
@@ -36,6 +38,7 @@ from .exceptions import (
     DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
     PedidoYaCerradoError,
+    SinMaterialError,
     SinPedidoEnCursoError,
     VentanaMensajeriaCerradaError,
 )
@@ -69,6 +72,8 @@ class ConversacionesService:
         anuncio_servicio: Optional[AnuncioServicio] = None,
         bot_worker=None,
         aprendizaje=None,
+        producto_repo=None,
+        imagen_repo=None,
     ):
         self._bot_worker_fijo = bot_worker
         self._anuncios = anuncio_servicio or AnuncioServicio()
@@ -76,6 +81,8 @@ class ConversacionesService:
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._leads = lead_repo or LeadRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
+        self._productos = producto_repo or ProductoBotRepository()
+        self._imagenes = imagen_repo or ImagenRepository()
         # «Aprendizaje de Victoria»: si el dueño tiene que meterse en una conversación que ella atendía, queda anotado.
         self._aprendizaje_fijo = aprendizaje
 
@@ -287,6 +294,71 @@ class ConversacionesService:
             id=mensaje["id"], rol=mensaje["rol"], contenido=mensaje["contenido"], tipo=mensaje["tipo"],
             creado_en=_iso(mensaje["creado_en"]),
         )
+
+    def enviar_material(self, conversacion_id: int, sku: str, imagen_ids: Optional[List[int]] = None) -> dict:
+        """El dueño, desde el panel, le manda al cliente las fotos y los videos del producto (los de su ficha, en el orden de la
+        galería). Es lo mismo que hace Victoria con `enviar_foto_producto`, pero para cuando atiende él: antes solo podía
+        escribir texto. `imagen_ids` = los archivos que eligió (si no elige, va todo). Las URLs salen SIEMPRE de la base,
+        nunca de lo que llegue del navegador. Sin el tope de «Material por envío»: ese tope es para que Victoria no sature;
+        aquí el dueño decide qué manda.
+
+        Cada archivo queda como mensaje del dueño (rol «humano») con el SKU entre paréntesis, igual que los de Victoria:
+        así ella sabe que ya se mandaron y no los repite si después le devuelven la conversación. Devuelve cuántas fotos y
+        videos salieron; si falla a la mitad, lo enviado queda guardado y se avisa del fallo."""
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        if conversacion is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        producto = self._productos.obtener_por_sku(sku)
+        if producto is None:
+            raise SinMaterialError("No existe ese producto.")
+        subidas = self._imagenes.listar(producto["sku"])
+        if imagen_ids:
+            elegidas = set(imagen_ids)
+            subidas = [i for i in subidas if i["id"] in elegidas]
+        galeria = galeria_para_enviar(subidas)
+        if not galeria:
+            raise SinMaterialError("Este producto no tiene fotos ni videos en su ficha para enviar.")
+
+        abierta, _ = self._ventana_abierta(conversacion)
+        if not abierta:
+            raise VentanaMensajeriaCerradaError(
+                "La ventana de 24 horas está cerrada: WhatsApp solo deja enviar fotos y videos dentro de las 24 horas "
+                "siguientes al último mensaje del cliente."
+            )
+        # Igual que al escribirle a mano: si la tenía Victoria, la toma el dueño para que no se estorben.
+        if conversacion["estado"] not in ESTADOS_QUE_ESPERAN_AL_DUENO:
+            self._anotar_intervencion(conversacion, "le envió fotos o videos al cliente")
+            self._conversaciones.marcar_manual(conversacion_id)
+
+        canal = self._canales.para(conversacion["canal"])
+        fotos = videos = 0
+        for posicion, archivo in enumerate(galeria):
+            es_video = archivo["tipo"] == TIPO_VIDEO
+            descripcion = producto["nombre"] if posicion == 0 else None
+            try:
+                if es_video:
+                    canal.enviar_video(conversacion["id_externo"], archivo["url"], descripcion)
+                else:
+                    canal.enviar_imagen(conversacion["id_externo"], archivo["url"], descripcion)
+            except (WhatsAppRequestError, WhatsAppBusinessError, CanalNoDisponibleError) as exc:
+                if fotos or videos:
+                    self._conversaciones.actualizar_timestamp(conversacion_id)
+                raise EnvioWhatsAppFallidoError(
+                    f"se enviaron {fotos + videos} de {len(galeria)} archivos; el siguiente falló ({exc})"
+                ) from exc
+            self._mensajes.crear(
+                conversacion_id=conversacion_id,
+                rol="humano",
+                contenido=f"{PREFIJO_VIDEO if es_video else PREFIJO_FOTO}{producto['nombre']} ({producto['sku']})",
+                tipo=TIPO_VIDEO if es_video else "imagen",
+                wamid=None,
+            )
+            if es_video:
+                videos += 1
+            else:
+                fotos += 1
+        self._conversaciones.actualizar_timestamp(conversacion_id)
+        return {"fotos": fotos, "videos": videos}
 
     def obtener_archivo(self, conversacion_id: int, mensaje_id: int):
         """La foto, el audio o el PDF de un mensaje, traído de Meta en este momento (no se guarda en ningún otro lado; Meta lo
