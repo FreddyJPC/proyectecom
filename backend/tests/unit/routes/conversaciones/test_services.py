@@ -10,6 +10,7 @@ import pytest
 
 from src.integrations.whatsapp import WhatsAppBusinessError
 from src.routes.conversaciones.exceptions import (
+    SinMaterialError,
     SinPedidoEnCursoError,
     ArchivoNoDisponibleError,
     ConversacionNoEncontradaError,
@@ -585,3 +586,96 @@ class TestArchivosDeLosMensajes:
         whatsapp.descargar_media.side_effect = RuntimeError("404")
         with pytest.raises(ArchivoNoDisponibleError, match="ya no entrega"):
             self._con_foto(whatsapp).obtener_archivo(1, 10)
+
+
+class FakeProductoRepository:
+    def obtener_por_sku(self, sku):
+        return {"sku": sku, "nombre": "Set 3 en 1", "activo": True} if sku == "SET-1" else None
+
+
+class FakeImagenRepository:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def listar(self, sku):
+        return [dict(f) for f in self._filas if f["producto_sku"] == sku]
+
+
+_GALERIA = [
+    {"id": 1, "producto_sku": "SET-1", "url": "https://x.supabase.co/a.jpg", "storage_path": "SET-1/a.jpg", "orden": 0},
+    {"id": 2, "producto_sku": "SET-1", "url": "https://x.supabase.co/b.mp4", "storage_path": "SET-1/b.mp4", "orden": 1},
+    {"id": 3, "producto_sku": "SET-1", "url": "https://x.supabase.co/c.jpg", "storage_path": "SET-1/c.jpg", "orden": 2},
+]
+
+
+def _con_material(estado="manual", whatsapp=None, mensajes=None, galeria=_GALERIA):
+    servicio = _servicio(
+        conversaciones=[_conversacion(estado=estado)], mensajes=_ventana_abierta() if mensajes is None else mensajes,
+        whatsapp=whatsapp or MagicMock(),
+    )
+    servicio._productos = FakeProductoRepository()
+    servicio._imagenes = FakeImagenRepository(galeria)
+    return servicio
+
+
+class TestEnviarMaterialDesdeElPanel:
+    """El dueño manda las fotos y los videos del producto desde la conversación (antes solo podía escribir texto)."""
+
+    def test_envia_toda_la_galeria_en_orden_y_la_deja_en_el_historial(self):
+        whatsapp = MagicMock()
+        servicio = _con_material(whatsapp=whatsapp)
+
+        assert servicio.enviar_material(1, "SET-1") == {"fotos": 2, "videos": 1}
+
+        assert [c.kwargs["url"] for c in whatsapp.enviar_imagen.call_args_list] == ["https://x.supabase.co/a.jpg", "https://x.supabase.co/c.jpg"]
+        assert whatsapp.enviar_video.call_args.kwargs["url"] == "https://x.supabase.co/b.mp4"
+        # Solo el primero lleva el nombre del producto como pie.
+        assert whatsapp.enviar_imagen.call_args_list[0].kwargs["descripcion"] == "Set 3 en 1"
+        assert whatsapp.enviar_imagen.call_args_list[1].kwargs["descripcion"] is None
+        guardados = [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"]
+        assert [m["tipo"] for m in guardados] == ["imagen", "video", "imagen"]
+        assert all("(SET-1)" in m["contenido"] for m in guardados)  # así Victoria sabe que ya se mandaron
+
+    def test_solo_los_elegidos_y_nunca_una_url_ajena(self):
+        whatsapp = MagicMock()
+        servicio = _con_material(whatsapp=whatsapp)
+        assert servicio.enviar_material(1, "SET-1", [3, 999]) == {"fotos": 1, "videos": 0}
+        assert whatsapp.enviar_imagen.call_args.kwargs["url"] == "https://x.supabase.co/c.jpg"
+
+    def test_si_la_tenia_victoria_la_toma_el_dueno(self):
+        servicio = _con_material(estado="activa")
+        servicio._aprendizaje_fijo = MagicMock()
+        servicio.enviar_material(1, "SET-1")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "manual"
+        servicio._aprendizaje_fijo.anotar.assert_called_once()
+
+    def test_escalada_sigue_escalada(self):
+        servicio = _con_material(estado="escalada")
+        servicio.enviar_material(1, "SET-1")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "escalada"
+
+    def test_ventana_cerrada_no_envia_nada(self):
+        whatsapp = MagicMock()
+        vieja = {1: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=30)}]}
+        servicio = _con_material(whatsapp=whatsapp, mensajes=vieja)
+        with pytest.raises(VentanaMensajeriaCerradaError):
+            servicio.enviar_material(1, "SET-1")
+        whatsapp.enviar_imagen.assert_not_called()
+
+    def test_sin_material_o_producto_inexistente(self):
+        with pytest.raises(SinMaterialError):
+            _con_material(galeria=[]).enviar_material(1, "SET-1")
+        with pytest.raises(SinMaterialError):
+            _con_material().enviar_material(1, "NO-EXISTE")
+
+    def test_si_falla_a_la_mitad_lo_enviado_queda_y_se_avisa(self):
+        whatsapp = MagicMock()
+        whatsapp.enviar_video.side_effect = WhatsAppBusinessError("rechazado")
+        servicio = _con_material(whatsapp=whatsapp)
+        with pytest.raises(EnvioWhatsAppFallidoError, match="1 de 3"):
+            servicio.enviar_material(1, "SET-1")
+        assert len([m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"]) == 1
+
+    def test_conversacion_inexistente(self):
+        with pytest.raises(ConversacionNoEncontradaError):
+            _con_material().enviar_material(999, "SET-1")

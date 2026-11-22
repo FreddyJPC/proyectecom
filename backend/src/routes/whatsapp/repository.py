@@ -326,7 +326,8 @@ class MensajeRepository:
     @staticmethod
     def contar_fotos(conversacion_id: int, sku: str) -> int:
         """¿Cuántos archivos (fotos y videos) de este producto se le mandaron ya a este cliente? Cada uno queda como un
-        mensaje del bot con tipo 'imagen' o 'video' y el SKU entre paréntesis (lo escribe `tools.py`): así no hace
+        mensaje del bot (o del dueño, si lo mandó desde el panel) con tipo 'imagen' o 'video' y el SKU entre paréntesis
+        (lo escriben `tools.py` y `conversaciones/services.py`): así no hace
         falta una tabla aparte y la próxima tanda de fotos sigue donde quedó la anterior. `strpos` y no
         `like`, para que un SKU con `%` o `_` no se interprete como comodín."""
         with get_connection() as conn:
@@ -334,7 +335,8 @@ class MensajeRepository:
                 cur.execute(
                     """
                     select count(*) from mensajes
-                    where conversacion_id = %s and rol = 'bot' and tipo in ('imagen', 'video') and strpos(contenido, %s) > 0
+                    where conversacion_id = %s and rol in ('bot', 'humano') and tipo in ('imagen', 'video')
+                      and strpos(contenido, %s) > 0
                     """,
                     (conversacion_id, f"({sku})"),
                 )

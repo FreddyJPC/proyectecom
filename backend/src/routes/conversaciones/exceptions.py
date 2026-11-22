@@ -33,3 +33,7 @@ class DatosEnvioInvalidosError(ValueError):
     def __init__(self, mensaje: str, sugerencias=None):
         super().__init__(mensaje)
         self.sugerencias = list(sugerencias or [])
+
+
+class SinMaterialError(Exception):
+    """El producto no existe, o no tiene fotos ni videos subidos a su ficha (o ninguno de los elegidos es suyo)."""

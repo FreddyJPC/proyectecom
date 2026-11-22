@@ -24,6 +24,7 @@ import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion
 import { ArchivoDelMensaje } from "./archivo-del-mensaje";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { DatosEnvioDialog } from "./datos-envio-dialog";
+import { EnviarMaterialDialog } from "./enviar-material-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
 const REFRESCO_MS = 15_000;
@@ -633,6 +634,12 @@ export default function ConversacionDetallePage() {
 
         {/* Campo de respuesta, siempre visible abajo */}
         <form onSubmit={handleEnviar} className="flex items-end gap-2 border-t bg-card p-3">
+          <EnviarMaterialDialog
+            conversacionId={id}
+            skuInicial={lead?.productoSku ?? conversacion.anuncio?.producto?.sku ?? null}
+            deshabilitado={!conversacion.ventanaAbierta}
+            onEnviado={recargar}
+          />
           <Textarea
             value={mensaje}
             rows={1}

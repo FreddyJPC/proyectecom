@@ -52,7 +52,7 @@ from .coincidencia import base, buscar
 from .confirmacion import datos_que_faltan, texto_de_confirmacion
 from .cuentas import respuesta_para_victoria
 from .ubicacion import revisar_ubicacion
-from src.routes.imagenes.logica import TIPO_VIDEO, galeria_para_enviar
+from src.routes.imagenes.logica import PREFIJO_FOTO, PREFIJO_VIDEO, TIPO_VIDEO, galeria_para_enviar  # noqa: F401 (PREFIJO_* se reexportan)
 from src.routes.imagenes.repository import ImagenRepository
 from src.routes.ventas.exceptions import StockInsuficienteError, VentaYaRegistradaError
 from src.routes.ventas.origen import controla_su_stock, es_de_cierre_manual
@@ -529,9 +529,6 @@ HERRAMIENTAS_VICTORIA = [
     ),
 ]
 
-# Cómo queda en el historial cada archivo enviado (y cómo se cuentan después: `contar_fotos` busca el SKU entre paréntesis).
-PREFIJO_FOTO = "📷 Foto de "
-PREFIJO_VIDEO = "🎬 Video de "
 
 
 def _cuantos(n: int, singular: str, plural: str) -> str:

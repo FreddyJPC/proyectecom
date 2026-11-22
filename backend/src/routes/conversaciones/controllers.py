@@ -10,6 +10,7 @@ from .exceptions import (
     DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
     PedidoYaCerradoError,
+    SinMaterialError,
     SinPedidoEnCursoError,
     VentanaMensajeriaCerradaError,
 )
@@ -18,6 +19,7 @@ from .schemas import (
     continuar_input_schema,
     datos_envio_input_schema,
     conversacion_lista_schema,
+    enviar_material_input_schema,
     enviar_mensaje_input_schema,
     mensaje_schema,
     notas_input_schema,
@@ -70,6 +72,28 @@ def enviar_mensaje(conversacion_id: int):
         return jsonify(error=f"El mensaje se guardó pero no se pudo enviar: {exc}"), 502
 
     return jsonify(mensaje_schema.dump(asdict(mensaje))), 200
+
+
+@conversaciones_bp.post("/<int:conversacion_id>/material")
+def enviar_material(conversacion_id: int):
+    """El dueño le manda al cliente las fotos y los videos del producto desde el panel."""
+    try:
+        data = enviar_material_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+
+    try:
+        resultado = _build_service().enviar_material(conversacion_id, data["sku"], data["imagen_ids"])
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except SinMaterialError as exc:
+        return jsonify(error=str(exc)), 422
+    except VentanaMensajeriaCerradaError as exc:
+        return jsonify(error=str(exc)), 409
+    except EnvioWhatsAppFallidoError as exc:
+        return jsonify(error=f"No se pudo enviar todo: {exc}"), 502
+
+    return jsonify(resultado), 200
 
 
 @conversaciones_bp.get("/<int:conversacion_id>/mensajes/<int:mensaje_id>/archivo")

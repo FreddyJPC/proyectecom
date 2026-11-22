@@ -1450,6 +1450,20 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    // Botón «Enviar fotos y videos» del panel: cuenta lo elegido de la galería del producto.
+    if (p.match(/^\/conversaciones\/\d+\/material$/) && req.method === "POST") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      return req.on("end", () => {
+        const body = raw ? JSON.parse(raw) : {};
+        const f = productosBot.find((x) => x.sku === body.sku);
+        const ids = body.imagenIds || [];
+        const elegidas = (f?.imagenes || []).filter((i) => !ids.length || ids.includes(i.id));
+        if (!elegidas.length) return send({ error: "Este producto no tiene fotos ni videos en su ficha para enviar." }, 422);
+        const videos = elegidas.filter((i) => i.tipo === "video").length;
+        send({ fotos: elegidas.length - videos, videos });
+      });
+    }
     if ((m = p.match(/^\/conversaciones\/(\d+)\/datos-envio$/))) {
       let raw = "";
       req.on("data", (d) => (raw += d));
