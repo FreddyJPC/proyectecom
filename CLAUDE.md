@@ -300,8 +300,12 @@ posible y rotarlos.
   (grupo «Entregas», el interruptor de agencia viene apagado); pantalla **Aprendizaje de Victoria** y «Datos de envío» en cada conversación.
   Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla), #85 (pruebas) y #86 (corregir producto, cantidad y pago desde el panel).
   Reversa: Railway `41b95694` (commit `f5cee97`); Vercel `dpl_6g2MC4HaqFrdndaY4VoDQLTV5ogU`.
-- **Inmuebles (ADR-019, entrada 0.0.173) — construido 2026-11-23, SIN DESPLEGAR:** migración **037** sin aplicar en Supabase;
-  81 parámetros en el código. Pendientes I-1 a I-10 en `docs/BITACORA_INMUEBLES.md`.
+- **Inmuebles (ADR-019, entradas 0.0.173 y 0.0.174) — DESPLEGADO 2026-11-23 (PR #54, camino B):** migraciones **037** y **038**
+  aplicadas en Supabase (**38 migraciones**; la 038 quita el índice viejo de `conversaciones` y se aplicó DESPUÉS del código);
+  81 parámetros (`inmuebles.activo` encendido de fábrica, pero sin propiedades publicadas nada cambia). Menú «Inmuebles»
+  (Propiedades, Agenda de visitas). **Falta:** cargar la ficha de la casa, vincular el anuncio y probar con la IA real (I-1 a I-11 en
+  `docs/BITACORA_INMUEBLES.md`). Reversa: Railway `1fb21c22`; Vercel `dpl_4yCyf96KrqgWHWfjT4dQLPfCYZFt` (si se vuelve atrás el
+  código, antes recrear el índice viejo: `create unique index uq_conversaciones_canal_id_externo on conversaciones (canal, id_externo)`).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

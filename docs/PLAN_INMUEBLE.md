@@ -1,6 +1,6 @@
 # Plan: atender con el bot los mensajes del anuncio de la casa (módulo «Inmueble»)
 
-> Estado: **construido, sin desplegar** (2026-11-23). Lo que se hizo, lo verificado en Meta y los pendientes: `docs/BITACORA_INMUEBLES.md`.
+> Estado: **desplegado** (2026-11-23, camino B). Lo que se hizo, lo verificado en Meta y los pendientes: `docs/BITACORA_INMUEBLES.md`.
 > (Este plan queda como referencia de la idea original.) Pedido de Freddy: que los mensajes del anuncio de la casa en venta
 > lleguen a la app y los atienda un asistente que **informa y toma pedidos de visita**, sin vender, sin negociar y sin
 > presentarse como asesor de ventas. Además, un panel de agendamientos para ver quién va a ver la casa y cuándo.
