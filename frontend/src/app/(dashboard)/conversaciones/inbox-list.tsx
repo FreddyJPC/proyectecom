@@ -62,7 +62,9 @@ export function InboxList() {
   }, [entrada]);
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
-  if (vista !== "todas") params.set("estado", vista);
+  // «Inmuebles» no es un estado: filtra las conversaciones que atiende el asistente de propiedades.
+  if (vista === "inmuebles") params.set("asistente", "inmuebles");
+  else if (vista !== "todas") params.set("estado", vista);
   if (origen !== "todos") params.set("origen", origen);
   if (canal !== "todos") params.set("canal", canal);
   if (busqueda) params.set("q", busqueda);
@@ -83,6 +85,7 @@ export function InboxList() {
     { value: "esperando_pago", label: "Esperando pago", count: totales?.esperandoPago },
     { value: "en_gestion", label: "En gestión", count: totales?.enGestion },
     { value: "manual", label: "Atiendes tú", count: totales?.manual },
+    { value: "inmuebles", label: "Inmuebles" },
   ];
 
   const hayFiltros = vista !== "todas" || origen !== "todos" || canal !== "todos" || busqueda !== "";
@@ -252,6 +255,9 @@ export function InboxList() {
                         <StatusBadge label={info.label} variant={info.variant} className="h-5 px-2 text-[0.7rem]" />
                         {c.canal !== "whatsapp" && (
                           <span className="rounded-full border px-2 py-0.5 text-[0.7rem] text-muted-foreground">{nombreCanal(c.canal)}</span>
+                        )}
+                        {c.asistente === "inmuebles" && (
+                          <span className="rounded-full bg-status-info-soft px-2 py-0.5 text-[0.7rem] font-medium text-status-info-ink">Inmuebles</span>
                         )}
                         {c.productoInteres && (
                           <span className="max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">

@@ -12,7 +12,9 @@ from src.routes.leads.temperaturas import ABIERTAS, GANADO, ORIGEN_REGLA
 # faltar en canales que no lo dan, como Instagram); `canal` + `id_externo` son cómo se la encuentra en ese canal.
 _SELECT_CONVERSACION = (
     "select c.id, c.contacto_id, c.canal, c.id_externo, c.nombre_perfil, ct.telefono, ct.nombre as contacto_nombre, "
-    "c.origen, c.id_anuncio, c.ctwa_clid, c.estado, c.vista_en, c.notas_internas, c.creada_en, c.actualizada_en "
+    "c.origen, c.id_anuncio, c.ctwa_clid, c.estado, c.vista_en, c.notas_internas, c.creada_en, c.actualizada_en, "
+    # Módulo «Inmuebles» (migración 037): quién atiende, de qué propiedad se habla y por qué número del negocio llegó.
+    "c.asistente, c.inmueble_id, c.numero_negocio "
     "from conversaciones c join contactos ct on ct.id = c.contacto_id"
 )
 _COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre, analisis"
@@ -61,13 +63,16 @@ _LEAD_ACTUAL = (
 
 class ConversacionRepository:
     @staticmethod
-    def obtener_por_canal(canal: str, id_externo: str) -> Optional[dict]:
-        """La conversación de un cliente en un canal (WhatsApp: `id_externo` es su teléfono)."""
+    def obtener_por_canal(canal: str, id_externo: str, numero_negocio: Optional[str] = None) -> Optional[dict]:
+        """La conversación de un cliente en un canal (WhatsApp: `id_externo` es su teléfono), por el número del negocio al que
+        escribió (`numero_negocio`; None = el número principal, el de Victoria). Migración 037: quien le escribe a dos números
+        del negocio tiene dos conversaciones."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"{_SELECT_CONVERSACION} where c.canal = %s and c.id_externo = %s",
-                    (canal, id_externo),
+                    f"{_SELECT_CONVERSACION} where c.canal = %s and c.id_externo = %s "
+                    "and coalesce(c.numero_negocio, '') = coalesce(%s, '')",
+                    (canal, id_externo, numero_negocio),
                 )
                 row = cur.fetchone()
                 if row is None:
@@ -95,6 +100,9 @@ class ConversacionRepository:
         ctwa_clid: Optional[str] = None,
         nombre_perfil: Optional[str] = None,
         telefono: Optional[str] = None,
+        numero_negocio: Optional[str] = None,
+        asistente: str = "ventas",
+        inmueble_id: Optional[int] = None,
     ) -> dict:
         """Crea el contacto (si hace falta) y su conversación en ese canal, en UNA transacción. Es «crear o traer»:
         si dos mensajes del mismo cliente llegan a la vez (dos hilos), el segundo recibe la conversación que creó el
@@ -122,13 +130,18 @@ class ConversacionRepository:
 
                 cur.execute(
                     """
-                    insert into conversaciones (contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid)
-                    values (%s, %s, %s, %s, %s, %s, %s)
-                    on conflict (canal, id_externo)
+                    insert into conversaciones (
+                        contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid, numero_negocio, asistente, inmueble_id
+                    )
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    on conflict (canal, id_externo, (coalesce(numero_negocio, '')))
                     do update set nombre_perfil = coalesce(excluded.nombre_perfil, conversaciones.nombre_perfil)
                     returning id
                     """,
-                    (contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid),
+                    (
+                        contacto_id, canal, id_externo, nombre_perfil, origen, id_anuncio, ctwa_clid, numero_negocio, asistente,
+                        inmueble_id,
+                    ),
                 )
                 conversacion_id = cur.fetchone()[0]
 
@@ -136,6 +149,17 @@ class ConversacionRepository:
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]
                 return dict(zip(cols, row))
+
+    @staticmethod
+    def fijar_asistente(conversacion_id: int, asistente: str, inmueble_id: Optional[int] = None) -> None:
+        """Quién atiende la conversación: «ventas» (Victoria) o «inmuebles» (el asistente de propiedades, con la propiedad de la
+        que se habla). Lo decide el anuncio o el número por el que llegó el cliente, y el dueño lo puede cambiar desde el panel."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update conversaciones set asistente = %s, inmueble_id = %s, actualizada_en = now() where id = %s",
+                    (asistente, inmueble_id if asistente == "inmuebles" else None, conversacion_id),
+                )
 
     @staticmethod
     def actualizar_estado(conversacion_id: int, estado: str) -> None:
@@ -232,6 +256,7 @@ class ConversacionRepository:
         page: int = 1,
         page_size: int = 20,
         canal: Optional[str] = None,
+        asistente: Optional[str] = None,
     ) -> dict:
         """Listado del módulo de Conversaciones (dashboard): una fila por
         conversación, con el nombre/producto del lead y el último mensaje
@@ -248,6 +273,9 @@ class ConversacionRepository:
         if canal:
             condiciones.append("c.canal = %s")
             params.append(canal)
+        if asistente:
+            condiciones.append("c.asistente = %s")
+            params.append(asistente)
         if q:
             condiciones.append(
                 "(ct.telefono ILIKE %s OR c.id_externo ILIKE %s OR lower(ct.nombre) LIKE lower(%s) "
@@ -274,7 +302,8 @@ class ConversacionRepository:
                     f"""
                     select
                         c.id, c.canal, c.id_externo, ct.telefono, ct.nombre as contacto_nombre, c.nombre_perfil,
-                        c.origen, c.estado, c.vista_en, c.creada_en, c.actualizada_en,
+                        c.origen, c.estado, c.vista_en, c.creada_en, c.actualizada_en, c.asistente,
+                        (select i.titulo from inmuebles i where i.id = c.inmueble_id) as inmueble_titulo,
                         l.nombre_cliente, l.producto_nombre,
                         m.rol as ultimo_mensaje_rol, m.contenido as ultimo_mensaje_contenido, m.creado_en as ultimo_mensaje_creado_en
                     from conversaciones c

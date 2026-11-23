@@ -25,6 +25,8 @@ export type ConversacionResumen = {
   ultimoMensaje: UltimoMensaje | null;
   creadaEn: string | null;
   actualizadaEn: string | null;
+  /** Módulo «Inmuebles»: «inmuebles» si la atiende el asistente de propiedades. */
+  asistente?: "ventas" | "inmuebles";
 };
 
 export type TotalesPorFiltroRapido = {
@@ -132,6 +134,10 @@ export type ConversacionDetalle = {
   ventanaGratuita: VentanaGratuita | null;
   anuncio: AnuncioDeConversacion | null;
   llegadasPorAnuncio: LlegadaPorAnuncio[] | null;
+  /** Módulo «Inmuebles»: quién la atiende («ventas» = Victoria) y, si es el asistente de propiedades, de cuál se habla. */
+  asistente?: "ventas" | "inmuebles";
+  inmuebleId?: number | null;
+  inmuebleTitulo?: string | null;
 };
 
 export type ConversacionDetalleCompleto = {

@@ -21,6 +21,7 @@ class ConversacionResumenSchema(Schema):
     ultimo_mensaje = fields.Nested(UltimoMensajeSchema, data_key="ultimoMensaje", allow_none=True)
     creada_en = fields.Str(data_key="creadaEn", allow_none=True)
     actualizada_en = fields.Str(data_key="actualizadaEn", allow_none=True)
+    asistente = fields.Str()
 
 
 class TotalesPorFiltroRapidoSchema(Schema):
@@ -126,6 +127,9 @@ class ConversacionDetalleSchema(Schema):
     ventana_gratuita = fields.Nested(VentanaGratuitaSchema, data_key="ventanaGratuita", allow_none=True)
     anuncio = fields.Nested(AnuncioSchema, allow_none=True)
     llegadas_por_anuncio = fields.List(fields.Nested(LlegadaPorAnuncioSchema), data_key="llegadasPorAnuncio", allow_none=True)
+    asistente = fields.Str()
+    inmueble_id = fields.Int(data_key="inmuebleId", allow_none=True)
+    inmueble_titulo = fields.Str(data_key="inmuebleTitulo", allow_none=True)
 
 
 class MensajeSchema(Schema):

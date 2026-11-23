@@ -475,7 +475,10 @@ class WhatsAppGrabador:
     def __init__(self):
         self.enviadas: List[Dict[str, str]] = []
 
-    def para(self, canal: Optional[str]) -> "WhatsAppGrabador":
+    def para_conversacion(self, conversacion: Optional[dict] = None) -> "WhatsAppGrabador":
+        return self
+
+    def para(self, canal: Optional[str], numero_negocio: Optional[str] = None) -> "WhatsAppGrabador":
         return self
 
     def enviar_imagen(self, id_externo: str, url: str, descripcion: Optional[str] = None) -> dict:

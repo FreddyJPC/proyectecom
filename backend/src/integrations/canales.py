@@ -15,7 +15,7 @@ bastará con una clase nueva con los mismos métodos y registrarla en `get_regis
 from functools import lru_cache
 from typing import Dict, Optional
 
-from .whatsapp import WhatsAppClient, get_whatsapp_client
+from .whatsapp import WhatsAppClient, get_whatsapp_client, get_whatsapp_client_para, normalizar_numero_negocio
 
 CANAL_WHATSAPP = "whatsapp"
 CANAL_INSTAGRAM = "instagram"
@@ -60,6 +60,13 @@ class CanalWhatsApp:
         """Baja una foto, audio o documento que mandó el cliente. Devuelve (bytes, tipo_mime)."""
         return self._cliente.descargar_media(media_id, max_bytes=max_bytes)
 
+    def enviar_ubicacion(
+        self, id_externo: str, latitud: float, longitud: float, nombre: Optional[str] = None, direccion: Optional[str] = None
+    ) -> dict:
+        return self._cliente.enviar_ubicacion(
+            telefono=id_externo, latitud=latitud, longitud=longitud, nombre=nombre, direccion=direccion
+        )
+
     def enviar_plantilla(self, id_externo: str, nombre_plantilla: str, variables: Optional[list] = None, idioma: str = "es") -> dict:
         """Mensaje de plantilla aprobada por Meta: lo único que se puede enviar fuera de las 24 h. Solo WhatsApp lo tiene:
         un canal sin este método no puede recibir seguimientos automáticos."""
@@ -71,17 +78,40 @@ class CanalWhatsApp:
 class RegistroCanales:
     """Los canales conectados, por nombre. `para(canal)` devuelve el adaptador o lanza `CanalNoDisponibleError`."""
 
-    def __init__(self, canales: Dict[str, object]):
+    def __init__(self, canales: Dict[str, object], fabrica_whatsapp=None):
         self._canales = dict(canales)
+        # Módulo «Inmuebles» (migración 037): cómo armar el adaptador de WhatsApp de OTRO número del negocio. Por defecto, el
+        # cliente real de ese número; las pruebas pasan uno falso.
+        self._fabrica_whatsapp = fabrica_whatsapp
+        self._otros_numeros: Dict[str, object] = {}
 
-    def para(self, canal: Optional[str]):
+    def para(self, canal: Optional[str], numero_negocio: Optional[str] = None):
+        """El adaptador del canal. En WhatsApp, `numero_negocio` es el número del negocio desde el que se envía (None = el
+        principal): la respuesta sale del mismo número al que escribió el cliente."""
         nombre = canal or CANAL_WHATSAPP
         adaptador = self._canales.get(nombre)
         if adaptador is None:
             raise CanalNoDisponibleError(
                 f"El canal «{nombre_de_canal(nombre)}» todavía no está conectado: no se puede enviar por él."
             )
+        if nombre == CANAL_WHATSAPP and numero_negocio:
+            return self._whatsapp_de(numero_negocio, adaptador)
         return adaptador
+
+    def para_conversacion(self, conversacion: dict):
+        """El adaptador para responder en ESA conversación: su canal y el número del negocio por el que llegó."""
+        return self.para(conversacion.get("canal"), conversacion.get("numero_negocio"))
+
+    def _whatsapp_de(self, numero: str, principal):
+        if self._fabrica_whatsapp is not None:
+            if numero not in self._otros_numeros:
+                self._otros_numeros[numero] = self._fabrica_whatsapp(numero)
+            return self._otros_numeros[numero]
+        if normalizar_numero_negocio(numero) is None:
+            return principal
+        if numero not in self._otros_numeros:
+            self._otros_numeros[numero] = CanalWhatsApp(get_whatsapp_client_para(numero))
+        return self._otros_numeros[numero]
 
     def conectados(self):
         return tuple(self._canales)

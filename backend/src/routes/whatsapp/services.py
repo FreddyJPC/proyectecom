@@ -11,10 +11,13 @@ from typing import Any, Dict, Optional
 from src.config.parametros import parametros
 from src.integrations.canales import etiqueta_de_cliente
 from src.integrations.telegram import TelegramNotifier, get_telegram_notifier
-from src.integrations.whatsapp import WhatsAppClient, WhatsAppError, get_whatsapp_client
+from src.integrations.whatsapp import (
+    WhatsAppClient, WhatsAppError, get_whatsapp_client, get_whatsapp_client_para, normalizar_numero_negocio,
+)
 
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.gestion.tipos import ESTADOS_EN_MANOS_DEL_DUENO
+from src.routes.inmuebles.ruteo import INMUEBLES, VENTAS, RuteoDeAsistente
 
 from .dto import MensajeEntranteDTO
 from .factory import get_bot_worker
@@ -34,7 +37,10 @@ class WebhookService:
         telegram_notifier: Optional[TelegramNotifier] = None,
         bot_worker: Optional[BotWorker] = None,
         anuncio_servicio: Optional[AnuncioServicio] = None,
+        ruteo: Optional[RuteoDeAsistente] = None,
     ):
+        # Con un cliente fijo (pruebas) se usa siempre ese; si no, el del número al que escribió el cliente.
+        self._client_fijo = whatsapp_client
         self._client = whatsapp_client or get_whatsapp_client()
         self._conversaciones = conversacion_repo or ConversacionRepository()
         self._mensajes = mensaje_repo or MensajeRepository()
@@ -42,6 +48,8 @@ class WebhookService:
         self._telegram = telegram_notifier or get_telegram_notifier()
         self._bot_worker = bot_worker or get_bot_worker()
         self._anuncios = anuncio_servicio or AnuncioServicio()
+        # Módulo «Inmuebles»: quién atiende cada conversación (Victoria o el asistente de propiedades).
+        self._ruteo = ruteo or RuteoDeAsistente()
 
     def procesar_mensaje_entrante(self, dto: MensajeEntranteDTO) -> None:
         """Se llama desde un hilo que el controller dispara DESPUÉS de
@@ -61,11 +69,15 @@ class WebhookService:
 
         # 2 y 3. Conversación: se reutiliza si el cliente ya nos había
         # escrito antes por este canal; si no, se crea junto con su contacto (con detección de anuncio incluida).
-        conversacion = self._conversaciones.obtener_por_canal(dto.canal, dto.id_externo)
+        # Módulo «Inmuebles»: una conversación por número del negocio (None = el principal, el de Victoria).
+        numero = normalizar_numero_negocio(dto.numero_negocio)
+        conversacion = self._conversaciones.obtener_por_canal(dto.canal, dto.id_externo, numero)
         if conversacion is None:
-            conversacion = self._crear_conversacion(dto)
+            conversacion = self._crear_conversacion(dto, numero)
         else:
             self._conversaciones.actualizar_timestamp(conversacion["id"])
+            if dto.referral:
+                self._reasignar_por_anuncio(conversacion, numero, dto.referral.get("source_id"))
 
         # 4. Guardar el mensaje del cliente.
         extras = {}
@@ -90,7 +102,8 @@ class WebhookService:
         # best-effort: un fallo acá no debe impedir que se encole la
         # respuesta al cliente.
         try:
-            self._client.marcar_como_leido(dto.wamid)
+            cliente = self._client if (self._client_fijo is not None or numero is None) else get_whatsapp_client_para(numero)
+            cliente.marcar_como_leido(dto.wamid)
         except WhatsAppError:
             logger.warning("No se pudo marcar el mensaje como leído", extra={"wamid": dto.wamid}, exc_info=True)
 
@@ -110,6 +123,23 @@ class WebhookService:
         # Regla 1: la conversación ya está en manos del dueño -- escalada, o en gestión (ADR-012:
         # intención de compra de un producto propio) --, no se genera ninguna respuesta automática más.
         if conversacion["estado"] in ESTADOS_EN_MANOS_DEL_DUENO:
+            return
+
+        # Módulo «Inmuebles»: una conversación de propiedades la contesta el asistente de inmuebles (el worker elige cuál por
+        # la conversación). Las reglas de abajo (postventa, comprobante de pago) son de la tienda: no aplican. Con el asistente
+        # apagado, pasa al dueño sin respuesta automática.
+        if conversacion.get("asistente") == INMUEBLES:
+            if not parametros.valor("inmuebles.activo"):
+                self._escalar(conversacion, motivo="Mensaje de un interesado en una propiedad (el asistente de inmuebles está apagado)")
+                return
+            self._bot_worker.encolar(
+                conversacion_id=conversacion_id,
+                canal=dto.canal,
+                id_externo=dto.id_externo,
+                modo="ia",
+                mensaje_id=mensaje["id"],
+                texto_mensaje_cliente=dto.contenido,
+            )
             return
 
         # Regla 2: postventa mínimo -- un contacto con un pedido previo (despachado por Rocketfy, o de un
@@ -195,20 +225,35 @@ class WebhookService:
             origen=self._anuncios.describir_origen(conversacion_id),
         )
 
-    def _crear_conversacion(self, dto: MensajeEntranteDTO) -> dict:
+    def _reasignar_por_anuncio(self, conversacion: dict, numero: Optional[str], id_anuncio: Optional[str]) -> None:
+        """El cliente volvió por un anuncio: si es de una propiedad, lo atiende el asistente de inmuebles (y de esa propiedad);
+        si es de la tienda y el número es de Victoria, vuelve a Victoria. Best-effort: nunca impide responder."""
+        try:
+            asistente, inmueble_id = self._ruteo.decidir(numero, id_anuncio)
+            if asistente != conversacion.get("asistente", VENTAS) or (inmueble_id and inmueble_id != conversacion.get("inmueble_id")):
+                self._conversaciones.fijar_asistente(conversacion["id"], asistente, inmueble_id)
+                conversacion["asistente"], conversacion["inmueble_id"] = asistente, inmueble_id
+        except Exception:
+            logger.exception("No se pudo reasignar el asistente de la conversación %s", conversacion.get("id"))
+
+    def _crear_conversacion(self, dto: MensajeEntranteDTO, numero: Optional[str] = None) -> dict:
         # La presencia de "referral" es la señal de que el cliente llegó desde un anuncio (Click-to-WhatsApp). La
         # ventana gratuita de Meta ya NO se calcula aquí (era «72 h desde el primer mensaje», la regla anterior): se
         # deduce de los mensajes, ver routes/anuncios/ventana.py. Los datos completos del anuncio los guarda
         # `_registrar_llegada_por_anuncio`.
+        id_anuncio = dto.referral.get("source_id") if dto.referral else None
+        asistente, inmueble_id = self._ruteo.decidir(numero, id_anuncio)
+        ruteo = {"numero_negocio": numero, "asistente": asistente, "inmueble_id": inmueble_id}
         if dto.referral:
             return self._conversaciones.crear(
                 id_externo=dto.id_externo,
                 canal=dto.canal,
                 nombre_perfil=dto.nombre_perfil,
                 origen="anuncio",
-                id_anuncio=dto.referral.get("source_id"),
+                id_anuncio=id_anuncio,
                 ctwa_clid=dto.referral.get("ctwa_clid"),
+                **ruteo,
             )
         return self._conversaciones.crear(
-            id_externo=dto.id_externo, canal=dto.canal, nombre_perfil=dto.nombre_perfil, origen="directo"
+            id_externo=dto.id_externo, canal=dto.canal, nombre_perfil=dto.nombre_perfil, origen="directo", **ruteo
         )

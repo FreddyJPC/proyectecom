@@ -40,8 +40,10 @@ def listar_conversaciones():
     page = request.args.get("page", 1, type=int)
     page_size = min(request.args.get("pageSize", 20, type=int), 100)
 
+    asistente = request.args.get("asistente")
     resultado = _build_service().listar_conversaciones(
-        estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal
+        estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal,
+        **({"asistente": asistente} if asistente in ("ventas", "inmuebles") else {}),
     )
     return jsonify(conversacion_lista_schema.dump(asdict(resultado))), 200
 

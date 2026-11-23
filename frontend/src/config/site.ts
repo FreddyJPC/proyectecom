@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BarChart3, Boxes, ClipboardList, GraduationCap, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Tag, Target } from "lucide-react";
+import { AlertTriangle, BarChart3, Boxes, Building2, CalendarDays, ClipboardList, GraduationCap, LayoutDashboard, Megaphone, MessageCircle, Package, PlusCircle, SlidersHorizontal, Tag, Target } from "lucide-react";
 
 /** Metadata y navegación del sitio. Única fuente de verdad: cualquier
  * texto/ruta que aparezca en más de un lugar (layout, sidebar, header,
@@ -29,6 +29,14 @@ export const NAV_GRUPOS: { label: string; items: NavItem[] }[] = [
       { title: "Leads", short: "Leads", url: "/leads", icon: Target },
       { title: "Pedidos", short: "Pedidos", url: "/pedidos", icon: Package },
       { title: "Por gestionar", short: "Gestión", url: "/gestion", icon: ClipboardList },
+    ],
+  },
+  {
+    // Módulo «Inmuebles»: propiedades que atiende un asistente aparte de Victoria, y la agenda de visitas.
+    label: "Inmuebles",
+    items: [
+      { title: "Propiedades", short: "Propiedades", url: "/inmuebles", icon: Building2 },
+      { title: "Agenda de visitas", short: "Agenda", url: "/agenda", icon: CalendarDays },
     ],
   },
   {
@@ -79,6 +87,9 @@ export function migasDe(pathname: string): Miga[] {
   }
   if (seccion.url === "/pedidos") return [{ label: seccion.title, href: seccion.url }, { label: `Pedido #${resto}` }];
   if (seccion.url === "/conversaciones") return [{ label: seccion.title, href: seccion.url }, { label: "Conversación" }];
+  if (seccion.url === "/inmuebles") {
+    return [{ label: seccion.title, href: seccion.url }, { label: resto === "nueva" ? "Nueva propiedad" : "Propiedad" }];
+  }
   if (seccion.url === "/catalogo" && resto === "propio/nuevo") {
     return [{ label: seccion.title, href: `${seccion.url}?tab=mis-productos` }, { label: "Publicar producto propio" }];
   }

@@ -24,19 +24,19 @@ import { createClient } from "@/lib/supabase/client";
 import type { ImagenProducto, ProductoBotDetalle } from "@/types/producto-bot";
 
 /** Bucket público de Supabase Storage donde viven las fotos de los productos (migración 021). */
-const BUCKET = "productos";
+export const BUCKET = "productos";
 /** Máximo de fotos y videos por producto (espejo de `MAXIMO_POR_PRODUCTO` en el backend). */
 const MAXIMO_FOTOS = 12;
 /** WhatsApp solo envía video MP4 o 3GP de hasta 16 MB (el mismo límite tiene el bucket, migración 036). */
 const TIPOS_VIDEO: Record<string, string> = { "video/mp4": "mp4", "video/3gpp": "3gp" };
 const MAXIMO_VIDEO_MB = 16;
 
-function esVideo(material: { tipo?: string; storagePath: string }): boolean {
+export function esVideo(material: { tipo?: string; storagePath: string }): boolean {
   return material.tipo === "video" || /\.(mp4|3gp)$/i.test(material.storagePath);
 }
 
 /** Revisa un video antes de subirlo: el formato y el peso que WhatsApp acepta. Devuelve la extensión o lanza un error claro. */
-function revisarVideo(archivo: File): string {
+export function revisarVideo(archivo: File): string {
   const extension = TIPOS_VIDEO[archivo.type];
   if (!extension) {
     const esMov = archivo.type === "video/quicktime" || /\.mov$/i.test(archivo.name);
@@ -57,7 +57,7 @@ const LADO_MAXIMO = 1600;
 const CALIDAD_JPEG = 0.85;
 
 /** Reduce la foto y la convierte a JPEG (WhatsApp solo acepta JPEG y PNG; el celular puede dar HEIC o fotos enormes). */
-async function prepararFoto(archivo: File): Promise<Blob> {
+export async function prepararFoto(archivo: File): Promise<Blob> {
   let imagen: ImageBitmap;
   try {
     imagen = await createImageBitmap(archivo, { imageOrientation: "from-image" });
