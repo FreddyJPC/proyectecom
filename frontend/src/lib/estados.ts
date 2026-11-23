@@ -228,3 +228,29 @@ export const ESTADO_APRENDIZAJE: Record<string, EstadoInfo> = {
 export function estadoAprendizajeInfo(estado: string): EstadoInfo {
   return ESTADO_APRENDIZAJE[estado] ?? { label: estado, variant: "neutral" };
 }
+
+/** Módulo «Inmuebles»: estado de una propiedad. */
+const ESTADO_INMUEBLE: Record<string, EstadoInfo> = {
+  borrador: { label: "Borrador", variant: "neutral" },
+  activo: { label: "Publicada", variant: "success" },
+  pausado: { label: "Pausada", variant: "warning" },
+  vendido: { label: "Vendida", variant: "info" },
+  archivado: { label: "Archivada", variant: "neutral" },
+};
+
+export function estadoInmuebleInfo(estado: string): EstadoInfo {
+  return ESTADO_INMUEBLE[estado] ?? { label: estado, variant: "neutral" };
+}
+
+/** Módulo «Inmuebles»: estado de una visita de la agenda. */
+const ESTADO_VISITA: Record<string, EstadoInfo> = {
+  solicitada: { label: "Por confirmar", variant: "warning" },
+  confirmada: { label: "Confirmada", variant: "success" },
+  realizada: { label: "Realizada", variant: "info" },
+  no_asistio: { label: "No asistió", variant: "danger" },
+  cancelada: { label: "Cancelada", variant: "neutral" },
+};
+
+export function estadoVisitaInfo(estado: string): EstadoInfo {
+  return ESTADO_VISITA[estado] ?? { label: estado, variant: "neutral" };
+}

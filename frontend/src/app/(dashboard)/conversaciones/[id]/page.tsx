@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { ConversacionDetalleCompleto, LeadConversacion, MensajeConversacion } from "@/types/conversacion";
 
 import { ArchivoDelMensaje } from "./archivo-del-mensaje";
+import { AsistenteConversacion } from "./asistente-conversacion";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { DatosEnvioDialog } from "./datos-envio-dialog";
 import { EnviarMaterialDialog } from "./enviar-material-dialog";
@@ -79,7 +80,7 @@ function TextoConEnlaces({ texto }: { texto: string }) {
   );
 }
 
-function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string }) {
+function Burbuja({ m, mostrarAutor, conversacionId, nombreBot = "Victoria" }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string; nombreBot?: string }) {
   if (m.rol === "sistema") return <NotaDelSistema m={m} />;
   const esCliente = m.rol === "cliente";
   const esBot = m.rol === "bot";
@@ -90,7 +91,7 @@ function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; 
       {mostrarAutor && (
         <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
           {esBot && <Bot className="size-3" aria-hidden />}
-          {esCliente ? "Cliente" : esBot ? "Victoria" : "Tú"}
+          {esCliente ? "Cliente" : esBot ? nombreBot : "Tú"}
         </span>
       )}
       <div
@@ -162,14 +163,19 @@ function PanelDatos({
   const puedeEditarEnvio = Boolean(lead) && !["despachado", "por_gestionar", "cancelado"].includes(lead?.estado ?? "");
   const agenciaPendiente = lead?.tipoEntrega === "agencia" && !lead?.agenciaDefinidaEn;
 
+  // Módulo «Inmuebles»: una conversación de propiedades no tiene envío ni compra (no es una venta de la tienda).
+  const esInmuebles = conversacion.asistente === "inmuebles";
+
   return (
     <div className="flex flex-col gap-6 p-4">
-      <section aria-labelledby="t-cliente" className="space-y-3">
+      <AsistenteConversacion conversacion={conversacion} onCambio={onDatosGuardados} />
+
+      <section aria-labelledby="t-cliente" className="space-y-3 border-t pt-5">
         <h2 id="t-cliente" className="flex items-center gap-2 text-sm font-semibold">
           <UserRound className="size-4 text-muted-foreground" aria-hidden /> Cliente
         </h2>
         <dl className="space-y-3">
-          <Dato label="Nombre">{lead?.nombreCliente}</Dato>
+          <Dato label="Nombre">{lead?.nombreCliente ?? (esInmuebles ? conversacion.nombre : undefined)}</Dato>
           <Dato label="Canal">{nombreCanal(conversacion.canal)}</Dato>
           <Dato label="Teléfono">
             {telefono ? (
@@ -182,6 +188,7 @@ function PanelDatos({
         </dl>
       </section>
 
+      {!esInmuebles && (
       <section aria-labelledby="t-envio" className="space-y-3 border-t pt-5">
         <h2 id="t-envio" className="flex items-center gap-2 text-sm font-semibold">
           <MapPin className="size-4 text-muted-foreground" aria-hidden /> Envío
@@ -220,9 +227,11 @@ function PanelDatos({
           />
         )}
       </section>
+      )}
 
       <OrigenCliente conversacion={conversacion} />
 
+      {!esInmuebles && (
       <section aria-labelledby="t-pedido" className="space-y-3 border-t pt-5">
         <h2 id="t-pedido" className="flex items-center gap-2 text-sm font-semibold">
           <Package className="size-4 text-muted-foreground" aria-hidden /> Compra
@@ -246,6 +255,7 @@ function PanelDatos({
           </Button>
         )}
       </section>
+      )}
 
       <section aria-labelledby="t-notas" className="space-y-3 border-t pt-5">
         <h2 id="t-notas" className="flex items-center gap-2 text-sm font-semibold">
@@ -353,7 +363,7 @@ export default function ConversacionDetallePage() {
     setTomando(true);
     try {
       await apiFetch(`/conversaciones/${id}/tomar`, { method: "POST" });
-      toast.success("Victoria ya no responde en este chat: lo atiendes tú.");
+      toast.success(`${data?.conversacion.asistente === "inmuebles" ? "El asistente" : "Victoria"} ya no responde en este chat: lo atiendes tú.`);
       recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo tomar la conversación.");
@@ -366,7 +376,7 @@ export default function ConversacionDetallePage() {
     setReactivando(true);
     try {
       await apiFetch(`/conversaciones/${id}/reactivar`, { method: "POST" });
-      toast.success("Se devolvió el control a Victoria.");
+      toast.success(`Se devolvió el control ${data?.conversacion.asistente === "inmuebles" ? "al asistente" : "a Victoria"}.`);
       recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo reactivar la conversación.");
@@ -413,6 +423,11 @@ export default function ConversacionDetallePage() {
   }
 
   const { conversacion, lead } = data;
+  // Módulo «Inmuebles»: en una conversación de propiedades no atiende Victoria sino el asistente de inmuebles.
+  const esInmuebles = conversacion.asistente === "inmuebles";
+  const ElBot = esInmuebles ? "El asistente" : "Victoria";
+  const elBot = esInmuebles ? "el asistente" : "Victoria";
+  const aBot = esInmuebles ? "al asistente" : "a Victoria";
   const info = estadoConversacionInfo(conversacion.estado);
   const nombre = nombreDeCliente({ nombreCliente: lead?.nombreCliente, nombre: conversacion.nombre, telefono: conversacion.telefono, idExterno: conversacion.idExterno });
   const nota = notaLocal ?? conversacion.notasInternas ?? "";
@@ -491,7 +506,7 @@ export default function ConversacionDetallePage() {
         {conversacion.estado === "escalada" && (
           <div className="flex items-center justify-between gap-3 border-b bg-status-danger-soft px-4 py-2.5 text-status-danger-ink">
             <p className="text-sm">
-              <strong className="font-semibold">Victoria pasó este chat a una persona.</strong>
+              <strong className="font-semibold">{ElBot} pasó este chat a una persona.</strong>
               <span className="hidden opacity-85 md:inline"> Respóndele al cliente o devuélvele el control.</span>
             </p>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -501,7 +516,7 @@ export default function ConversacionDetallePage() {
                 trigger={
                   <Button variant="outline" size="sm" className="bg-card text-foreground">
                     <Play />
-                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="hidden sm:inline">Que {elBot} continúe</span>
                     <span className="sm:hidden">Continuar</span>
                   </Button>
                 }
@@ -511,7 +526,7 @@ export default function ConversacionDetallePage() {
                 {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
                 {reactivando ? "Devolviendo…" : (
                   <>
-                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="hidden sm:inline">Devolver {aBot}</span>
                     <span className="sm:hidden">Devolver</span>
                   </>
                 )}
@@ -525,7 +540,7 @@ export default function ConversacionDetallePage() {
           <div className="flex items-center justify-between gap-3 border-b bg-status-info-soft px-4 py-2.5 text-status-info-ink">
             <p className="text-sm">
               <strong className="font-semibold">Atiendes tú este chat.</strong>
-              <span className="hidden opacity-85 md:inline"> Victoria no responde mientras tanto. Devuélvele el control cuando quieras.</span>
+              <span className="hidden opacity-85 md:inline"> {ElBot} no responde mientras tanto. Devuélvele el control cuando quieras.</span>
             </p>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <ContinuarVentaDialog
@@ -534,7 +549,7 @@ export default function ConversacionDetallePage() {
                 trigger={
                   <Button variant="outline" size="sm" className="bg-card text-foreground">
                     <Play />
-                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="hidden sm:inline">Que {elBot} continúe</span>
                     <span className="sm:hidden">Continuar</span>
                   </Button>
                 }
@@ -544,7 +559,7 @@ export default function ConversacionDetallePage() {
                 {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
                 {reactivando ? "Devolviendo…" : (
                   <>
-                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="hidden sm:inline">Devolver {aBot}</span>
                     <span className="sm:hidden">Devolver</span>
                   </>
                 )}
@@ -557,8 +572,8 @@ export default function ConversacionDetallePage() {
         {(conversacion.estado === "activa" || conversacion.estado === "esperando_pago") && (
           <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2 text-foreground">
             <p className="text-sm">
-              <strong className="font-semibold">Victoria atiende este chat.</strong>
-              <span className="hidden text-muted-foreground md:inline"> Si le escribes al cliente desde aquí, ella se calla.</span>
+              <strong className="font-semibold">{ElBot} atiende este chat.</strong>
+              <span className="hidden text-muted-foreground md:inline"> Si le escribes al cliente desde aquí, deja de responder.</span>
             </p>
             <Button variant="outline" size="sm" onClick={handleTomar} disabled={tomando} className="shrink-0 bg-card">
               {tomando ? <Loader2 className="animate-spin" /> : <UserRound />}
@@ -577,7 +592,7 @@ export default function ConversacionDetallePage() {
           <div className="flex items-center justify-between gap-3 border-b bg-status-info-soft px-4 py-2.5 text-status-info-ink">
             <p className="text-sm">
               <strong className="font-semibold">Este chat está en gestión: lo atiendes tú.</strong>
-              <span className="hidden opacity-85 md:inline"> Victoria ya no responde. Mira «Por gestionar» para ver qué pidió el cliente.</span>
+              <span className="hidden opacity-85 md:inline"> {ElBot} ya no responde. Mira «Por gestionar» para ver qué pidió el cliente.</span>
             </p>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <ContinuarVentaDialog
@@ -586,7 +601,7 @@ export default function ConversacionDetallePage() {
                 trigger={
                   <Button variant="outline" size="sm" className="bg-card text-foreground">
                     <Play />
-                    <span className="hidden sm:inline">Que Victoria continúe</span>
+                    <span className="hidden sm:inline">Que {elBot} continúe</span>
                     <span className="sm:hidden">Continuar</span>
                   </Button>
                 }
@@ -596,7 +611,7 @@ export default function ConversacionDetallePage() {
                 {reactivando ? <Loader2 className="animate-spin" /> : <Bot />}
                 {reactivando ? "Devolviendo…" : (
                   <>
-                    <span className="hidden sm:inline">Devolver a Victoria</span>
+                    <span className="hidden sm:inline">Devolver {aBot}</span>
                     <span className="sm:hidden">Devolver</span>
                   </>
                 )}
@@ -650,7 +665,7 @@ export default function ConversacionDetallePage() {
                     </span>
                   </div>
                 )}
-                <Burbuja m={m} mostrarAutor={mostrarAutor} conversacionId={id} />
+                <Burbuja m={m} mostrarAutor={mostrarAutor} conversacionId={id} nombreBot={esInmuebles ? "Asistente" : "Victoria"} />
               </div>
             );
           })}
@@ -658,12 +673,14 @@ export default function ConversacionDetallePage() {
 
         {/* Campo de respuesta, siempre visible abajo */}
         <form onSubmit={handleEnviar} className="flex items-end gap-2 border-t bg-card p-3">
-          <EnviarMaterialDialog
-            conversacionId={id}
-            skuInicial={lead?.productoSku ?? conversacion.anuncio?.producto?.sku ?? null}
-            deshabilitado={!conversacion.ventanaAbierta}
-            onEnviado={recargar}
-          />
+          {conversacion.asistente !== "inmuebles" && (
+            <EnviarMaterialDialog
+              conversacionId={id}
+              skuInicial={lead?.productoSku ?? conversacion.anuncio?.producto?.sku ?? null}
+              deshabilitado={!conversacion.ventanaAbierta}
+              onEnviado={recargar}
+            />
+          )}
           <Textarea
             value={mensaje}
             rows={1}

@@ -74,13 +74,28 @@ const convs = [
   ["17841400000000002", "Valeria Quishpe", "anuncio", "activa", "Lámpara LED Recargable", false, "cliente", "¿Hacen envíos a Loja? Vi su anuncio en Instagram", 6, "instagram"],
   ["7391850264412009", null, "directo", "escalada", "Cargador Rápido 33W", true, "cliente", "¿Pueden llamarme? Mi número es 0991112233", 33, "messenger"],
   ["593969001122", "Carla Romero", "directo", "manual", "Lámpara LED Recargable", false, "humano", "Hola Carla, soy Freddy, yo te ayudo con tu pedido.", 4],
+  // Módulo «Inmuebles»: la atiende el asistente de propiedades (id 288).
+  ["593993344556", "Jorge Paredes", "anuncio", "activa", "Casa de dos pisos en Guayaquil", false, "bot", "Con gusto. El propietario le confirma el horario en breve por este mismo chat.", 3],
 ];
+const TELEFONO_INMUEBLE = "593993344556";
 const conversaciones = convs.map((c, i) => ({
   id: 301 - i, canal: c[9] || "whatsapp", idExterno: c[0], telefono: c[9] ? null : c[0], nombre: c[9] ? (c[1] || "usuario_" + c[0].slice(-4)) : c[1],
   nombreCliente: c[1], origen: c[2], estado: c[3], productoInteres: c[4], sinRevisar: c[5],
   ultimoMensaje: { rol: c[6], contenido: c[7], creadoEn: ago(c[8]) }, creadaEn: ago(c[8] + 300), actualizadaEn: ago(c[8]),
+  asistente: c[0] === TELEFONO_INMUEBLE ? "inmuebles" : "ventas",
 }));
 const mensajesDe = (c) => {
+  if (c.asistente === "inmuebles") {
+    return [
+      ["cliente", "Hola, vi el anuncio de la casa. ¿Cuántas habitaciones tiene?", 40],
+      ["bot", "Hola, gracias por escribir. La casa tiene 3 habitaciones y 2 baños y medio, en dos pisos. ¿Le gustaría saber algo más?", 39],
+      ["cliente", "¿Dónde queda exactamente?", 20],
+      ["bot", "[Ubicación enviada — https://maps.google.com/?q=-2.170998,-79.922359]", 19],
+      ["bot", "Le envié la ubicación. Queda frente al parque Samanes, casa esquinera.", 19],
+      ["cliente", "Me gustaría ir a verla el sábado en la mañana", 4],
+      ["bot", "Con gusto. El propietario le confirma el horario en breve por este mismo chat.", 3],
+    ].map((m, i) => ({ id: c.id * 100 + i, rol: m[0], contenido: m[1], tipo: m[1].startsWith("[Ubicación") ? "ubicacion" : "texto", creadoEn: ago(m[2]) }));
+  }
   const base = [
     ["cliente", "Hola, vi su anuncio de los " + (c.productoInteres || "audífonos") + ". ¿Todavía tienen disponibles?"],
     ["bot", "¡Hola! Soy Victoria, de AzoShop 😊 Sí, tenemos stock. El precio es $34.90 con envío gratis y pagas al recibir."],
@@ -139,8 +154,10 @@ const convDetalle = (id) => {
       ventanaGratuita: gratuita,
       anuncio: meta ? { idAnuncio: ad.id, ...meta, producto: vinculo ? { sku: vinculo.sku, nombre: nombreProductoBot(vinculo.sku) } : null, llegadas: ad.llegadas.length } : null,
       llegadasPorAnuncio: ad.llegadas,
+      asistente: c.asistente, inmuebleId: c.asistente === "inmuebles" ? 1 : null,
+      inmuebleTitulo: c.asistente === "inmuebles" ? "Casa de dos pisos en Guayaquil" : null,
     },
-    lead: c.nombreCliente ? {
+    lead: c.nombreCliente && c.asistente !== "inmuebles" ? {
       nombreCliente: c.nombreCliente, direccion: "Av. 9 de Octubre 1234 y Boyacá", canton: "Guayaquil", provincia: "Guayas",
       productoSku: "AUD-BT-001", productoNombre: c.productoInteres, productoVariante: "Negro", total: "34.90", metodoPago: c.estado === "esperando_pago" ? "transferencia" : "contraentrega",
       estadoPago: null, estado: c.estado === "cerrada" ? "despachado" : "en_proceso", idPedidoLocal: c.estado === "cerrada" ? 1035 : null, idPedidoRocketfy: c.estado === "cerrada" ? 884035 : null,
@@ -1508,6 +1525,7 @@ const server = http.createServer((req, res) => {
     if (p.startsWith("/ventas/")) return manejarVentas(req, res, p, send);
     if (p === "/categorias-producto") return manejarCategorias(req, res, p, send);
     if (p === "/cuentas-bancarias" || p.startsWith("/cuentas-bancarias/")) return manejarCuentas(req, res, p, send);
+    if (p.startsWith("/inmuebles") || p.startsWith("/visitas") || p.startsWith("/numeros-whatsapp")) return manejarInmuebles(req, res, p, q, send);
     if (p.startsWith("/meta/")) return manejarMeta(req, res, p, send);
     if (p.startsWith("/precios/")) return manejarPrecios(req, res, p, q, send);
     if (p.startsWith("/aprendizaje")) return manejarAprendizaje(req, res, p, q, send);
@@ -1519,3 +1537,141 @@ const server = http.createServer((req, res) => {
   delay ? setTimeout(go, delay) : go();
 });
 server.listen(PORT, "127.0.0.1", () => console.log("mock escuchando en", PORT));
+
+
+// ---------- Inmuebles (módulo «Inmuebles», migración 037) ----------
+const fichaInmuebleBase = {
+  tipo: "casa", operacion: "venta", estado: "borrador", precio: null, mostrarPrecio: false, precioNegociable: null, ciudad: null,
+  sector: null, direccion: null, referenciaLlegada: null, latitud: null, longitud: null, terrenoM2: null, construccionM2: null,
+  frenteM: null, fondoM: null, pisos: null, habitaciones: null, banos: null, parqueaderos: null, uso: null, descripcion: null,
+  caracteristicas: null, servicios: null, documentacion: null, preguntasFrecuentes: null, temasNoResponder: null, horariosVisita: null,
+  encargadoVisitas: null, notasInternas: null, material: [], anuncios: [],
+};
+let siguienteInmueble = 3;
+let siguienteMaterialInm = 10;
+let siguienteVisita = 10;
+const inmueblesMock = [
+  {
+    ...fichaInmuebleBase, id: 1, codigo: "CASA-GYE-01", titulo: "Casa de dos pisos en Guayaquil", estado: "activo", precio: "85000.00",
+    mostrarPrecio: true, precioNegociable: true, ciudad: "Guayaquil", sector: "Samanes, norte", direccion: "Av. Francisco de Orellana y calle 5",
+    referenciaLlegada: "Frente al parque Samanes, casa esquinera color crema.", latitud: "-2.170998", longitud: "-79.922359",
+    terrenoM2: "200.00", construccionM2: "180.00", frenteM: "10.00", fondoM: "20.00", pisos: 2, habitaciones: 3, banos: "2.5", parqueaderos: 2,
+    uso: "mixto", descripcion: "Casa amplia y iluminada, ideal para vivienda o negocio en planta baja.", servicios: "Agua, luz, alcantarillado",
+    documentacion: "Escrituras al día", horariosVisita: "Lunes a sábado de 9:00 a 17:00", encargadoVisitas: "Don Luis",
+    material: [
+      { id: 1, url: urlFoto("i1/fachada.jpg"), storagePath: "i1/fachada.jpg", orden: 0, tipo: "imagen" },
+      { id: 2, url: urlFoto("i1/sala.jpg"), storagePath: "i1/sala.jpg", orden: 1, tipo: "imagen" },
+    ],
+    anuncios: [{ idAnuncio: "120252118114240418", nombre: "Video Casa Guayaquil 1", creadoEn: ago(60 * 24 * 3) }],
+    creadoEn: ago(60 * 24 * 5), actualizadoEn: ago(60 * 3),
+  },
+  { ...fichaInmuebleBase, id: 2, codigo: "TERRENO-SAL-01", titulo: "Terreno en Salinas", tipo: "terreno", ciudad: "Salinas", creadoEn: ago(60 * 30), actualizadoEn: ago(60 * 30) },
+];
+const enCuatroDias = new Date(now + 4 * 86400000);
+enCuatroDias.setUTCHours(15, 0, 0, 0);
+const visitasMock = [
+  { id: 1, inmuebleId: 1, conversacionId: 288, nombreCliente: "Jorge Paredes", telefono: "593993344556", estado: "solicitada", preferenciaCliente: "el sábado en la mañana", personas: 2, fechaHora: null, encargado: null, notas: null, motivoCancelacion: null, creadaPor: "asistente", creadoEn: ago(3), confirmadaEn: null, avisadoClienteEn: null },
+  { id: 2, inmuebleId: 1, conversacionId: 300, nombreCliente: "Carlos Andrade", telefono: "593998877665", estado: "confirmada", preferenciaCliente: "entre semana después de las 4", personas: null, fechaHora: enCuatroDias.toISOString(), encargado: "Don Luis", notas: "Viene con su arquitecto", motivoCancelacion: null, creadaPor: "asistente", creadoEn: ago(60 * 26), confirmadaEn: ago(60 * 20), avisadoClienteEn: null },
+  { id: 3, inmuebleId: 1, conversacionId: null, nombreCliente: "Rosa Vélez", telefono: "0991234567", estado: "realizada", preferenciaCliente: null, personas: 1, fechaHora: ago(60 * 24 * 2), encargado: "Don Luis", notas: "Llamó por teléfono", motivoCancelacion: null, creadaPor: "dueno", creadoEn: ago(60 * 24 * 4), confirmadaEn: ago(60 * 24 * 4), avisadoClienteEn: null },
+];
+let numerosWhatsapp = [{ phoneNumberId: "880000000001", nombre: "Casa Guayaquil", telefonoVisible: "+593 99 000 0001", asistente: "inmuebles", activo: true, esPrincipal: false }];
+
+const faltantesDe = (i) => {
+  const f = [];
+  if (!i.latitud) f.push("Ubicación en el mapa (para mandar el pin)");
+  if (!i.referenciaLlegada) f.push("Cómo llegar");
+  if (!i.terrenoM2 && !i.construccionM2) f.push("Metros de terreno o de construcción");
+  if (i.tipo !== "terreno" && i.habitaciones == null) f.push("Habitaciones");
+  if (!i.precio) f.push("Precio (aunque no se diga, sirve para tu control)");
+  if (!i.horariosVisita) f.push("Horarios de visita");
+  if (!i.material.length) f.push("Fotos o videos");
+  return f;
+};
+const detalleInmueble = (i) => ({ ...i, faltantes: faltantesDe(i), carpeta: `i${i.id}`, material: [...i.material].sort((a, b) => a.orden - b.orden) });
+const resumenInmueble = (i) => ({
+  ...i, portadaUrl: i.material[0]?.url ?? null, portadaPath: i.material[0]?.storagePath ?? null,
+  visitasPorConfirmar: visitasMock.filter((v) => v.inmuebleId === i.id && v.estado === "solicitada").length,
+  visitasProximas: visitasMock.filter((v) => v.inmuebleId === i.id && v.estado === "confirmada").length,
+});
+const visitaCompleta = (v) => {
+  const i = inmueblesMock.find((x) => x.id === v.inmuebleId);
+  return { ...v, inmuebleTitulo: i?.titulo, inmuebleCodigo: i?.codigo, ventanaAbierta: v.conversacionId === 288 || v.conversacionId === 300, ventanaExpiraEn: v.conversacionId ? new Date(now + 17 * 3600000).toISOString() : null };
+};
+const diaEc = (iso) => new Date(new Date(iso).getTime() - 5 * 3600000).toISOString().slice(0, 10);
+
+function manejarInmuebles(req, res, p, q, send) {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = raw ? JSON.parse(raw) : {};
+    let m;
+    if (p === "/inmuebles" && req.method === "GET") return send(inmueblesMock.filter((i) => i.estado !== "archivado").map(resumenInmueble));
+    if (p === "/inmuebles" && req.method === "POST") {
+      if (!body.codigo || !body.titulo) return send({ error: "El código y el título son obligatorios." }, 422);
+      const i = { ...fichaInmuebleBase, ...body, codigo: String(body.codigo).toUpperCase(), id: siguienteInmueble++, estado: "borrador", creadoEn: new Date().toISOString(), actualizadoEn: new Date().toISOString() };
+      inmueblesMock.push(i);
+      return send(detalleInmueble(i), 201);
+    }
+    if ((m = p.match(/^\/inmuebles\/conversaciones\/(\d+)\/asistente$/))) {
+      const c = conversaciones.find((x) => String(x.id) === m[1]);
+      if (c) c.asistente = body.asistente;
+      return send({ status: "ok" });
+    }
+    if ((m = p.match(/^\/inmuebles\/(\d+)(?:\/(estado|material|anuncios))?(?:\/([^/]+))?$/))) {
+      const i = inmueblesMock.find((x) => String(x.id) === m[1]);
+      if (!i) return send({ error: "No existe esa propiedad." }, 404);
+      const toca = () => { i.actualizadoEn = new Date().toISOString(); return send(detalleInmueble(i)); };
+      if (!m[2] && req.method === "GET") return send(detalleInmueble(i));
+      if (!m[2] && req.method === "PUT") { Object.assign(i, body); return toca(); }
+      if (m[2] === "estado") {
+        if (body.estado === "activo" && (!(i.sector || i.direccion) || !i.descripcion)) return send({ error: "Para publicarla falta el sector o la dirección, la descripción." }, 422);
+        i.estado = body.estado;
+        return toca();
+      }
+      if (m[2] === "material" && !m[3] && req.method === "POST") { i.material.push({ id: siguienteMaterialInm++, url: urlFoto(body.storagePath), storagePath: body.storagePath, orden: i.material.length, tipo: /\.(mp4|3gp)$/i.test(body.storagePath) ? "video" : "imagen" }); return toca(); }
+      if (m[2] === "material" && m[3] === "orden") { i.material = body.ids.map((id, n) => ({ ...i.material.find((x) => x.id === id), orden: n })); return toca(); }
+      if (m[2] === "material" && m[3] && req.method === "DELETE") { i.material = i.material.filter((x) => String(x.id) !== m[3]); return toca(); }
+      if (m[2] === "anuncios" && req.method === "POST") { i.anuncios.push({ idAnuncio: body.idAnuncio, nombre: body.nombre, creadoEn: new Date().toISOString() }); return toca(); }
+      if (m[2] === "anuncios" && req.method === "DELETE") { i.anuncios = i.anuncios.filter((a) => a.idAnuncio !== decodeURIComponent(m[3])); return toca(); }
+    }
+    if (p === "/visitas/resumen") {
+      const hoy = diaEc(new Date().toISOString());
+      return send({
+        porConfirmar: visitasMock.filter((v) => v.estado === "solicitada").length,
+        proximas: visitasMock.filter((v) => v.estado === "confirmada" && new Date(v.fechaHora) >= new Date()).length,
+        hoy: visitasMock.filter((v) => v.estado === "confirmada" && v.fechaHora && diaEc(v.fechaHora) === hoy).length,
+      });
+    }
+    if (p === "/visitas" && req.method === "GET") {
+      const estados = (q.get("estado") || "").split(",").filter(Boolean);
+      const desde = q.get("desde"), hasta = q.get("hasta"), inm = q.get("inmuebleId");
+      return send(visitasMock.filter((v) => (!estados.length || estados.includes(v.estado)) && (!inm || String(v.inmuebleId) === inm)
+        && (!v.fechaHora || ((!desde || diaEc(v.fechaHora) >= desde) && (!hasta || diaEc(v.fechaHora) <= hasta)))).map(visitaCompleta));
+    }
+    if (p === "/visitas" && req.method === "POST") {
+      const v = { id: siguienteVisita++, inmuebleId: body.inmuebleId, conversacionId: null, nombreCliente: body.nombreCliente, telefono: body.telefono, estado: body.fechaHora ? "confirmada" : "solicitada", preferenciaCliente: body.preferenciaCliente, personas: null, fechaHora: body.fechaHora ? new Date(body.fechaHora).toISOString() : null, encargado: body.encargado, notas: body.notas, motivoCancelacion: null, creadaPor: "dueno", creadoEn: new Date().toISOString(), confirmadaEn: null, avisadoClienteEn: null };
+      visitasMock.push(v);
+      return send(visitaCompleta(v), 201);
+    }
+    if ((m = p.match(/^\/visitas\/(\d+)\/(confirmar|estado|notas|aviso|avisar)$/))) {
+      const v = visitasMock.find((x) => String(x.id) === m[1]);
+      if (!v) return send({ error: "No existe esa visita." }, 404);
+      if (m[2] === "confirmar") Object.assign(v, { estado: "confirmada", fechaHora: new Date(body.fechaHora).toISOString(), encargado: body.encargado ?? v.encargado, notas: body.notas ?? v.notas, confirmadaEn: new Date().toISOString() });
+      if (m[2] === "estado") Object.assign(v, { estado: body.estado, motivoCancelacion: body.motivo ?? null });
+      if (m[2] === "notas") Object.assign(v, { notas: body.notas ?? v.notas, encargado: body.encargado ?? v.encargado });
+      if (m[2] === "aviso") return send({ texto: `Hola ${(v.nombreCliente || "").split(" ")[0]}, su visita a la casa quedó confirmada para el sábado a las 10:00. Referencia: Frente al parque Samanes. Si necesita cambiar el horario, escríbanos por aquí.` });
+      if (m[2] === "avisar") v.avisadoClienteEn = new Date().toISOString();
+      return send(visitaCompleta(v));
+    }
+    if (p === "/numeros-whatsapp" && req.method === "GET") return send(numerosWhatsapp);
+    if (p === "/numeros-whatsapp" && req.method === "PUT") {
+      numerosWhatsapp = [...numerosWhatsapp.filter((n) => n.phoneNumberId !== body.phoneNumberId), { ...body, esPrincipal: false }];
+      return send(body);
+    }
+    if ((m = p.match(/^\/numeros-whatsapp\/(.+)$/)) && req.method === "DELETE") {
+      numerosWhatsapp = numerosWhatsapp.filter((n) => n.phoneNumberId !== m[1]);
+      return send({ status: "ok" });
+    }
+    send({ error: "mock: ruta no implementada " + p }, 404);
+  });
+}
