@@ -162,12 +162,23 @@ class WhatsAppClient:
             raise WhatsAppRequestError("Meta no devolvió el id del archivo subido")
         return str(data["id"])
 
-    def enviar_imagen_subida(self, telefono: str, media_id: str, descripcion: Optional[str] = None) -> dict:
-        """POST .../messages, type=image con el id de un archivo ya subido con `subir_media` (no con un enlace)."""
-        imagen = {"id": media_id}
+    def enviar_media_subida(
+        self, telefono: str, tipo: str, media_id: str, descripcion: Optional[str] = None, nombre_archivo: Optional[str] = None
+    ) -> dict:
+        """POST .../messages con el id de un archivo ya subido con `subir_media` (no con un enlace). `tipo`: image, video o
+        document. Un documento lleva su nombre de archivo (es lo que ve el cliente, p. ej. «Catalogo.pdf»)."""
+        if tipo not in ("image", "video", "document"):
+            raise ValueError(f"Tipo de archivo no soportado: {tipo}")
+        contenido = {"id": media_id}
         if descripcion:
-            imagen["caption"] = descripcion
-        return self._post({"messaging_product": "whatsapp", "to": telefono, "type": "image", "image": imagen})
+            contenido["caption"] = descripcion
+        if tipo == "document" and nombre_archivo:
+            contenido["filename"] = nombre_archivo
+        return self._post({"messaging_product": "whatsapp", "to": telefono, "type": tipo, tipo: contenido})
+
+    def enviar_imagen_subida(self, telefono: str, media_id: str, descripcion: Optional[str] = None) -> dict:
+        """Una imagen ya subida (atajo de `enviar_media_subida`)."""
+        return self.enviar_media_subida(telefono, "image", media_id, descripcion)
 
     def enviar_video(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
         """POST .../messages, type=video con un enlace público (`link`), igual que una imagen (entrada 0.0.163). Meta solo

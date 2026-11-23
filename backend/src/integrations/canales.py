@@ -60,12 +60,15 @@ class CanalWhatsApp:
         """Baja una foto, audio o documento que mandó el cliente. Devuelve (bytes, tipo_mime)."""
         return self._cliente.descargar_media(media_id, max_bytes=max_bytes)
 
-    def enviar_foto_propia(self, id_externo: str, datos: bytes, mime: str, descripcion: Optional[str] = None) -> str:
-        """Una foto que el dueño eligió de su teléfono o computadora: se sube a WhatsApp y se envía por su id (nunca por un enlace
-        público). Devuelve el id del archivo, para guardarlo en el mensaje y poder verlo después en el panel."""
-        extension = "png" if mime == "image/png" else "jpg"
-        media_id = self._cliente.subir_media(datos, mime, nombre=f"foto.{extension}")
-        self._cliente.enviar_imagen_subida(telefono=id_externo, media_id=media_id, descripcion=descripcion)
+    def enviar_archivo_propio(
+        self, id_externo: str, datos: bytes, mime: str, tipo: str, nombre: str, descripcion: Optional[str] = None
+    ) -> str:
+        """Un archivo que el dueño eligió de su teléfono o computadora (foto, video o documento): se sube a WhatsApp y se envía
+        por su id (nunca por un enlace público). Devuelve el id del archivo, para guardarlo en el mensaje y verlo en el panel."""
+        media_id = self._cliente.subir_media(datos, mime, nombre=nombre)
+        self._cliente.enviar_media_subida(
+            telefono=id_externo, tipo=tipo, media_id=media_id, descripcion=descripcion, nombre_archivo=nombre
+        )
         return media_id
 
     def enviar_ubicacion(

@@ -299,3 +299,24 @@ class TestFotoPropia:
         body = json.loads(responses.calls[0].request.body)
         assert body == {"messaging_product": "whatsapp", "to": "593987654321", "type": "image",
                         "image": {"id": "MEDIA-77", "caption": "Su guía"}}
+
+
+class TestMediaSubida:
+    @responses.activate
+    def test_documento_lleva_su_nombre(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.X"}]}, status=200)
+        client.enviar_media_subida(telefono="593987654321", tipo="document", media_id="M1", descripcion="Catálogo", nombre_archivo="Catalogo.pdf")
+        body = json.loads(responses.calls[0].request.body)
+        assert body == {"messaging_product": "whatsapp", "to": "593987654321", "type": "document",
+                        "document": {"id": "M1", "caption": "Catálogo", "filename": "Catalogo.pdf"}}
+
+    @responses.activate
+    def test_video_sin_nombre(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.X"}]}, status=200)
+        client.enviar_media_subida(telefono="593987654321", tipo="video", media_id="M2", nombre_archivo="v.mp4")
+        body = json.loads(responses.calls[0].request.body)
+        assert body["type"] == "video" and body["video"] == {"id": "M2"}
+
+    def test_tipo_desconocido(self, client):
+        with pytest.raises(ValueError):
+            client.enviar_media_subida(telefono="1", tipo="sticker", media_id="M3")

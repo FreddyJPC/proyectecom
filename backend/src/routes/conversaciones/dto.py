@@ -152,6 +152,8 @@ class MensajeDTO:
     analisis: Optional[str] = None
     # El enlace público de una foto o video que ENVIAMOS desde el bucket (migración 039): el panel la muestra directo.
     media_url: Optional[str] = None
+    # El nombre del archivo (un documento: «Catalogo.pdf»), para descargarlo con su nombre.
+    nombre_archivo: Optional[str] = None
 
 
 @dataclass

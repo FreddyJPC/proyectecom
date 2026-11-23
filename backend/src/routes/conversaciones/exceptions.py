@@ -39,5 +39,5 @@ class SinMaterialError(Exception):
     """El producto no existe, o no tiene fotos ni videos subidos a su ficha (o ninguno de los elegidos es suyo)."""
 
 
-class FotoInvalidaError(ValueError):
-    """La foto que se quiso enviar desde el panel no es JPG ni PNG, o pesa más de lo que acepta WhatsApp."""
+# El archivo que se quiso enviar desde el panel no se puede mandar por WhatsApp (tipo o peso): ver `archivos.py`.
+from .archivos import ArchivoInvalidoError  # noqa: E402,F401

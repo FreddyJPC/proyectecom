@@ -26,7 +26,7 @@ import { AsistenteConversacion } from "./asistente-conversacion";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { DatosEnvioDialog } from "./datos-envio-dialog";
 import { PedidoRocketfyDialog } from "./pedido-rocketfy-dialog";
-import { EnviarFotoDialog } from "./enviar-foto-dialog";
+import { EnviarArchivoDialog } from "./enviar-archivo-dialog";
 import { EnviarMaterialDialog } from "./enviar-material-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
@@ -133,7 +133,7 @@ function Burbuja({ m, mostrarAutor, conversacionId, nombreBot = "Victoria" }: { 
       >
         <TextoConEnlaces texto={m.contenido} />
         {m.mediaUrl && <MaterialEnviado url={m.mediaUrl} tipo={m.tipo} />}
-        {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} deCliente={esCliente} />}
+        {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} deCliente={esCliente} nombreArchivo={m.nombreArchivo} />}
         {m.analisis && (
           <span className="mt-1.5 block text-xs not-italic leading-snug text-muted-foreground">
             {m.tipo === "audio" ? "Lo que dice: " : "Lo que se entendió: "}
@@ -714,7 +714,7 @@ export default function ConversacionDetallePage() {
 
         {/* Campo de respuesta, siempre visible abajo */}
         <form onSubmit={handleEnviar} className="flex items-end gap-2 border-t bg-card p-3">
-          <EnviarFotoDialog conversacionId={id} deshabilitado={!conversacion.ventanaAbierta} onEnviado={recargar} />
+          <EnviarArchivoDialog conversacionId={id} deshabilitado={!conversacion.ventanaAbierta} onEnviado={recargar} />
           {conversacion.asistente !== "inmuebles" && (
             <EnviarMaterialDialog
               conversacionId={id}

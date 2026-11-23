@@ -86,6 +86,8 @@ export type MensajeConversacion = {
   analisis?: string | null;
   /** Enlace público de una foto o video que ENVIAMOS del catálogo (se muestra directo en la burbuja). */
   mediaUrl?: string | null;
+  /** Nombre del archivo de un documento (p. ej. «Catalogo.pdf»), para descargarlo con su nombre. */
+  nombreArchivo?: string | null;
 };
 
 /** La ventana gratuita de Meta para clientes que llegan por anuncio. Es informativa: solo la de 24 h permite texto libre. */

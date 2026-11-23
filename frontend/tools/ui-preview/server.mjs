@@ -115,7 +115,9 @@ const mensajesDe = (c) => {
       // Fotos que ENVIAMOS: una del catálogo (se ve directo, migración 039) y una del teléfono del dueño (se baja de Meta).
       { id: c.id * 100 + 52, rol: "bot", contenido: "📷 Foto de Lámpara LED Recargable (LAMP-LED-01)", tipo: "imagen", creadoEn: ago(116),
         mediaUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/LAMP-LED-01/foto-1.jpg` },
-      { id: c.id * 100 + 53, rol: "humano", contenido: "📷 Foto enviada desde el panel: Esta es la guía de su pedido", tipo: "imagen", creadoEn: ago(114), tieneArchivo: true },
+      { id: c.id * 100 + 53, rol: "humano", contenido: "📷 Foto enviada desde el panel — Esta es la guía de su pedido", tipo: "imagen", creadoEn: ago(114), tieneArchivo: true },
+      { id: c.id * 100 + 54, rol: "humano", contenido: "📄 Archivo enviado desde el panel: Catalogo_Hogar_y_Cocina_AzoShop.pdf — Le comparto nuestro catálogo", tipo: "documento",
+        creadoEn: ago(112), tieneArchivo: true, nombreArchivo: "Catalogo_Hogar_y_Cocina_AzoShop.pdf" },
     );
   }
   // Aviso del dueño a Victoria (rol «sistema»): solo en la conversación 300, que espera la confirmación de un pago.
@@ -1473,9 +1475,9 @@ const server = http.createServer((req, res) => {
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
     // Foto del teléfono o la computadora del dueño (formulario con el archivo).
-    if (p.match(/^\/conversaciones\/\d+\/foto$/) && req.method === "POST") {
+    if (p.match(/^\/conversaciones\/\d+\/(foto|archivo)$/) && req.method === "POST") {
       req.on("data", () => {});
-      return req.on("end", () => send({ mensajeId: 99999 }));
+      return req.on("end", () => send({ mensajeId: 99999, tipo: "documento" }));
     }
     // «Ya hice el pedido en Rocketfy» (pendiente #89): pedidos de los que llegó aviso y que no son de ninguna conversación.
     if (p.match(/^\/conversaciones\/\d+\/pedidos-rocketfy$/)) {
