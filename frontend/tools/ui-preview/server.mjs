@@ -87,6 +87,7 @@ const mensajesDe = (c) => {
     ["cliente", "¿Y hacen envíos a mi ciudad?"],
     ["bot", "¡Claro! Enviamos a todo el Ecuador. ¿Me indicas tu nombre, dirección y cantón para registrar tu pedido?"],
     ["cliente", c.nombreCliente ? `Soy ${c.nombreCliente}, vivo en el centro` : "Prefiero pensarlo un poco"],
+    ["cliente", "[Ubicación compartida — https://maps.google.com/?q=-2.170998,-79.922359]"],
     [c.estado === "escalada" ? "bot" : "bot", c.estado === "escalada" ? "Entiendo. Voy a pasar tu caso a una persona del equipo para que te ayude mejor." : "Perfecto, ¿qué dirección registro para la entrega?"],
     [c.ultimoMensaje.rol, c.ultimoMensaje.contenido],
   ];
