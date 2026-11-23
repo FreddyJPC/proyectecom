@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, Bot, CircleSlash, Clock, Info, Loader2, MapPin, NotebookPen, Package, PencilLine, Play, SendHorizontal, TriangleAlert, UserRound } from "lucide-react";
+import { Banknote, Bot, CircleSlash, Clock, Info, Loader2, MapPin, NotebookPen, Package, PackageCheck, PencilLine, Play, SendHorizontal, TriangleAlert, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
@@ -25,6 +25,7 @@ import { ArchivoDelMensaje } from "./archivo-del-mensaje";
 import { AsistenteConversacion } from "./asistente-conversacion";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { DatosEnvioDialog } from "./datos-envio-dialog";
+import { PedidoRocketfyDialog } from "./pedido-rocketfy-dialog";
 import { EnviarMaterialDialog } from "./enviar-material-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
@@ -253,6 +254,18 @@ function PanelDatos({
           <Button asChild className="w-full">
             <Link href={`/pedidos/nuevo?${paramsPedido.toString()}`}>Crear pedido con estos datos</Link>
           </Button>
+        )}
+        {/* El dueño creó el pedido a mano en el panel de Rocketfy: se une a esta venta para que no se cree otro (pendiente #89). */}
+        {puedeEditarEnvio && (
+          <PedidoRocketfyDialog
+            conversacionId={String(conversacion.id)}
+            onListo={onDatosGuardados}
+            trigger={
+              <Button variant="outline" className="w-full">
+                <PackageCheck /> Ya hice el pedido en Rocketfy
+              </Button>
+            }
+          />
         )}
       </section>
       )}

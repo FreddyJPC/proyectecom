@@ -22,11 +22,12 @@ mandar fotos, y anotar quién quiere visitarla.
 
 | Parte | Estado |
 |---|---|
-| Base de datos (migración 037) | Hecha y probada en la base local. **No aplicada en Supabase** (falta el visto bueno). |
-| Backend (asistente, ruteo, agenda, API) | Hecho, 2713 pruebas pasando. **No desplegado.** |
-| Panel (Propiedades, ficha, Agenda, conversación) | Hecho: lint, build y accesibilidad SIN VIOLACIONES. **No desplegado.** |
-| Datos de la casa | **Faltan** (ver pendientes I-1 a I-4). |
-| Conexión del número / anuncio | **Falta decidir** (ver sección 4 y pendiente I-5). |
+| Base de datos (migraciones 037 y 038) | **Aplicadas en Supabase** (2026-11-23; 38 migraciones). La 038 quitó el índice viejo de `conversaciones` después de desplegar el código. |
+| Backend (asistente, ruteo, agenda, API) | **Desplegado** en Railway (PR #54, despliegue `e9e4fd29`): arranque limpio, `/health` 200. 2713 pruebas. |
+| Panel (Propiedades, ficha, Agenda, conversación) | **Desplegado** en Vercel (`dpl_66Mqskw4qFx3noG2kh2URasYqLAM`). |
+| Datos de la casa | **Faltan** (ver pendientes I-1 a I-4). Mientras no haya una propiedad publicada ni un anuncio vinculado, todo sigue igual que antes: Victoria atiende todo. |
+| Conexión del número / anuncio | **Camino B** (número de Victoria). Falta que el anuncio apunte a ese número y vincularlo en la ficha (I-5, I-7). |
+| Forma de hablar del asistente | **La dirá Freddy en detalle** (I-11). Hoy usa las instrucciones genéricas. |
 
 ## 3. Cómo funciona (en palabras simples)
 
@@ -92,7 +93,7 @@ pero **frenada por el límite de gasto de la cuenta**; trajo 447 conversaciones 
 | I-3 | **Cómo se presenta**: sin nombre, «el equipo de la casa» u otro nombre (parámetro «Nombre del asistente de inmuebles»), y cómo nombra al dueño («el propietario», «Freddy»…). | Freddy |
 | I-4 | **Visitas**: días y horas en que se puede visitar y quién la enseña (en la ficha). Revisar el texto del mensaje de visita confirmada (parámetro). | Freddy |
 | I-5 | ~~Decidir B o C~~ **DECIDIDO 2026-11-23: camino B** (el anuncio de la casa apunta al número de Victoria y se vincula a la propiedad en su ficha). A Freddy no le importa que se vea «AzoShop»: el asistente puede saludar como «le habla Freddy». Falta que el anuncio apunte al número de Victoria (hoy apunta al WhatsApp Business del teléfono). | Freddy, con guía |
-| I-6 | **Desplegar**: aplicar la migración 037 en Supabase (primero la migración, después el código), PR, fusión, Railway y Vercel. Pide confirmación. | Claude, con visto bueno |
+| I-6 | ~~Desplegar~~ **HECHO 2026-11-23**: migración 037 → código (PR #54, Railway `e9e4fd29`, Vercel `dpl_66Mqskw4…`) → migración 038. | — |
 | I-7 | **Cargar la ficha** de la casa en la app, publicarla y vincular el anuncio `120252118114240418` (si es camino B) o registrar el número (camino C). | Freddy o Claude con los datos |
 | I-8 | **Probar con la IA real** antes de reactivar: preguntas típicas, «¿dónde queda?», «mándeme fotos», «quiero visitarla», «dígame usted la hora», una oferta de precio, una pregunta que no está en la ficha. Hoy solo hay pruebas con una IA simulada. | Claude |
 | I-9 | **Reactivar la campaña** (subir el límite de gasto de la cuenta personal) cuando todo lo anterior esté listo. | Freddy |
@@ -104,3 +105,4 @@ pero **frenada por el límite de gasto de la cuenta**; trajo 447 conversaciones 
 | Fecha | Qué |
 |---|---|
 | 2026-11-23 | Idea asentada (`docs/PLAN_INMUEBLE.md`). Revisado en Meta: campaña de la casa frenada por límite de gasto; coexistencia (camino A) requiere ser Tech Provider + Embedded Signup → no viable hoy. Construido el módulo completo: migración 037, asistente, ruteo por anuncio y por número, respuestas desde el número correcto, agenda manual con aviso al cliente, API y panel. 2713 pruebas; lint, build y accesibilidad sin violaciones. Sin desplegar. |
+| 2026-11-23 | Freddy elige el **camino B** (número de Victoria; puede saludar «le habla Freddy») y pide desplegar. Agregada la seguridad por filas (RLS) a las 5 tablas nuevas y el borrado del índice viejo pasado a una migración **038** aparte (el código anterior lo usaba). **Desplegado:** 037 en Supabase → PR #54 fusionado → Railway `e9e4fd29` (arranque limpio, BotWorker y scheduler, `/health` 200) y Vercel → 038 en Supabase (queda solo la clave única nueva; 24 conversaciones intactas, todas de Victoria). Anotado I-11: Freddy dará después cómo debe hablar el asistente y que, cuando necesite a una persona, **se quede callado y marque la conversación** en vez de decir «le paso con un asesor». **No probado** con la IA real ni con un mensaje real. |

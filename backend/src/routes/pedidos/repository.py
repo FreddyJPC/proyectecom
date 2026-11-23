@@ -148,3 +148,70 @@ class PedidoRepository:
                     "update pedidos set estado_local = 'rechazado', actualizado_en = now() where id_local = %s",
                     (id_local,),
                 )
+
+    # ------------------------------------------------------------------
+    # Pedidos hechos A MANO en el panel de Rocketfy (pendiente #89, 2026-11-23)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def obtener_por_id_rocketfy(id_rocketfy: int) -> Optional[dict]:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"select {_COLUMNAS} from pedidos where id_rocketfy = %s", (id_rocketfy,))
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                cols = [d[0] for d in cur.description]
+                return dict(zip(cols, row))
+
+    @staticmethod
+    def insertar_externo(id_local: int, id_rocketfy: int, estado_local: str, status_id: Optional[int], payload: dict) -> bool:
+        """Guarda un pedido que el dueño creó en el panel de Rocketfy (no lo creó este sistema). Devuelve False si ese id_local
+        o ese id_rocketfy ya existían (no se pisa nada): el llamador prueba otro id_local o avisa que ya estaba registrado."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into pedidos (id_local, id_rocketfy, estado_local, status_id_rocketfy, payload_creacion,
+                                         confirmado_en, actualizado_en)
+                    values (%s, %s, %s, %s, %s, case when %s = 'confirmado' then now() end, now())
+                    on conflict do nothing
+                    """,
+                    (id_local, id_rocketfy, estado_local, status_id,
+                     Json(payload, dumps=lambda o: json.dumps(o, default=str)), estado_local),
+                )
+                return cur.rowcount == 1
+
+    @staticmethod
+    def ultimo_status_avisado(id_rocketfy: int) -> Optional[int]:
+        """El último estado que Rocketfy avisó por el webhook para ese pedido (los avisos se guardan aunque el pedido no sea
+        nuestro todavía)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select status_id from webhook_events where id_rocketfy = %s order by recibido_en desc, id desc limit 1",
+                    (id_rocketfy,),
+                )
+                row = cur.fetchone()
+                return row[0] if row else None
+
+    @staticmethod
+    def sin_vincular(dias: int = 14, limite: int = 20) -> list:
+        """Pedidos de los que Rocketfy nos avisó por el webhook pero que no están en `pedidos`: los que el dueño creó a mano
+        en su panel. El más reciente primero, con el último aviso de cada uno."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select w.id_rocketfy, max(w.recibido_en) as ultimo_aviso,
+                           (array_agg(w.payload order by w.recibido_en desc, w.id desc))[1] as payload
+                    from webhook_events w
+                    where not exists (select 1 from pedidos p where p.id_rocketfy = w.id_rocketfy)
+                      and w.recibido_en > now() - make_interval(days => %s)
+                    group by w.id_rocketfy
+                    order by ultimo_aviso desc
+                    limit %s
+                    """,
+                    (dias, limite),
+                )
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, fila)) for fila in cur.fetchall()]

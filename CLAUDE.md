@@ -123,7 +123,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2713 tests pasando**.
+   desde `backend/`. Estado actual: **2740 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -300,8 +300,13 @@ posible y rotarlos.
   (grupo «Entregas», el interruptor de agencia viene apagado); pantalla **Aprendizaje de Victoria** y «Datos de envío» en cada conversación.
   Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla), #85 (pruebas) y #86 (corregir producto, cantidad y pago desde el panel).
   Reversa: Railway `41b95694` (commit `f5cee97`); Vercel `dpl_6g2MC4HaqFrdndaY4VoDQLTV5ogU`.
-- **Inmuebles (ADR-019, entrada 0.0.173) — construido 2026-11-23, SIN DESPLEGAR:** migración **037** sin aplicar en Supabase;
-  81 parámetros en el código. Pendientes I-1 a I-10 en `docs/BITACORA_INMUEBLES.md`.
+- **Inmuebles (ADR-019, entradas 0.0.173 y 0.0.174) — DESPLEGADO 2026-11-23 (PR #54, camino B):** migraciones **037** y **038**
+  aplicadas en Supabase (**38 migraciones**; la 038 quita el índice viejo de `conversaciones` y se aplicó DESPUÉS del código);
+  81 parámetros (`inmuebles.activo` encendido de fábrica, pero sin propiedades publicadas nada cambia). Menú «Inmuebles»
+  (Propiedades, Agenda de visitas). **Falta:** cargar la ficha de la casa, vincular el anuncio y probar con la IA real (I-1 a I-11 en
+  `docs/BITACORA_INMUEBLES.md`). Reversa: Railway `1fb21c22`; Vercel `dpl_4yCyf96KrqgWHWfjT4dQLPfCYZFt` (si se vuelve atrás el
+  código, antes recrear el índice viejo: `create unique index uq_conversaciones_canal_id_externo on conversaciones (canal, id_externo)`).
+- **«Ya hice el pedido en Rocketfy» (pendiente #89, entrada 0.0.175):** un pedido creado a mano en el panel de Rocketfy se une a la venta desde la conversación (solo lectura a Rocketfy, mismo teléfono, sin duplicar). La API **no** permite elegir transportadora, agencia ni caja: un retiro en agencia hoy se crea a mano. **Costos reales de logística ≈ $10,69 por pedido vs. $5,00 estimado** (pendiente #90, prioritario).
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el
