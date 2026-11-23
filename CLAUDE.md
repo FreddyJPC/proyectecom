@@ -79,6 +79,11 @@ Base de datos: **Supabase** (Postgres). Migraciones en `backend/migrations/`.
   `motivo`) y queda en `victoria_aprendizaje`; anotar nunca frena una venta. Victoria **nunca nombra ni confirma una agencia de Servientrega**:
   la define el dueño en «Datos de envío».
 
+- **Inmuebles (ADR-019):** las conversaciones de propiedades las atiende un asistente APARTE de Victoria
+  (`routes/inmuebles/`): informa y anota visitas, nunca vende, negocia ni confirma una visita (la confirma el dueño en la
+  Agenda). Quién atiende lo decide el anuncio o el número (`numeros_whatsapp`); la respuesta sale del mismo número
+  (`registro.para_conversacion`). Bitácora propia: `docs/BITACORA_INMUEBLES.md`.
+
 **Código**
 - Cambios con tests. Seguir el patrón de capas existente
   (`dto/schemas/services/controllers/repository`) y el estilo de comentarios
@@ -118,7 +123,7 @@ PostgreSQL 16 (`/usr/lib/postgresql/16/bin`):
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN=token-secreto-de-prueba`, y
    `SUPABASE_DB_URL=postgresql://postgres@localhost:5433/postgres`.
 4. `python tools/apply_migrations.py` y luego `python -m pytest -q`
-   desde `backend/`. Estado actual: **2615 tests pasando**.
+   desde `backend/`. Estado actual: **2713 tests pasando**.
 
 **Interfaz (frontend)** — sistema de diseño definido en ADR-009
 - Colores y estados **solo con tokens** de `src/app/globals.css` (`bg-primary`,
@@ -295,6 +300,8 @@ posible y rotarlos.
   (grupo «Entregas», el interruptor de agencia viene apagado); pantalla **Aprendizaje de Victoria** y «Datos de envío» en cada conversación.
   Pendientes #83 (preguntas a Rocketfy antes de encender la agencia), #84 (aviso automático al cliente con plantilla), #85 (pruebas) y #86 (corregir producto, cantidad y pago desde el panel).
   Reversa: Railway `41b95694` (commit `f5cee97`); Vercel `dpl_6g2MC4HaqFrdndaY4VoDQLTV5ogU`.
+- **Inmuebles (ADR-019, entrada 0.0.173) — construido 2026-11-23, SIN DESPLEGAR:** migración **037** sin aplicar en Supabase;
+  81 parámetros en el código. Pendientes I-1 a I-10 en `docs/BITACORA_INMUEBLES.md`.
 - Código listo para desplegar: firma del webhook de WhatsApp, jobs bajo
   gunicorn (`ENABLE_SCHEDULER`), `gunicorn.conf.py`, `/health`.
 - **Pendiente:** crear el servicio en Railway y cargar variables, desplegar el

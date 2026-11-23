@@ -1790,3 +1790,21 @@ manda cada foto con `enviar_imagen` y cada video con `enviar_video` (WhatsApp, p
 
 **Parámetros.** «Enviar fotos y videos del producto» (`bot.enviar_fotos`) enciende o apaga el envío; «Material por envío»
 (`bot.max_fotos_por_envio`, 12 por defecto) es cuántos archivos manda de una vez: con 12 se manda todo.
+
+
+## 60. Varios asistentes y varios números de WhatsApp (módulo «Inmuebles», ADR-019)
+
+**Qué es:** la misma «máquina» (recibir el mensaje, juntarlo, entender fotos y audios, guardar y responder) puede atender con
+**distintos asistentes**. Cada conversación guarda cuál la atiende: Victoria (la tienda) o el asistente de inmuebles. Cambian las
+instrucciones y las herramientas; lo demás se reutiliza.
+
+**Cómo se decide:** por el **anuncio** por el que llegó el cliente (si está vinculado a una propiedad) o por el **número** del
+negocio al que escribió (cada número registrado tiene su asistente). Sin nada de eso, Victoria.
+
+**Número del negocio:** Meta pone en cada mensaje entrante el identificador del número que lo recibió (`phone_number_id`). Se guarda
+en la conversación para que la respuesta salga **del mismo número**. El número principal se guarda vacío: así las conversaciones de
+siempre no cambiaron.
+
+**Coexistencia:** es la opción de Meta para usar el MISMO número en la app WhatsApp Business del teléfono y en la API a la vez.
+Solo la pueden activar los socios de Meta (Tech Provider o Solution Partner) con su «registro incrustado» (Embedded Signup); por eso
+hoy no la usamos.
