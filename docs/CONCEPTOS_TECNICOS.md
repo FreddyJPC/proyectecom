@@ -1808,3 +1808,23 @@ siempre no cambiaron.
 **Coexistencia:** es la opción de Meta para usar el MISMO número en la app WhatsApp Business del teléfono y en la API a la vez.
 Solo la pueden activar los socios de Meta (Tech Provider o Solution Partner) con su «registro incrustado» (Embedded Signup); por eso
 hoy no la usamos.
+
+## 61. Pedido hecho a mano en Rocketfy y cómo se une a la venta (pendiente #89)
+
+**Qué es:** a veces el pedido no lo crea Victoria por la API, sino el dueño a mano en el panel de Rocketfy. Pasa cuando hace falta algo que
+la API no permite: elegir la transportadora, el retiro en una agencia de la lista de Rocketfy o el envío con caja.
+
+**El problema:** Rocketfy avisa de ese pedido por el webhook (con su número, por ejemplo 413585), pero el sistema no sabe de qué cliente es.
+La venta sigue «recopilando datos», no cuenta en las métricas, y un «Que Victoria continúe» podría crear un **segundo pedido real**.
+
+**La solución:** en la conversación → Compra → **«Ya hice el pedido en Rocketfy»**. El dueño elige el pedido de la lista de avisos sin dueño
+(o escribe su número), y el sistema:
+1. pregunta a Rocketfy (solo lectura) que ese pedido exista y que sea del **mismo teléfono** del cliente (un número mal escrito no une el
+   pedido de otra persona);
+2. lo guarda como pedido del sistema, y desde ahí los avisos de Rocketfy (por ejemplo «paquete en agencia») ya saben de quién es;
+3. cierra la venta (despachado/ganado) y deja una nota interna en el chat para que Victoria no cree otro pedido.
+
+Si el total o la ciudad no coinciden con lo acordado en el chat, se avisa, pero no se frena.
+
+**Número de Rocketfy vs. «ID externo»:** el número del pedido (413585) es el de Rocketfy. El «ID externo» que muestra su panel es otra cosa
+(en los pedidos que crea Victoria es nuestro número interno). Para unir un pedido se usa el número de Rocketfy.

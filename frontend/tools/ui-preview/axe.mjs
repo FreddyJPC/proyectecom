@@ -269,6 +269,17 @@ for (const theme of ["light", "dark"]) {
         await page.waitForTimeout(300);
         await auditar(r + " [datos de envío]");
         await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+        // «Ya hice el pedido en Rocketfy»: la lista de pedidos sin cliente y el número a mano.
+        await page.locator("button:visible", { hasText: "Ya hice el pedido en Rocketfy" }).first().click();
+        await page.getByRole("dialog", { name: "Ya hice el pedido en Rocketfy" }).waitFor();
+        await page.getByText("Pedido 413585").waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [pedido hecho en Rocketfy]");
+        await page.getByText("Escribir el número").click();
+        await page.waitForTimeout(200);
+        await auditar(r + " [pedido hecho en Rocketfy, número a mano]");
+        await page.keyboard.press("Escape");
         if (vn === "movil") await page.keyboard.press("Escape");
         await page.waitForTimeout(300);
       }

@@ -23,7 +23,9 @@ from .schemas import (
     enviar_mensaje_input_schema,
     mensaje_schema,
     notas_input_schema,
+    pedido_rocketfy_input_schema,
 )
+from .pedido_externo import PedidoExternoInvalidoError, PedidoExternoService, RocketfyNoDisponibleError
 from .services import ConversacionesService
 
 
@@ -153,6 +155,35 @@ def actualizar_datos_envio(conversacion_id: int):
     except DatosEnvioInvalidosError as exc:
         return jsonify(error=str(exc), sugerencias=exc.sugerencias, bloqueos=exc.sugerencias), 422
     return jsonify(status="ok"), 200
+
+
+@conversaciones_bp.get("/<int:conversacion_id>/pedidos-rocketfy")
+def pedidos_rocketfy_sin_vincular(conversacion_id: int):
+    """Los pedidos de Rocketfy de los que llegó aviso y que no son de ninguna conversación (hechos a mano en su panel)."""
+    try:
+        items = PedidoExternoService().sin_vincular(conversacion_id)
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    return jsonify(items=items), 200
+
+
+@conversaciones_bp.post("/<int:conversacion_id>/pedido-rocketfy")
+def registrar_pedido_rocketfy(conversacion_id: int):
+    """«Ya hice el pedido en Rocketfy»: une a esta venta un pedido que el dueño creó a mano en el panel de Rocketfy."""
+    try:
+        datos = pedido_rocketfy_input_schema.load(request.get_json(force=True, silent=True) or {})
+    except ValidationError as exc:
+        return jsonify(error="Datos inválidos.", detalle=exc.messages), 422
+    usuario = (getattr(g, "usuario", None) or {}).get("email")
+    try:
+        resultado = PedidoExternoService().registrar(conversacion_id, datos["id_rocketfy"], usuario)
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except (SinPedidoEnCursoError, PedidoYaCerradoError, PedidoExternoInvalidoError) as exc:
+        return jsonify(error=str(exc)), 409
+    except RocketfyNoDisponibleError as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(status="ok", **resultado), 200
 
 
 @conversaciones_bp.post("/<int:conversacion_id>/reactivar")

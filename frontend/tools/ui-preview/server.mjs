@@ -1468,6 +1468,22 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    // «Ya hice el pedido en Rocketfy» (pendiente #89): pedidos de los que llegó aviso y que no son de ninguna conversación.
+    if (p.match(/^\/conversaciones\/\d+\/pedidos-rocketfy$/)) {
+      return send({ items: [
+        { idRocketfy: 413585, estado: "Confirmado - Pendiente de preparación", transportadora: "Servientrega", total: "25.00", ultimoAviso: new Date(Date.now() - 20 * 60000).toISOString() },
+        { idRocketfy: 413512, estado: "Nuevo", transportadora: "Gintracom", total: "39.99", ultimoAviso: new Date(Date.now() - 26 * 3600000).toISOString() },
+      ] });
+    }
+    if (p.match(/^\/conversaciones\/\d+\/pedido-rocketfy$/) && req.method === "POST") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      return req.on("end", () => {
+        const b = raw ? JSON.parse(raw) : {};
+        if (b.idRocketfy === 999) return send({ error: "El pedido 999 de Rocketfy es de otro cliente (Otra Persona, teléfono 0987654321). Revisa el número." }, 409);
+        send({ status: "ok", idLocal: 1763900000, idRocketfy: b.idRocketfy, estado: "confirmado", total: "25.00", avisos: ["Rocketfy va a cobrar $25.00; en el chat se acordó $24.99."] });
+      });
+    }
     // Botón «Enviar fotos y videos» del panel: cuenta lo elegido de la galería del producto.
     if (p.match(/^\/conversaciones\/\d+\/material$/) && req.method === "POST") {
       let raw = "";

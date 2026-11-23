@@ -184,6 +184,18 @@ conversacion_detalle_schema = DetalleCompletoSchema()
 mensaje_schema = MensajeSchema()
 enviar_mensaje_input_schema = EnviarMensajeInputSchema()
 enviar_material_input_schema = EnviarMaterialInputSchema()
+
+
+class PedidoRocketfyInputSchema(Schema):
+    """«Ya hice el pedido en Rocketfy»: el número del pedido en Rocketfy (el que muestra su panel y sus avisos)."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    id_rocketfy = fields.Int(required=True, strict=True, data_key="idRocketfy", validate=validate.Range(min=1, max=10**12))
+
+
+pedido_rocketfy_input_schema = PedidoRocketfyInputSchema()
 notas_input_schema = NotasInputSchema()
 continuar_input_schema = ContinuarInputSchema()
 datos_envio_input_schema = DatosEnvioInputSchema(unknown=EXCLUDE)
