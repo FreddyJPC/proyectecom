@@ -44,6 +44,8 @@ _CANDIDATOS = """
       and not ct.no_contactar
       and c.canal = any(%(canales)s)
       and c.estado in ('activa', 'esperando_pago')
+      -- Módulo «Inmuebles»: a un interesado en una propiedad nunca se le manda el seguimiento de la tienda.
+      and c.asistente = 'ventas'
       and ult.rol = 'bot'
       and {momento}
       and {extra}
@@ -134,7 +136,7 @@ class SeguimientoRepository:
                     join contactos ct on ct.id = l.contacto_id
                     join conversaciones c on c.id = l.conversacion_id
                     where l.id = %s and not ct.no_contactar and l.temperatura in ('caliente', 'tibio')
-                      and c.estado in ('activa', 'esperando_pago')
+                      and c.estado in ('activa', 'esperando_pago') and c.asistente = 'ventas'
                       and (
                           select rol from mensajes where conversacion_id = l.conversacion_id order by creado_en desc, id desc limit 1
                       ) = 'bot'

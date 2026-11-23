@@ -20,6 +20,7 @@ from src.routes.ajustes import ajustes_bp
 from src.routes.anuncios import anuncios_bp
 from src.routes.categorias import categorias_bp
 from src.routes.cuentas_bancarias import cuentas_bancarias_bp
+from src.routes.inmuebles.api import inmuebles_bp, numeros_bp, visitas_bp
 from src.routes.meta import meta_bp
 from src.routes.precios import precios_bp
 from src.routes.aprendizaje import aprendizaje_bp
@@ -83,6 +84,9 @@ def create_app() -> Flask:
     app.register_blueprint(catalogos_bp)
     app.register_blueprint(categorias_bp)
     app.register_blueprint(cuentas_bancarias_bp)
+    app.register_blueprint(inmuebles_bp)
+    app.register_blueprint(visitas_bp)
+    app.register_blueprint(numeros_bp)
     app.register_blueprint(conversaciones_bp)
     app.register_blueprint(gestion_bp)
     app.register_blueprint(ventas_bp)

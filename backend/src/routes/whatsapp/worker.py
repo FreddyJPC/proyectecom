@@ -105,6 +105,8 @@ class BotWorker:
         telegram: Optional[TelegramNotifier] = None,
         pausas_reintento: Optional[tuple] = None,
         aprendizaje=None,
+        conversacion_repository=None,
+        servicio_inmuebles=None,
     ):
         self._cola: "queue.Queue[TareaRespuestaDTO]" = queue.Queue()
         self._canales = canales
@@ -115,6 +117,9 @@ class BotWorker:
         self._segundos_espera_fijo = segundos_espera
         self._telegram_fijo = telegram
         self._aprendizaje_fijo = aprendizaje
+        # Módulo «Inmuebles»: de dónde leer quién atiende la conversación y por qué número salió, y el asistente de propiedades.
+        self._conversaciones_fijo = conversacion_repository
+        self._servicio_inmuebles = servicio_inmuebles
         self._pausas_reintento = pausas_reintento if pausas_reintento is not None else PAUSAS_ENTRE_REINTENTOS
         self._esperando: Dict[int, _Espera] = {}
         self._candado = threading.Lock()
@@ -297,6 +302,26 @@ class BotWorker:
             self._conversation_service = VictoriaConversationService()
         return self._conversation_service
 
+    def _conversacion(self, conversacion_id: int) -> Optional[dict]:
+        """La conversación (para saber quién la atiende y desde qué número se responde). Si no se puede leer, None: se responde
+        como siempre (Victoria, número principal)."""
+        try:
+            if self._conversaciones_fijo is None:
+                from .repository import ConversacionRepository
+
+                self._conversaciones_fijo = ConversacionRepository()
+            return self._conversaciones_fijo.obtener_por_id(conversacion_id)
+        except Exception:
+            logger.exception("No se pudo leer la conversación %s antes de responder", conversacion_id)
+            return None
+
+    def _obtener_servicio_inmuebles(self):
+        if self._servicio_inmuebles is None:
+            from src.routes.inmuebles.asistente import AsistenteInmueblesService  # perezoso: evita ciclos al arrancar
+
+            self._servicio_inmuebles = AsistenteInmueblesService(canales=self._canales)
+        return self._servicio_inmuebles
+
     def _procesar(self, tarea: TareaRespuestaDTO) -> None:
         """
         modo='ia': VictoriaConversationService.procesar_turno() ya guarda
@@ -309,8 +334,14 @@ class BotWorker:
         de las reglas deterministas de escalado) -- acá sí hay que
         guardarlo antes de enviarlo, nadie más lo hizo todavía.
         """
+        conversacion = self._conversacion(tarea.conversacion_id) or {}
         if tarea.modo == "ia":
-            texto_respuesta = self._obtener_conversation_service().procesar_turno(
+            servicio = (
+                self._obtener_servicio_inmuebles()
+                if conversacion.get("asistente") == "inmuebles"
+                else self._obtener_conversation_service()
+            )
+            texto_respuesta = servicio.procesar_turno(
                 conversacion_id=tarea.conversacion_id,
                 mensaje_cliente=tarea.texto_mensaje_cliente,
             )
@@ -327,6 +358,6 @@ class BotWorker:
             )
 
         try:
-            self._canales.para(tarea.canal).enviar_texto(tarea.id_externo, texto_respuesta)
+            self._canales.para(tarea.canal, conversacion.get("numero_negocio")).enviar_texto(tarea.id_externo, texto_respuesta)
         except Exception as exc:
             raise _ErrorDeEnvio(str(exc)) from exc

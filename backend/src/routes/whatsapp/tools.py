@@ -882,7 +882,7 @@ class HerramientasVictoria:
 
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         tanda = pendientes[: parametros.valor("bot.max_fotos_por_envio")]
-        canal = self._registro_canales().para(conversacion["canal"])
+        canal = self._registro_canales().para_conversacion(conversacion)
         fotos = videos = 0
         for posicion, archivo in enumerate(tanda):
             es_video = archivo["tipo"] == TIPO_VIDEO

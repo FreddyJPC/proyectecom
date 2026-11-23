@@ -29,6 +29,8 @@ class ConversacionResumenDTO:
     ultimo_mensaje: Optional[UltimoMensajeDTO]
     creada_en: Optional[str]
     actualizada_en: Optional[str]
+    # Módulo «Inmuebles»: quién la atiende («ventas» = Victoria, «inmuebles» = asistente de propiedades).
+    asistente: str = "ventas"
 
 
 @dataclass
@@ -132,6 +134,10 @@ class ConversacionDetalleDTO:
     ventana_gratuita: Optional[VentanaGratuitaDTO] = None
     anuncio: Optional[AnuncioDTO] = None
     llegadas_por_anuncio: Optional[List[LlegadaPorAnuncioDTO]] = None
+    # Módulo «Inmuebles»: quién la atiende y, si es el asistente de propiedades, de cuál se habla.
+    asistente: str = "ventas"
+    inmueble_id: Optional[int] = None
+    inmueble_titulo: Optional[str] = None
 
 
 @dataclass

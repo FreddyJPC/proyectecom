@@ -191,6 +191,11 @@ GRUPOS: Tuple[Grupo, ...] = (
         "Entregas",
         "Cómo recibe el cliente su pedido: en su domicilio o retirándolo en una agencia de Servientrega.",
     ),
+    Grupo(
+        "inmuebles",
+        "Inmuebles (asistente de propiedades)",
+        "Cómo atiende el asistente los mensajes de los anuncios de propiedades: cómo se presenta y qué le dice al cliente.",
+    ),
     Grupo("tareas", "Tareas automáticas", "Cada cuántos minutos el sistema revisa Rocketfy, enfría los leads y envía seguimientos por su cuenta."),
 )
 
@@ -484,6 +489,72 @@ CATALOGO: Tuple[Parametro, ...] = (
         defecto="Disculpe la demora, ya le comunico con un asesor que le ayuda enseguida.",
         largo_maximo=300,
         aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    # ------------------------------------------------------------------ Inmuebles (migración 037)
+    Parametro(
+        clave="inmuebles.activo",
+        grupo="inmuebles",
+        nombre="Que el asistente de inmuebles responda",
+        para_que_sirve=(
+            "Encendido: el asistente contesta las conversaciones de propiedades (las que llegan por un anuncio vinculado a una "
+            "propiedad o por un número de WhatsApp asignado a inmuebles). Apagado: esas conversaciones te llegan a ti sin "
+            "respuesta automática, con aviso por Telegram."
+        ),
+        tipo=TIPO_BOOLEANO,
+        defecto=True,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="inmuebles.nombre_asistente",
+        grupo="inmuebles",
+        nombre="Nombre del asistente de inmuebles",
+        para_que_sirve=(
+            "Cómo se presenta el asistente de propiedades. Escribe «Sin nombre» para que no use ninguno (no es Victoria y nunca "
+            "se presenta como asesor ni vendedor)."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="Sin nombre",
+        largo_maximo=40,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="inmuebles.como_llamar_al_dueno",
+        grupo="inmuebles",
+        nombre="Cómo nombra al dueño",
+        para_que_sirve=(
+            "Cómo se refiere el asistente a quien confirma las visitas y atiende lo que él no puede (p. ej. «el propietario», "
+            "«Freddy», «el equipo de ventas»)."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto="el propietario",
+        largo_maximo=60,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="inmuebles.texto_paso_al_dueno",
+        grupo="inmuebles",
+        nombre="Mensaje cuando el asistente se traba",
+        para_que_sirve="Lo que recibe el cliente si el asistente de inmuebles no logra responder y la conversación pasa a ti.",
+        tipo=TIPO_TEXTO,
+        defecto="Gracias por su paciencia. El propietario le escribe en breve por este mismo chat.",
+        largo_maximo=300,
+        aplica=APLICA_SIGUIENTE_MENSAJE,
+    ),
+    Parametro(
+        clave="inmuebles.texto_confirmacion_visita",
+        grupo="inmuebles",
+        nombre="Mensaje de visita confirmada",
+        para_que_sirve=(
+            "Lo que recibe el cliente cuando confirmas su visita en la Agenda y tocas «Avisar al cliente». Puedes usar {nombre}, "
+            "{inmueble}, {fecha}, {hora} y {referencia}: el sistema los reemplaza (la fecha y la hora, en hora de Ecuador)."
+        ),
+        tipo=TIPO_TEXTO,
+        defecto=(
+            "Hola {nombre}, su visita a {inmueble} quedó confirmada para el {fecha} a las {hora}. Referencia: {referencia}. "
+            "Si necesita cambiar el horario, escríbanos por aquí."
+        ),
+        largo_maximo=600,
+        aplica=APLICA_SIGUIENTE_USO,
     ),
     # ------------------------------------------------------------------ Stock
     Parametro(

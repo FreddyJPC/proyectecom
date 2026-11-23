@@ -16,6 +16,9 @@ class MensajeEntranteDTO:
     media_mime: Optional[str] = None
     media_nombre: Optional[str] = None
     referral: Optional[dict] = None
+    # Número del negocio al que escribió el cliente (metadata.phone_number_id del webhook). Módulo «Inmuebles»: el negocio
+    # puede tener más de un número; la respuesta sale del mismo y cada número puede tener su asistente.
+    numero_negocio: Optional[str] = None
     # Objeto referral completo si vino de anuncio Click-to-WhatsApp (FEP), None si no.
     # Cuando está presente, contiene: source_id (id_anuncio), ctwa_clid, headline, body, etc.
     # Su presencia es la señal de que aplica la ventana gratuita de 72 horas.

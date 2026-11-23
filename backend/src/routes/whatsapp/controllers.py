@@ -101,9 +101,11 @@ def _extraer_mensajes(payload: dict) -> List[MensajeEntranteDTO]:
                     for c in valor.get("contacts", [])
                     if isinstance(c, dict)
                 }
+                numero_negocio = (valor.get("metadata") or {}).get("phone_number_id")
                 for msg in valor.get("messages", []):
                     dto = _parsear_mensaje(msg, nombres.get(msg.get("from")))
                     if dto is not None:
+                        dto.numero_negocio = numero_negocio
                         mensajes.append(dto)
     except Exception:
         logger.exception("Payload de webhook de WhatsApp con forma inesperada -- se ignora")

@@ -27,15 +27,18 @@ class FakeConversacionRepository:
 
     # En estos falsos la conversación se guarda por su identificador en el canal (el teléfono, en WhatsApp) y el
     # contacto se identifica por ese mismo valor: basta para comprobar las reglas del webhook sin base de datos.
-    def obtener_por_canal(self, canal, id_externo):
+    def obtener_por_canal(self, canal, id_externo, numero_negocio=None):
         existente = self.tabla.get(id_externo)
         if existente is None:
             return None
         return {"contacto_id": id_externo, "canal": canal, "id_externo": id_externo, **existente}
 
     def crear(self, id_externo, canal="whatsapp", origen="directo", id_anuncio=None, ctwa_clid=None,
-              nombre_perfil=None, telefono=None):
+              nombre_perfil=None, telefono=None, numero_negocio=None, asistente="ventas", inmueble_id=None):
         conversacion = {
+            "numero_negocio": numero_negocio,
+            "asistente": asistente,
+            "inmueble_id": inmueble_id,
             "id": self._siguiente_id,
             "contacto_id": id_externo,
             "canal": canal,
@@ -64,6 +67,11 @@ class FakeConversacionRepository:
 
     def actualizar_timestamp(self, conversacion_id):
         self.timestamps_actualizados.append(conversacion_id)
+
+    def fijar_asistente(self, conversacion_id, asistente, inmueble_id=None):
+        for c in self.tabla.values():
+            if c["id"] == conversacion_id:
+                c["asistente"], c["inmueble_id"] = asistente, inmueble_id
 
 
 class FakeMensajeRepository:

@@ -117,9 +117,11 @@ class ConversacionesService:
         page: int = 1,
         page_size: int = 20,
         canal: Optional[str] = None,
+        asistente: Optional[str] = None,
     ) -> ListaConversacionesDTO:
         resultado = self._conversaciones.listar(
-            estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal
+            estado=estado, origen=origen, q=q, page=page, page_size=page_size, canal=canal,
+            **({"asistente": asistente} if asistente else {}),
         )
 
         items = []
@@ -141,7 +143,9 @@ class ConversacionesService:
                     nombre_cliente=fila.get("nombre_cliente"),
                     origen=fila["origen"],
                     estado=fila["estado"],
-                    producto_interes=fila.get("producto_nombre"),
+                    # En una conversación de propiedades, «de qué habla» es la propiedad, no un producto.
+                    producto_interes=fila.get("inmueble_titulo") if fila.get("asistente") == "inmuebles" else fila.get("producto_nombre"),
+                    asistente=fila.get("asistente") or "ventas",
                     sin_revisar=(fila["estado"] in ESTADOS_QUE_ESPERAN_AL_DUENO and fila.get("vista_en") is None),
                     ultimo_mensaje=ultimo_mensaje,
                     creada_en=_iso(fila["creada_en"]),
@@ -236,9 +240,21 @@ class ConversacionesService:
                 LlegadaPorAnuncioDTO(id_anuncio=l.get("id_anuncio"), titulo=l.get("titulo"), creado_en=_iso(l["creado_en"]))
                 for l in origen["llegadas"][:MAXIMO_LLEGADAS_LISTADAS]
             ],
+            asistente=conversacion.get("asistente") or "ventas",
+            inmueble_id=conversacion.get("inmueble_id"),
+            inmueble_titulo=self._titulo_inmueble(conversacion.get("inmueble_id")),
         )
 
         return DetalleCompletoDTO(conversacion=conversacion_dto, lead=lead_dto, mensajes=mensajes)
+
+    @staticmethod
+    def _titulo_inmueble(inmueble_id: Optional[int]) -> Optional[str]:
+        if not inmueble_id:
+            return None
+        from src.routes.inmuebles.repository import InmuebleRepository  # perezoso: solo si la conversación es de una propiedad
+
+        inmueble = InmuebleRepository.obtener(inmueble_id)
+        return inmueble["titulo"] if inmueble else None
 
     @staticmethod
     def _anuncio_dto(origen: dict) -> Optional[AnuncioDTO]:
@@ -282,7 +298,7 @@ class ConversacionesService:
             self._conversaciones.marcar_manual(conversacion_id)
 
         try:
-            self._canales.para(conversacion["canal"]).enviar_texto(conversacion["id_externo"], contenido)
+            self._canales.para_conversacion(conversacion).enviar_texto(conversacion["id_externo"], contenido)
         except (WhatsAppRequestError, WhatsAppBusinessError, CanalNoDisponibleError) as exc:
             # El mensaje YA quedó guardado arriba -- el dueño necesita
             # saber que probablemente no llegó, no que se pierda en
@@ -330,7 +346,7 @@ class ConversacionesService:
             self._anotar_intervencion(conversacion, "le envió fotos o videos al cliente")
             self._conversaciones.marcar_manual(conversacion_id)
 
-        canal = self._canales.para(conversacion["canal"])
+        canal = self._canales.para_conversacion(conversacion)
         fotos = videos = 0
         for posicion, archivo in enumerate(galeria):
             es_video = archivo["tipo"] == TIPO_VIDEO

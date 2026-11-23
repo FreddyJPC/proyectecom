@@ -27,7 +27,7 @@ class TestInvariantesDelCatalogo:
         # recurrente) + 10 del seguimiento automático (interruptores, horario, tope, textos y su tarea) + 7 de recordatorios y
         # 4 del aviso de ventas a Meta (interruptor, espera, antigüedad, intentos) + la tarea que los envía.
         # + 4 de entregas (retiro en agencia: interruptor, texto, indicación al repartidor, aviso de paquete en agencia).
-        assert len(CATALOGO) == 76
+        assert len(CATALOGO) == 81
 
     def test_el_aviso_de_ventas_a_meta_viene_apagado_de_fabrica(self):
         """Lo que se envía a Meta no se puede borrar: hay que encenderlo a propósito."""

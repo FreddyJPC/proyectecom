@@ -29,6 +29,7 @@ def borrar_conversaciones_de_prueba(*ids_externos: str, canal: str = "whatsapp")
                     (conversaciones, contactos, conversaciones),
                 )
                 cur.execute("delete from seguimientos where conversacion_id = any(%s)", (conversaciones,))
+                cur.execute("delete from visitas where conversacion_id = any(%s) or contacto_id = any(%s)", (conversaciones, contactos))
                 cur.execute("delete from solicitudes_gestion where conversacion_id = any(%s)", (conversaciones,))
                 cur.execute(
                     "delete from ventas where conversacion_id = any(%s) or contacto_id = any(%s)", (conversaciones, contactos)
@@ -58,3 +59,25 @@ def borrar_conversaciones_de_prueba(*ids_externos: str, canal: str = "whatsapp")
                 "and not exists (select 1 from ventas v where v.contacto_id = ct.id)",
                 (list(ids_externos),),
             )
+
+
+def borrar_inmuebles_de_prueba(*codigos: str) -> None:
+    """Módulo «Inmuebles»: borra esas propiedades con sus visitas, material y anuncios (las conversaciones que las nombraban
+    quedan sin propiedad; se borran aparte con `borrar_conversaciones_de_prueba`)."""
+    if not codigos:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select id from inmuebles where codigo = any(%s)", (list(codigos),))
+            ids = [f[0] for f in cur.fetchall()]
+            if not ids:
+                return
+            cur.execute("delete from visitas where inmueble_id = any(%s)", (ids,))
+            cur.execute("update conversaciones set inmueble_id = null where inmueble_id = any(%s)", (ids,))
+            cur.execute("delete from inmuebles where id = any(%s)", (ids,))
+
+
+def borrar_numeros_de_prueba(*phone_number_ids: str) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("delete from numeros_whatsapp where phone_number_id = any(%s)", (list(phone_number_ids),))

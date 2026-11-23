@@ -142,6 +142,18 @@ class WhatsAppClient:
             video["caption"] = descripcion
         return self._post({"messaging_product": "whatsapp", "to": telefono, "type": "video", "video": video})
 
+    def enviar_ubicacion(
+        self, telefono: str, latitud: float, longitud: float, nombre: Optional[str] = None, direccion: Optional[str] = None
+    ) -> dict:
+        """POST .../messages, type=location: el «pin» de WhatsApp, que el cliente abre en su app de mapas con un toque (módulo
+        «Inmuebles»: la ubicación de la propiedad). Las coordenadas salen de la ficha, nunca de lo que escriba la IA."""
+        ubicacion: dict = {"latitude": latitud, "longitude": longitud}
+        if nombre:
+            ubicacion["name"] = nombre
+        if direccion:
+            ubicacion["address"] = direccion
+        return self._post({"messaging_product": "whatsapp", "to": telefono, "type": "location", "location": ubicacion})
+
     def enviar_plantilla(
         self, telefono: str, nombre_plantilla: str, variables: Optional[List[str]] = None, idioma: str = "es"
     ) -> dict:
