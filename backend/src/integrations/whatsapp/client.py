@@ -133,6 +133,42 @@ class WhatsAppClient:
         }
         return self._post(payload)
 
+    def subir_media(self, datos: bytes, mime: str, nombre: str = "foto.jpg") -> str:
+        """Sube un archivo a WhatsApp (POST .../{phone_number_id}/media) y devuelve su id. Es para las fotos que el dueño manda
+        desde su teléfono o computadora: así se envían sin publicarlas en ningún enlace abierto. Meta guarda el archivo unos
+        30 días; con el mismo id se puede volver a bajar (`descargar_media`) para verlo en el panel."""
+        url = self._url.rsplit("/", 1)[0] + "/media"  # .../{phone_number_id}/media
+        try:
+            resp = self._session.post(
+                url,
+                headers={"Authorization": f"Bearer {self._api_token}"},
+                data={"messaging_product": "whatsapp", "type": mime},
+                files={"file": (nombre, datos, mime)},
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            raise WhatsAppRequestError(f"Error de red subiendo el archivo a WhatsApp: {exc}") from exc
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise WhatsAppRequestError(f"Respuesta no-JSON al subir el archivo (HTTP {resp.status_code})") from exc
+        if resp.status_code == 401:
+            raise WhatsAppAuthError(data.get("error", {}).get("message", "Acceso denegado (401)"))
+        if resp.status_code >= 400:
+            error = data.get("error", {})
+            raise WhatsAppBusinessError(message=error.get("message", f"Meta no aceptó el archivo (HTTP {resp.status_code})"),
+                                        code=error.get("code", resp.status_code), raw=data)
+        if not data.get("id"):
+            raise WhatsAppRequestError("Meta no devolvió el id del archivo subido")
+        return str(data["id"])
+
+    def enviar_imagen_subida(self, telefono: str, media_id: str, descripcion: Optional[str] = None) -> dict:
+        """POST .../messages, type=image con el id de un archivo ya subido con `subir_media` (no con un enlace)."""
+        imagen = {"id": media_id}
+        if descripcion:
+            imagen["caption"] = descripcion
+        return self._post({"messaging_product": "whatsapp", "to": telefono, "type": "image", "image": imagen})
+
     def enviar_video(self, telefono: str, url: str, descripcion: Optional[str] = None) -> dict:
         """POST .../messages, type=video con un enlace público (`link`), igual que una imagen (entrada 0.0.163). Meta solo
         acepta MP4 o 3GP (video H.264 + audio AAC) de hasta 16 MB; si no puede bajarlo o no le sirve, el fallo llega después

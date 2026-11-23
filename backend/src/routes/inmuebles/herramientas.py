@@ -214,6 +214,7 @@ class HerramientasInmuebles:
                 conversacion_id=conversacion_id, rol="bot",
                 contenido=f"{PREFIJO_VIDEO if es_video else PREFIJO_FOTO}{inmueble['titulo']} ({inmueble['codigo']})",
                 tipo=TIPO_VIDEO if es_video else "imagen", wamid=None,
+                media_url=archivo["url"],  # para ver en el panel QUÉ foto salió (migración 039)
             )
             enviadas += 1
         if not enviadas:

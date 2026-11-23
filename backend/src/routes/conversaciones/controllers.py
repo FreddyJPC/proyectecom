@@ -9,6 +9,7 @@ from .exceptions import (
     ConversacionNoEncontradaError,
     DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
+    FotoInvalidaError,
     PedidoYaCerradoError,
     SinMaterialError,
     SinPedidoEnCursoError,
@@ -26,7 +27,7 @@ from .schemas import (
     pedido_rocketfy_input_schema,
 )
 from .pedido_externo import PedidoExternoInvalidoError, PedidoExternoService, RocketfyNoDisponibleError
-from .services import ConversacionesService
+from .services import MAXIMO_BYTES_FOTO, ConversacionesService
 
 
 def _build_service() -> ConversacionesService:
@@ -100,9 +101,33 @@ def enviar_material(conversacion_id: int):
     return jsonify(resultado), 200
 
 
+@conversaciones_bp.post("/<int:conversacion_id>/foto")
+def enviar_foto_propia(conversacion_id: int):
+    """El dueño le manda al cliente una foto de su teléfono o computadora (formulario con `archivo` y `descripcion` opcional)."""
+    archivo = request.files.get("archivo")
+    if archivo is None:
+        return jsonify(error="Falta la foto."), 422
+    # Se lee como mucho un byte más del máximo: alcanza para saber si se pasa sin cargar archivos enormes en memoria.
+    datos = archivo.stream.read(MAXIMO_BYTES_FOTO + 1)
+    try:
+        resultado = _build_service().enviar_foto_propia(
+            conversacion_id, datos, archivo.mimetype, request.form.get("descripcion")
+        )
+    except ConversacionNoEncontradaError as exc:
+        return jsonify(error=str(exc)), 404
+    except FotoInvalidaError as exc:
+        return jsonify(error=str(exc)), 422
+    except VentanaMensajeriaCerradaError as exc:
+        return jsonify(error=str(exc)), 409
+    except EnvioWhatsAppFallidoError as exc:
+        return jsonify(error=f"No se pudo enviar la foto: {exc}"), 502
+    return jsonify(resultado), 200
+
+
 @conversaciones_bp.get("/<int:conversacion_id>/mensajes/<int:mensaje_id>/archivo")
 def ver_archivo_de_un_mensaje(conversacion_id: int, mensaje_id: int):
-    """La foto, el audio o el PDF que mandó el cliente, para verlo en el panel (el servidor lo trae de Meta al momento)."""
+    """La foto, el audio o el PDF de un mensaje (del cliente, o una foto que el dueño mandó desde el panel), para verlo en el panel
+    (el servidor lo trae de Meta al momento)."""
     try:
         datos, mime = _build_service().obtener_archivo(conversacion_id, mensaje_id)
     except ConversacionNoEncontradaError as exc:

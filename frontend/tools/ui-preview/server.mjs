@@ -112,6 +112,10 @@ const mensajesDe = (c) => {
     lista.splice(4, 0,
       { id: c.id * 100 + 50, rol: "cliente", contenido: "[imagen]", tipo: "imagen", creadoEn: ago(120), tieneArchivo: true, analisis: "Comprobante de pago: Transferencia (monto: $34.90; fecha: 2026-11-09; banco: Pichincha; referencia: 884412)" },
       { id: c.id * 100 + 51, rol: "cliente", contenido: "[audio]", tipo: "audio", creadoEn: ago(118), tieneArchivo: true, analisis: "quiero dos más pero de color blanco, ¿me los pueden enviar juntos?" },
+      // Fotos que ENVIAMOS: una del catálogo (se ve directo, migración 039) y una del teléfono del dueño (se baja de Meta).
+      { id: c.id * 100 + 52, rol: "bot", contenido: "📷 Foto de Lámpara LED Recargable (LAMP-LED-01)", tipo: "imagen", creadoEn: ago(116),
+        mediaUrl: `http://127.0.0.1:${PORT}/storage/v1/object/public/productos/LAMP-LED-01/foto-1.jpg` },
+      { id: c.id * 100 + 53, rol: "humano", contenido: "📷 Foto enviada desde el panel: Esta es la guía de su pedido", tipo: "imagen", creadoEn: ago(114), tieneArchivo: true },
     );
   }
   // Aviso del dueño a Victoria (rol «sistema»): solo en la conversación 300, que espera la confirmación de un pago.
@@ -1468,6 +1472,11 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end(svgFoto("/comprobante.svg"));
     }
     if (p.match(/^\/conversaciones\/\d+\/continuar$/)) return send({ status: "ok", victoriaContinua: true });
+    // Foto del teléfono o la computadora del dueño (formulario con el archivo).
+    if (p.match(/^\/conversaciones\/\d+\/foto$/) && req.method === "POST") {
+      req.on("data", () => {});
+      return req.on("end", () => send({ mensajeId: 99999 }));
+    }
     // «Ya hice el pedido en Rocketfy» (pendiente #89): pedidos de los que llegó aviso y que no son de ninguna conversación.
     if (p.match(/^\/conversaciones\/\d+\/pedidos-rocketfy$/)) {
       return send({ items: [

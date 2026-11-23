@@ -17,7 +17,7 @@ _SELECT_CONVERSACION = (
     "c.asistente, c.inmueble_id, c.numero_negocio "
     "from conversaciones c join contactos ct on ct.id = c.contacto_id"
 )
-_COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre, analisis"
+_COLUMNAS_MENSAJE = "id, conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre, analisis, media_url"
 # Lo que Victoria necesita saber de un producto. Además de la ficha, el proveedor (ADR-012: de él depende CÓMO
 # se cierra la venta), el costo, el stock propio y el envío.
 _COLUMNAS_PRODUCTO_BOT = (
@@ -382,19 +382,23 @@ class MensajeRepository:
         media_id: Optional[str] = None,
         media_mime: Optional[str] = None,
         media_nombre: Optional[str] = None,
+        media_url: Optional[str] = None,
     ) -> dict:
-        """`creado_en` solo se pasa para ubicar la respuesta del bot ANTES de un mensaje del cliente que llegó
+        """`media_url`: el enlace público con el que SE ENVIÓ una foto o video del bucket (migración 039), para verla en el panel.
+
+        `creado_en` solo se pasa para ubicar la respuesta del bot ANTES de un mensaje del cliente que llegó
         mientras Victoria la redactaba (ver `VictoriaConversationService.procesar_turno`): así ese mensaje sigue
         figurando como «sin responder». Sin él, vale la hora de la base de datos."""
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre)
-                    values (%s, %s, %s, %s, %s, coalesce(%s, now()), %s, %s, %s)
+                    insert into mensajes (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre,
+                                          media_url)
+                    values (%s, %s, %s, %s, %s, coalesce(%s, now()), %s, %s, %s, %s)
                     returning {_COLUMNAS_MENSAJE}
                     """,
-                    (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre),
+                    (conversacion_id, rol, contenido, tipo, wamid, creado_en, media_id, media_mime, media_nombre, media_url),
                 )
                 row = cur.fetchone()
                 cols = [d[0] for d in cur.description]

@@ -1,0 +1,11 @@
+-- Ver en el chat las fotos y videos que ENVIAMOS (pedido de Freddy, 2026-11-23).
+--
+-- Para qué: cuando Victoria o el dueño le mandan al cliente las fotos del producto (o de una propiedad), el mensaje se guardaba
+-- solo como texto («📷 Foto de Set 3 en 1 (SKU)»): en el panel no se podía ver QUÉ foto salió. Ahora se guarda también el enlace
+-- público con el que se envió (el del bucket `productos` de Supabase Storage), y el panel la muestra.
+--
+-- Las fotos que el dueño manda desde su teléfono o computadora NO usan esta columna: se suben a WhatsApp y quedan con su
+-- `media_id` (como las que manda el cliente), así no se publican en ningún enlace abierto.
+--
+-- Columna nueva y vacía: los mensajes que ya existen quedan igual (se siguen viendo como texto).
+alter table mensajes add column if not exists media_url text;

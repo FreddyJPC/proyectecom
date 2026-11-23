@@ -37,12 +37,32 @@ from .exceptions import (
     ConversacionNoEncontradaError,
     DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
+    FotoInvalidaError,
     PedidoYaCerradoError,
     SinMaterialError,
     SinPedidoEnCursoError,
     VentanaMensajeriaCerradaError,
 )
 from src.routes.whatsapp.ubicacion_compartida import coordenadas_compartidas
+
+# Fotos que el dueño manda desde su teléfono o computadora: lo que acepta WhatsApp para una imagen.
+MAXIMO_BYTES_FOTO = 5 * 1024 * 1024
+MAXIMO_LARGO_DESCRIPCION = 1000
+
+
+def tipo_de_imagen(datos: bytes) -> Optional[str]:
+    """El tipo REAL del archivo por sus primeros bytes (no por lo que diga el navegador): JPG o PNG; cualquier otra cosa, None."""
+    if datos[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if datos[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return None
+
+
+def _enlace_seguro(url: Optional[str]) -> Optional[str]:
+    """Solo enlaces https (los del bucket de Supabase): el panel los pone en un <img>/<video> tal cual."""
+    return url if isinstance(url, str) and url.lower().startswith("https://") else None
+
 
 # Cuántas llegadas por anuncio se listan en la pantalla de una conversación (la más reciente primero).
 MAXIMO_LLEGADAS_LISTADAS = 20
@@ -211,6 +231,7 @@ class ConversacionesService:
             MensajeDTO(
                 id=m["id"], rol=m["rol"], contenido=m["contenido"], tipo=m["tipo"], creado_en=_iso(m["creado_en"]),
                 tiene_archivo=bool(m.get("media_id")), analisis=m.get("analisis"),
+                media_url=_enlace_seguro(m.get("media_url")),
             )
             for m in mensajes_crudos
         ]
@@ -368,6 +389,7 @@ class ConversacionesService:
                 contenido=f"{PREFIJO_VIDEO if es_video else PREFIJO_FOTO}{producto['nombre']} ({producto['sku']})",
                 tipo=TIPO_VIDEO if es_video else "imagen",
                 wamid=None,
+                media_url=archivo["url"],  # para ver en el panel QUÉ foto salió (migración 039)
             )
             if es_video:
                 videos += 1
@@ -375,6 +397,53 @@ class ConversacionesService:
                 fotos += 1
         self._conversaciones.actualizar_timestamp(conversacion_id)
         return {"fotos": fotos, "videos": videos}
+
+    def enviar_foto_propia(self, conversacion_id: int, datos: bytes, mime: Optional[str], descripcion: Optional[str] = None) -> dict:
+        """El dueño le manda al cliente una foto que eligió de su teléfono o computadora (no del catálogo).
+
+        La foto se SUBE a WhatsApp y se envía por su id: no queda en ningún enlace público (puede ser una guía de envío, un
+        comprobante…). El mensaje se guarda con ese id, como las fotos que manda el cliente, y así se puede ver en el panel
+        mientras Meta la guarde (~30 días). Solo JPG o PNG de hasta 5 MB (lo que acepta WhatsApp); se revisa el contenido real
+        del archivo, no solo lo que dice el navegador. Igual que al escribirle a mano: si la tenía Victoria, la toma el dueño."""
+        conversacion = self._conversaciones.obtener_por_id(conversacion_id)
+        if conversacion is None:
+            raise ConversacionNoEncontradaError(f"No existe una conversación con id={conversacion_id}.")
+        tipo_real = tipo_de_imagen(datos)
+        if tipo_real is None:
+            raise FotoInvalidaError("Solo se pueden enviar fotos JPG o PNG.")
+        if len(datos) > MAXIMO_BYTES_FOTO:
+            raise FotoInvalidaError("La foto pesa más de 5 MB: WhatsApp no la acepta.")
+        texto = (descripcion or "").strip()[:MAXIMO_LARGO_DESCRIPCION] or None
+
+        abierta, _ = self._ventana_abierta(conversacion)
+        if not abierta:
+            raise VentanaMensajeriaCerradaError(
+                "La ventana de 24 horas está cerrada: WhatsApp solo deja enviar fotos dentro de las 24 horas siguientes al "
+                "último mensaje del cliente."
+            )
+        if conversacion["estado"] not in ESTADOS_QUE_ESPERAN_AL_DUENO:
+            self._anotar_intervencion(conversacion, "le envió una foto al cliente")
+            self._conversaciones.marcar_manual(conversacion_id)
+
+        canal = self._canales.para_conversacion(conversacion)
+        if not hasattr(canal, "enviar_foto_propia"):
+            raise EnvioWhatsAppFallidoError("este canal todavía no permite enviar fotos desde el panel")
+        try:
+            media_id = canal.enviar_foto_propia(conversacion["id_externo"], datos, tipo_real, texto)
+        except (WhatsAppRequestError, WhatsAppBusinessError, CanalNoDisponibleError) as exc:
+            raise EnvioWhatsAppFallidoError(str(exc)) from exc
+
+        mensaje = self._mensajes.crear(
+            conversacion_id=conversacion_id,
+            rol="humano",
+            contenido=f"📷 Foto enviada desde el panel{': ' + texto if texto else ''}",
+            tipo="imagen",
+            wamid=None,
+            media_id=media_id,
+            media_mime=tipo_real,
+        )
+        self._conversaciones.actualizar_timestamp(conversacion_id)
+        return {"mensajeId": mensaje["id"]}
 
     def obtener_archivo(self, conversacion_id: int, mensaje_id: int):
         """La foto, el audio o el PDF de un mensaje, traído de Meta en este momento (no se guarda en ningún otro lado; Meta lo
@@ -386,7 +455,8 @@ class ConversacionesService:
             raise ArchivoNoDisponibleError("Ese mensaje no tiene un archivo.")
         conversacion = self._conversaciones.obtener_por_id(conversacion_id)
         try:
-            datos, mime = self._canales.para(conversacion["canal"]).descargar_media(mensaje["media_id"])
+            # Del número de ESTA conversación (ADR-019): una foto subida desde otro número del negocio es de ese número.
+            datos, mime = self._canales.para_conversacion(conversacion).descargar_media(mensaje["media_id"])
         except Exception as exc:
             # Lo más común: Meta ya no lo guarda (pasaron ~30 días) o el enlace venció.
             raise ArchivoNoDisponibleError(f"Meta ya no entrega este archivo ({exc}).") from exc

@@ -304,7 +304,7 @@ class MensajesEnMemoria:
     def obtener_por_conversacion(self, conversacion_id: int) -> List[Dict[str, str]]:
         return list(self.filas)
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None) -> Dict[str, str]:
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **_otros) -> Dict[str, str]:
         fila = {"rol": rol, "contenido": contenido, "tipo": tipo, "creado_en": len(self.filas) + 1}
         self.filas.append(fila)
         if tipo in ("imagen", "video"):

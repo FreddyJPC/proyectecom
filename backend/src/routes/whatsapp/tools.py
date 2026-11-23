@@ -904,6 +904,7 @@ class HerramientasVictoria:
                 contenido=f"{PREFIJO_VIDEO if es_video else PREFIJO_FOTO}{producto['nombre']} ({producto['sku']})",
                 tipo=TIPO_VIDEO if es_video else "imagen",
                 wamid=None,
+                media_url=archivo["url"],  # para ver en el panel QUÉ foto salió (migración 039)
             )
             if es_video:
                 videos += 1

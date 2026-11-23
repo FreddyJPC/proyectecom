@@ -63,7 +63,7 @@ class FakeMensajeRepository:
     def obtener_por_conversacion(self, conversacion_id):
         return self._historial
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **kw):
         fila = {"conversacion_id": conversacion_id, "rol": rol, "contenido": contenido, "tipo": tipo, "wamid": wamid}
         self.guardados.append(fila)
         return fila
@@ -586,7 +586,7 @@ class MensajesConId:
     def obtener_por_conversacion(self, conversacion_id):
         return sorted(self.filas, key=lambda f: (f["creado_en"], f["id"]))
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, creado_en=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, creado_en=None, **kw):
         ultimo = max((f["creado_en"] for f in self.filas), default=0)
         fila = {"id": self._siguiente_id(), "creado_en": creado_en if creado_en is not None else ultimo + 1,
                 "rol": rol, "contenido": contenido, "tipo": tipo}

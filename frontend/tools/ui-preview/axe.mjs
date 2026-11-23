@@ -248,6 +248,15 @@ for (const theme of ["light", "dark"]) {
         await page.keyboard.press("Escape");
         await page.waitForTimeout(300);
       }
+      // Enviar una foto del teléfono o la computadora (botón junto al campo de respuesta).
+      if (r === "/conversaciones/301") {
+        await page.getByRole("button", { name: "Enviar una foto de tu teléfono o computadora" }).click();
+        await page.getByRole("dialog", { name: "Enviar una foto" }).waitFor();
+        await page.waitForTimeout(300);
+        await auditar(r + " [enviar una foto propia]");
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+      }
       // Enviar fotos y videos desde el panel (botón junto al campo de respuesta).
       if (r === "/conversaciones/301") {
         await page.getByRole("button", { name: "Enviar fotos y videos del producto" }).click();

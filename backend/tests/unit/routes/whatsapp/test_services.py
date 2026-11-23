@@ -82,7 +82,7 @@ class FakeMensajeRepository:
     def existe_por_wamid(self, wamid):
         return any(m["wamid"] == wamid for m in self.mensajes if m["wamid"] is not None)
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **kw):
         mensaje = {
             "id": self._siguiente_id,
             "conversacion_id": conversacion_id,

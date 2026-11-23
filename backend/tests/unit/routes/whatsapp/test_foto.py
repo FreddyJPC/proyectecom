@@ -40,7 +40,7 @@ class MensajesFalsos:
     def contar_fotos(self, conversacion_id, sku):
         return sum(1 for m in self.creados if m["conversacion_id"] == conversacion_id and m["contenido"].endswith(f"({sku})"))
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **kw):
         self.creados.append({"conversacion_id": conversacion_id, "rol": rol, "contenido": contenido, "tipo": tipo, "wamid": wamid})
         return self.creados[-1]
 

@@ -9,9 +9,9 @@ import { apiBlob } from "@/lib/api";
 const ETIQUETA = { imagen: "Ver la foto", audio: "Escuchar el audio", documento: "Abrir el PDF" } as const;
 const ICONO = { imagen: ImageIcon, audio: Mic, documento: FileText } as const;
 
-/** La foto, el audio o el PDF que mandó el cliente. El servidor lo trae de Meta solo cuando se pide (Meta lo guarda ~30 días);
+/** La foto, el audio o el PDF que mandó el cliente (o una foto que el dueño mandó desde su teléfono o computadora). El servidor lo trae de Meta solo cuando se pide (Meta lo guarda ~30 días);
  * por eso hay un botón y no se carga todo al abrir la conversación. */
-export function ArchivoDelMensaje({ conversacionId, mensajeId, tipo }: { conversacionId: string; mensajeId: number; tipo: string }) {
+export function ArchivoDelMensaje({ conversacionId, mensajeId, tipo, deCliente = true }: { conversacionId: string; mensajeId: number; tipo: string; deCliente?: boolean }) {
   const clave = (tipo === "audio" || tipo === "documento" ? tipo : "imagen") as keyof typeof ETIQUETA;
   const Icono = ICONO[clave];
   const [url, setUrl] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function ArchivoDelMensaje({ conversacionId, mensajeId, tipo }: { convers
 
   if (url && clave === "imagen") {
     // eslint-disable-next-line @next/next/no-img-element -- es un blob local de la sesión, next/image no aplica
-    return <img src={url} alt="Foto enviada por el cliente" className="mt-2 max-h-72 w-full rounded-lg border object-contain" />;
+    return <img src={url} alt={deCliente ? "Foto enviada por el cliente" : "Foto enviada al cliente"} className="mt-2 max-h-72 w-full rounded-lg border object-contain" />;
   }
   if (url && clave === "audio") {
     return <audio controls src={url} className="mt-2 w-full" aria-label="Audio enviado por el cliente" />;

@@ -261,3 +261,41 @@ class TestDescargarMedia:
         responses.add(responses.GET, f"{self.BASE}/M", body=RequestsConnectionError("sin red"))
         with pytest.raises(WhatsAppRequestError):
             client.descargar_media("M")
+
+
+MEDIA_URL = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/media"
+
+
+class TestFotoPropia:
+    """Una foto del teléfono o la computadora del dueño: se sube a WhatsApp y se envía por su id."""
+
+    @responses.activate
+    def test_sube_el_archivo_y_devuelve_su_id(self, client):
+        responses.add(responses.POST, MEDIA_URL, json={"id": "MEDIA-77"}, status=200)
+        assert client.subir_media(b"\xff\xd8\xffJPG", "image/jpeg", nombre="foto.jpg") == "MEDIA-77"
+        enviado = responses.calls[0].request
+        assert enviado.headers["Authorization"] == f"Bearer {TOKEN}"
+        assert enviado.headers["Content-Type"].startswith("multipart/form-data")
+        cuerpo = enviado.body
+        assert b'name="messaging_product"' in cuerpo and b"whatsapp" in cuerpo
+        assert b'name="file"; filename="foto.jpg"' in cuerpo and b"\xff\xd8\xffJPG" in cuerpo
+
+    @responses.activate
+    def test_meta_rechaza_el_archivo(self, client):
+        responses.add(responses.POST, MEDIA_URL, json={"error": {"message": "Param file must be a file", "code": 100}}, status=400)
+        with pytest.raises(WhatsAppBusinessError):
+            client.subir_media(b"x", "image/jpeg")
+
+    @responses.activate
+    def test_sin_id_en_la_respuesta(self, client):
+        responses.add(responses.POST, MEDIA_URL, json={}, status=200)
+        with pytest.raises(WhatsAppRequestError):
+            client.subir_media(b"x", "image/jpeg")
+
+    @responses.activate
+    def test_envia_la_imagen_por_id_no_por_enlace(self, client):
+        responses.add(responses.POST, URL, json={"messages": [{"id": "wamid.X"}]}, status=200)
+        client.enviar_imagen_subida(telefono="593987654321", media_id="MEDIA-77", descripcion="Su guía")
+        body = json.loads(responses.calls[0].request.body)
+        assert body == {"messaging_product": "whatsapp", "to": "593987654321", "type": "image",
+                        "image": {"id": "MEDIA-77", "caption": "Su guía"}}
