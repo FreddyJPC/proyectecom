@@ -252,3 +252,43 @@ class TestEnviarMaterial:
         mock_login_ok()
         resp = _client().post("/conversaciones/5/material", json={}, headers=AUTH_HEADER)
         assert resp.status_code == 422
+
+
+class TestEnviarFotoPropia:
+    @responses.activate
+    def test_envia_el_archivo_al_servicio(self):
+        import io
+
+        mock_login_ok()
+        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+            MockService.return_value.enviar_foto_propia.return_value = {"mensajeId": 5}
+            resp = _client().post(
+                "/conversaciones/1/foto",
+                data={"archivo": (io.BytesIO(b"\xff\xd8\xffJPG"), "foto.jpg", "image/jpeg"), "descripcion": "Su guía"},
+                content_type="multipart/form-data",
+                headers=AUTH_HEADER,
+            )
+        assert resp.status_code == 200 and resp.get_json() == {"mensajeId": 5}
+        args = MockService.return_value.enviar_foto_propia.call_args.args
+        assert args == (1, b"\xff\xd8\xffJPG", "image/jpeg", "Su guía")
+
+    @responses.activate
+    def test_sin_archivo(self):
+        mock_login_ok()
+        resp = _client().post("/conversaciones/1/foto", data={}, content_type="multipart/form-data", headers=AUTH_HEADER)
+        assert resp.status_code == 422
+
+    @responses.activate
+    def test_errores(self):
+        import io
+
+        from src.routes.conversaciones.exceptions import FotoInvalidaError
+
+        mock_login_ok()
+        for error, codigo in [(FotoInvalidaError("no"), 422), (VentanaMensajeriaCerradaError("x"), 409),
+                              (EnvioWhatsAppFallidoError("x"), 502), (ConversacionNoEncontradaError("x"), 404)]:
+            with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+                MockService.return_value.enviar_foto_propia.side_effect = error
+                resp = _client().post("/conversaciones/1/foto", data={"archivo": (io.BytesIO(b"x"), "f.jpg")},
+                                      content_type="multipart/form-data", headers=AUTH_HEADER)
+            assert resp.status_code == codigo, error

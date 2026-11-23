@@ -184,7 +184,7 @@ export function EnviarMaterialDialog({
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="icon-lg" disabled={deshabilitado} aria-label="Enviar fotos y videos del producto" className="shrink-0 rounded-full">
+        <Button type="button" variant="outline" size="icon-lg" disabled={deshabilitado} aria-label="Enviar fotos y videos del producto" title="Enviar fotos y videos del producto" className="shrink-0 rounded-full">
           <Images />
         </Button>
       </DialogTrigger>

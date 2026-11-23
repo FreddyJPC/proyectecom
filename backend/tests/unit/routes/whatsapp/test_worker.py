@@ -9,7 +9,7 @@ class FakeMensajeRepository:
     def __init__(self):
         self.mensajes = []
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **kw):
         mensaje = {
             "conversacion_id": conversacion_id,
             "rol": rol,

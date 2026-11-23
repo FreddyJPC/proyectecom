@@ -26,6 +26,7 @@ import { AsistenteConversacion } from "./asistente-conversacion";
 import { ContinuarVentaDialog } from "./continuar-venta-dialog";
 import { DatosEnvioDialog } from "./datos-envio-dialog";
 import { PedidoRocketfyDialog } from "./pedido-rocketfy-dialog";
+import { EnviarFotoDialog } from "./enviar-foto-dialog";
 import { EnviarMaterialDialog } from "./enviar-material-dialog";
 import { OrigenCliente } from "./origen-cliente";
 
@@ -81,6 +82,32 @@ function TextoConEnlaces({ texto }: { texto: string }) {
   );
 }
 
+/** La foto o el video del catálogo que se le ENVIÓ al cliente (enlace público del bucket): se ve directo en la burbuja.
+ * Tocarlo abre el archivo completo en otra pestaña. */
+function MaterialEnviado({ url, tipo }: { url: string; tipo: string }) {
+  const [falla, setFalla] = useState(false);
+  if (falla) return <span className="mt-1 block text-xs not-italic opacity-80">No se pudo mostrar el archivo.</span>;
+  if (tipo === "video") {
+    return (
+      <video
+        src={url}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label="Video enviado al cliente"
+        onError={() => setFalla(true)}
+        className="mt-2 max-h-72 w-full rounded-lg bg-black object-contain not-italic"
+      />
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      {/* eslint-disable-next-line @next/next/no-img-element -- la foto viene del bucket público de Supabase */}
+      <img src={url} alt="Foto enviada al cliente" loading="lazy" onError={() => setFalla(true)} className="max-h-72 w-full rounded-lg bg-card object-contain" />
+    </a>
+  );
+}
+
 function Burbuja({ m, mostrarAutor, conversacionId, nombreBot = "Victoria" }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string; nombreBot?: string }) {
   if (m.rol === "sistema") return <NotaDelSistema m={m} />;
   const esCliente = m.rol === "cliente";
@@ -105,7 +132,8 @@ function Burbuja({ m, mostrarAutor, conversacionId, nombreBot = "Victoria" }: { 
         )}
       >
         <TextoConEnlaces texto={m.contenido} />
-        {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} />}
+        {m.mediaUrl && <MaterialEnviado url={m.mediaUrl} tipo={m.tipo} />}
+        {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} deCliente={esCliente} />}
         {m.analisis && (
           <span className="mt-1.5 block text-xs not-italic leading-snug text-muted-foreground">
             {m.tipo === "audio" ? "Lo que dice: " : "Lo que se entendió: "}
@@ -686,6 +714,7 @@ export default function ConversacionDetallePage() {
 
         {/* Campo de respuesta, siempre visible abajo */}
         <form onSubmit={handleEnviar} className="flex items-end gap-2 border-t bg-card p-3">
+          <EnviarFotoDialog conversacionId={id} deshabilitado={!conversacion.ventanaAbierta} onEnviado={recargar} />
           {conversacion.asistente !== "inmuebles" && (
             <EnviarMaterialDialog
               conversacionId={id}

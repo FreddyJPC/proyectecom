@@ -16,6 +16,7 @@ from src.routes.conversaciones.exceptions import (
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
     VentanaMensajeriaCerradaError,
+    FotoInvalidaError,
 )
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.conversaciones.services import ConversacionesService
@@ -95,7 +96,7 @@ class FakeMensajeRepository:
     def obtener_por_id(self, mensaje_id):
         return next((dict(m) for ms in self._mensajes.values() for m in ms if m["id"] == mensaje_id), None)
 
-    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None):
+    def crear(self, conversacion_id, rol, contenido, tipo="texto", wamid=None, **kw):
         mensaje = {
             "id": self._siguiente_id,
             "conversacion_id": conversacion_id,
@@ -104,6 +105,7 @@ class FakeMensajeRepository:
             "tipo": tipo,
             "wamid": wamid,
             "creado_en": datetime.now(timezone.utc),
+            **kw,
         }
         self._mensajes.setdefault(conversacion_id, []).append(mensaje)
         self._siguiente_id += 1
@@ -481,7 +483,7 @@ def _transferencia(estado_pago="pendiente", metodo_pago="transferencia"):
 
 
 def _ventana_abierta():
-    return {1: [{"id": 1, "rol": "cliente", "contenido": "ya transferí", "creado_en": AHORA - timedelta(hours=2)}]}
+    return {1: [{"id": 1, "conversacion_id": 1, "rol": "cliente", "contenido": "ya transferí", "tipo": "texto", "creado_en": AHORA - timedelta(hours=2)}]}
 
 
 class TestContinuarLaVenta:
@@ -679,3 +681,100 @@ class TestEnviarMaterialDesdeElPanel:
     def test_conversacion_inexistente(self):
         with pytest.raises(ConversacionNoEncontradaError):
             _con_material().enviar_material(999, "SET-1")
+
+
+JPG = b"\xff\xd8\xff\xe0" + b"0" * 200
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+
+
+class TestFotosEnviadasSeVenEnElPanel:
+    """Las fotos y videos que ENVIAMOS desde el bucket guardan su enlace (migración 039) y el panel los muestra."""
+
+    def test_el_material_enviado_guarda_su_enlace(self):
+        servicio = _con_material()
+        servicio.enviar_material(1, "SET-1")
+        enviados = [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"]
+        assert [m["media_url"] for m in enviados] == [
+            "https://x.supabase.co/a.jpg", "https://x.supabase.co/b.mp4", "https://x.supabase.co/c.jpg"
+        ]
+        detalle = servicio.obtener_detalle(1)
+        assert [m.media_url for m in detalle.mensajes if m.rol == "humano"][0] == "https://x.supabase.co/a.jpg"
+
+    def test_un_enlace_que_no_es_https_no_llega_al_panel(self):
+        mensajes = {1: [{"id": 1, "conversacion_id": 1, "rol": "bot", "contenido": "📷 Foto de X (S)", "tipo": "imagen",
+                         "creado_en": AHORA, "media_url": "javascript:alert(1)"}]}
+        detalle = _servicio(conversaciones=[_conversacion()], mensajes=mensajes).obtener_detalle(1)
+        assert detalle.mensajes[0].media_url is None
+
+
+class TestEnviarFotoPropia:
+    """El dueño manda una foto de su teléfono o computadora: se sube a WhatsApp y se envía por su id (nunca un enlace público)."""
+
+    def _servicio(self, estado="manual", whatsapp=None, mensajes=None):
+        if whatsapp is None:
+            whatsapp = MagicMock()
+            whatsapp.subir_media.return_value = "MEDIA-1"
+        servicio = _servicio(conversaciones=[_conversacion(estado=estado)], mensajes=_ventana_abierta() if mensajes is None else mensajes,
+                             whatsapp=whatsapp)
+        return servicio, whatsapp
+
+    def test_sube_envia_por_id_y_la_guarda_para_verla(self):
+        servicio, whatsapp = self._servicio()
+        resultado = servicio.enviar_foto_propia(1, JPG, "image/jpeg", "  Esta es su guía  ")
+
+        assert whatsapp.subir_media.call_args.args[:2] == (JPG, "image/jpeg")
+        whatsapp.enviar_imagen_subida.assert_called_once_with(telefono="593987654321", media_id="MEDIA-1", descripcion="Esta es su guía")
+        whatsapp.enviar_imagen.assert_not_called()  # nunca por enlace
+        guardado = [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"][0]
+        assert guardado["media_id"] == "MEDIA-1" and guardado["media_mime"] == "image/jpeg" and guardado["tipo"] == "imagen"
+        assert guardado["contenido"] == "📷 Foto enviada desde el panel: Esta es su guía"
+        assert resultado == {"mensajeId": guardado["id"]}
+        # Se ve en el panel con el mismo camino que las fotos del cliente.
+        assert servicio.obtener_detalle(1).mensajes[-1].tiene_archivo is True
+
+    def test_png_y_sin_descripcion(self):
+        servicio, whatsapp = self._servicio()
+        servicio.enviar_foto_propia(1, PNG, "image/png", "")
+        assert whatsapp.subir_media.call_args.args[1] == "image/png"
+        assert whatsapp.enviar_imagen_subida.call_args.kwargs["descripcion"] is None
+
+    def test_el_tipo_se_decide_por_el_contenido_no_por_el_navegador(self):
+        servicio, whatsapp = self._servicio()
+        servicio.enviar_foto_propia(1, PNG, "image/jpeg")
+        assert whatsapp.subir_media.call_args.args[1] == "image/png"
+        with pytest.raises(FotoInvalidaError):
+            servicio.enviar_foto_propia(1, b"<html>no soy foto</html>", "image/jpeg")
+        with pytest.raises(FotoInvalidaError):
+            servicio.enviar_foto_propia(1, b"GIF89a" + b"0" * 50, "image/gif")
+
+    def test_mas_de_5_mb_no_se_envia(self):
+        servicio, whatsapp = self._servicio()
+        with pytest.raises(FotoInvalidaError, match="5 MB"):
+            servicio.enviar_foto_propia(1, JPG + b"0" * (5 * 1024 * 1024), "image/jpeg")
+        whatsapp.subir_media.assert_not_called()
+
+    def test_ventana_cerrada(self):
+        vieja = {1: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=30)}]}
+        servicio, whatsapp = self._servicio(mensajes=vieja)
+        with pytest.raises(VentanaMensajeriaCerradaError):
+            servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+        whatsapp.subir_media.assert_not_called()
+
+    def test_si_la_tenia_victoria_la_toma_el_dueno(self):
+        servicio, _ = self._servicio(estado="activa")
+        servicio._aprendizaje_fijo = MagicMock()
+        servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+        assert servicio._conversaciones.obtener_por_id(1)["estado"] == "manual"
+
+    def test_si_whatsapp_falla_no_queda_en_el_historial(self):
+        whatsapp = MagicMock()
+        whatsapp.subir_media.side_effect = WhatsAppBusinessError("archivo rechazado")
+        servicio, _ = self._servicio(whatsapp=whatsapp)
+        with pytest.raises(EnvioWhatsAppFallidoError):
+            servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+        assert [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"] == []
+
+    def test_conversacion_inexistente(self):
+        servicio, _ = self._servicio()
+        with pytest.raises(ConversacionNoEncontradaError):
+            servicio.enviar_foto_propia(99, JPG, "image/jpeg")
