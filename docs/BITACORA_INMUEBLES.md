@@ -91,11 +91,12 @@ pero **frenada por el límite de gasto de la cuenta**; trajo 447 conversaciones 
 | I-2 | **Precio**: ¿el asistente lo dice? ¿dice que es conversable o lo deja a Freddy? (en la ficha: «Que el asistente diga el precio» y «¿Es conversable?»). | Freddy |
 | I-3 | **Cómo se presenta**: sin nombre, «el equipo de la casa» u otro nombre (parámetro «Nombre del asistente de inmuebles»), y cómo nombra al dueño («el propietario», «Freddy»…). | Freddy |
 | I-4 | **Visitas**: días y horas en que se puede visitar y quién la enseña (en la ficha). Revisar el texto del mensaje de visita confirmada (parámetro). | Freddy |
-| I-5 | **Decidir B o C** (sección 4). Si es C: conseguir el chip y registrarlo en la API con el conector (requiere confirmación); después registrarlo en «Números de WhatsApp». | Freddy decide; Claude ejecuta |
+| I-5 | ~~Decidir B o C~~ **DECIDIDO 2026-11-23: camino B** (el anuncio de la casa apunta al número de Victoria y se vincula a la propiedad en su ficha). A Freddy no le importa que se vea «AzoShop»: el asistente puede saludar como «le habla Freddy». Falta que el anuncio apunte al número de Victoria (hoy apunta al WhatsApp Business del teléfono). | Freddy, con guía |
 | I-6 | **Desplegar**: aplicar la migración 037 en Supabase (primero la migración, después el código), PR, fusión, Railway y Vercel. Pide confirmación. | Claude, con visto bueno |
 | I-7 | **Cargar la ficha** de la casa en la app, publicarla y vincular el anuncio `120252118114240418` (si es camino B) o registrar el número (camino C). | Freddy o Claude con los datos |
 | I-8 | **Probar con la IA real** antes de reactivar: preguntas típicas, «¿dónde queda?», «mándeme fotos», «quiero visitarla», «dígame usted la hora», una oferta de precio, una pregunta que no está en la ficha. Hoy solo hay pruebas con una IA simulada. | Claude |
 | I-9 | **Reactivar la campaña** (subir el límite de gasto de la cuenta personal) cuando todo lo anterior esté listo. | Freddy |
+| I-11 | **Cómo actúa el asistente (lo dirá Freddy en detalle):** cómo habla y se presenta («Hola, buenos días/tardes/noches, le habla Freddy»), qué decir y qué no, y sobre todo: **cuando necesite a una persona NO debe decir «le paso con un asesor»: se queda callado y marca la conversación para gestión** (hoy, al pasar al dueño, se despide con una frase). Se ajusta en `asistente_prompt.txt` y en la herramienta `pasar_al_dueno`. | Freddy explica; Claude ajusta |
 | I-10 | Más adelante: recordatorio de la visita el día anterior (necesita una **plantilla aprobada por Meta**: texto a aprobar por Freddy); instrucciones del asistente editables desde la app (hoy se cambian en el archivo); probar el asistente desde la app como «Probar con Victoria». | Por decidir |
 
 ## 6. Historial

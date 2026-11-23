@@ -108,9 +108,10 @@ create index if not exists ix_conversaciones_asistente on conversaciones (asiste
 
 -- Clave única: (canal, cliente, número del negocio). El número principal se guarda como null: con coalesce, todas las
 -- conversaciones que ya existen conservan exactamente la misma clave que antes.
+-- El índice viejo (canal, id_externo) se quita en la 038, DESPUÉS de desplegar el código nuevo: el código anterior usa
+-- `on conflict (canal, id_externo)` y fallaría si desapareciera mientras sigue corriendo.
 create unique index if not exists uq_conversaciones_canal_id_externo_numero
     on conversaciones (canal, id_externo, (coalesce(numero_negocio, '')));
-drop index if exists uq_conversaciones_canal_id_externo;
 
 -- 4. Agenda de visitas -----------------------------------------------------------------------------------------------------
 create table if not exists visitas (
@@ -144,3 +145,11 @@ create index if not exists ix_visitas_conversacion on visitas (conversacion_id);
 -- Una sola visita ABIERTA (pedida o confirmada) por conversación y propiedad: si el cliente cambia de idea, se actualiza.
 create unique index if not exists uq_visitas_abierta_por_conversacion
     on visitas (conversacion_id, inmueble_id) where estado in ('solicitada', 'confirmada') and conversacion_id is not null;
+
+-- Como en las demás tablas (031 a 035): seguridad por filas activa y sin políticas. Solo el backend (que entra con el rol del
+-- servidor) las lee y escribe; la llave pública del navegador no ve nada.
+alter table inmuebles enable row level security;
+alter table inmuebles_material enable row level security;
+alter table inmuebles_anuncios enable row level security;
+alter table visitas enable row level security;
+alter table numeros_whatsapp enable row level security;
