@@ -55,6 +55,30 @@ function NotaDelSistema({ m }: { m: MensajeConversacion }) {
   );
 }
 
+// Un enlace dentro del texto (p. ej. «[Ubicación compartida — https://maps.google.com/?q=…]»). Se corta antes de un «]» o de
+// la puntuación final, para que no se lleve el cierre del corchete ni el punto de la frase.
+const ENLACE = /(https?:\/\/[^\s\]]+[^\s\].,;:!?)])/g;
+
+const esMapa = (url: string) => url.includes("maps.google.");
+
+/** El texto del mensaje con sus enlaces tocables (se abren en otra pestaña; una ubicación abre Google Maps). */
+function TextoConEnlaces({ texto }: { texto: string }) {
+  const partes = texto.split(ENLACE);
+  return (
+    <>
+      {partes.map((parte, i) =>
+        i % 2 === 1 ? (
+          <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className={cn("underline underline-offset-2", !esMapa(parte) && "break-all")}>
+            {esMapa(parte) ? "Abrir en Google Maps" : parte}
+          </a>
+        ) : (
+          parte
+        ),
+      )}
+    </>
+  );
+}
+
 function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; mostrarAutor: boolean; conversacionId: string }) {
   if (m.rol === "sistema") return <NotaDelSistema m={m} />;
   const esCliente = m.rol === "cliente";
@@ -78,7 +102,7 @@ function Burbuja({ m, mostrarAutor, conversacionId }: { m: MensajeConversacion; 
           esMedia && "italic opacity-90",
         )}
       >
-        {m.contenido}
+        <TextoConEnlaces texto={m.contenido} />
         {m.tieneArchivo && <ArchivoDelMensaje conversacionId={conversacionId} mensajeId={m.id} tipo={m.tipo} />}
         {m.analisis && (
           <span className="mt-1.5 block text-xs not-italic leading-snug text-muted-foreground">
