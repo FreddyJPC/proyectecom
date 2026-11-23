@@ -254,41 +254,42 @@ class TestEnviarMaterial:
         assert resp.status_code == 422
 
 
-class TestEnviarFotoPropia:
+class TestEnviarArchivoPropio:
     @responses.activate
-    def test_envia_el_archivo_al_servicio(self):
+    def test_envia_el_archivo_al_servicio_por_las_dos_rutas(self):
         import io
 
         mock_login_ok()
-        with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
-            MockService.return_value.enviar_foto_propia.return_value = {"mensajeId": 5}
-            resp = _client().post(
-                "/conversaciones/1/foto",
-                data={"archivo": (io.BytesIO(b"\xff\xd8\xffJPG"), "foto.jpg", "image/jpeg"), "descripcion": "Su guía"},
-                content_type="multipart/form-data",
-                headers=AUTH_HEADER,
-            )
-        assert resp.status_code == 200 and resp.get_json() == {"mensajeId": 5}
-        args = MockService.return_value.enviar_foto_propia.call_args.args
-        assert args == (1, b"\xff\xd8\xffJPG", "image/jpeg", "Su guía")
+        for ruta in ("/conversaciones/1/archivo", "/conversaciones/1/foto"):
+            with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
+                MockService.return_value.enviar_archivo_propio.return_value = {"mensajeId": 5, "tipo": "documento"}
+                resp = _client().post(
+                    ruta,
+                    data={"archivo": (io.BytesIO(b"%PDF-1.7 x"), "Catalogo.pdf", "application/pdf"), "descripcion": "Nuestro catálogo"},
+                    content_type="multipart/form-data",
+                    headers=AUTH_HEADER,
+                )
+            assert resp.status_code == 200 and resp.get_json() == {"mensajeId": 5, "tipo": "documento"}
+            args = MockService.return_value.enviar_archivo_propio.call_args.args
+            assert args == (1, b"%PDF-1.7 x", "Catalogo.pdf", "Nuestro catálogo")
 
     @responses.activate
     def test_sin_archivo(self):
         mock_login_ok()
-        resp = _client().post("/conversaciones/1/foto", data={}, content_type="multipart/form-data", headers=AUTH_HEADER)
+        resp = _client().post("/conversaciones/1/archivo", data={}, content_type="multipart/form-data", headers=AUTH_HEADER)
         assert resp.status_code == 422
 
     @responses.activate
     def test_errores(self):
         import io
 
-        from src.routes.conversaciones.exceptions import FotoInvalidaError
+        from src.routes.conversaciones.exceptions import ArchivoInvalidoError
 
         mock_login_ok()
-        for error, codigo in [(FotoInvalidaError("no"), 422), (VentanaMensajeriaCerradaError("x"), 409),
+        for error, codigo in [(ArchivoInvalidoError("no"), 422), (VentanaMensajeriaCerradaError("x"), 409),
                               (EnvioWhatsAppFallidoError("x"), 502), (ConversacionNoEncontradaError("x"), 404)]:
             with patch("src.routes.conversaciones.controllers.ConversacionesService") as MockService:
-                MockService.return_value.enviar_foto_propia.side_effect = error
-                resp = _client().post("/conversaciones/1/foto", data={"archivo": (io.BytesIO(b"x"), "f.jpg")},
+                MockService.return_value.enviar_archivo_propio.side_effect = error
+                resp = _client().post("/conversaciones/1/archivo", data={"archivo": (io.BytesIO(b"x"), "f.pdf")},
                                       content_type="multipart/form-data", headers=AUTH_HEADER)
             assert resp.status_code == codigo, error

@@ -250,10 +250,10 @@ for (const theme of ["light", "dark"]) {
       }
       // Enviar una foto del teléfono o la computadora (botón junto al campo de respuesta).
       if (r === "/conversaciones/301") {
-        await page.getByRole("button", { name: "Enviar una foto de tu teléfono o computadora" }).click();
-        await page.getByRole("dialog", { name: "Enviar una foto" }).waitFor();
+        await page.getByRole("button", { name: "Enviar un archivo de tu teléfono o computadora" }).click();
+        await page.getByRole("dialog", { name: "Enviar un archivo" }).waitFor();
         await page.waitForTimeout(300);
-        await auditar(r + " [enviar una foto propia]");
+        await auditar(r + " [enviar un archivo propio]");
         await page.keyboard.press("Escape");
         await page.waitForTimeout(300);
       }

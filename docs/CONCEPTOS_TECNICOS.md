@@ -1837,7 +1837,8 @@ Hay dos formas de mandarle una foto al cliente por WhatsApp:
 - **Por enlace (`link`)**: se le da a Meta una dirección pública y Meta baja la foto de ahí. Es lo que se usa con las fotos del
   catálogo (están en el bucket público de Supabase, que existe justamente para eso). Ahora ese enlace se guarda en el mensaje
   (`mensajes.media_url`) y el panel muestra la foto en el chat.
-- **Subida (`/media` + `id`)**: el archivo se sube primero a WhatsApp, que devuelve un identificador, y se envía con ese id. Es lo que se
+- **Subida (`/media` + `id`)** (desde la entrada 0.0.177 también para PDF, Word, Excel, PowerPoint y videos MP4, que salen como `document` o
+  `video`; un documento lleva su nombre de archivo, que es lo que ve el cliente): el archivo se sube primero a WhatsApp, que devuelve un identificador, y se envía con ese id. Es lo que se
   usa con una foto que el dueño elige de su teléfono o computadora: así **no queda publicada** en ningún enlace abierto (puede ser una guía
   de envío o un comprobante con datos del cliente). Meta la guarda unos 30 días; mientras tanto se ve en el chat (se baja de Meta al
   pulsar «Ver la foto», igual que las fotos que manda el cliente).

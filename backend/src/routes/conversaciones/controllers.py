@@ -9,7 +9,7 @@ from .exceptions import (
     ConversacionNoEncontradaError,
     DatosEnvioInvalidosError,
     EnvioWhatsAppFallidoError,
-    FotoInvalidaError,
+    ArchivoInvalidoError,
     PedidoYaCerradoError,
     SinMaterialError,
     SinPedidoEnCursoError,
@@ -27,7 +27,7 @@ from .schemas import (
     pedido_rocketfy_input_schema,
 )
 from .pedido_externo import PedidoExternoInvalidoError, PedidoExternoService, RocketfyNoDisponibleError
-from .services import MAXIMO_BYTES_FOTO, ConversacionesService
+from .services import MAXIMO_BYTES_ARCHIVO, ConversacionesService
 
 
 def _build_service() -> ConversacionesService:
@@ -101,26 +101,30 @@ def enviar_material(conversacion_id: int):
     return jsonify(resultado), 200
 
 
-@conversaciones_bp.post("/<int:conversacion_id>/foto")
-def enviar_foto_propia(conversacion_id: int):
-    """El dueño le manda al cliente una foto de su teléfono o computadora (formulario con `archivo` y `descripcion` opcional)."""
+@conversaciones_bp.post("/<int:conversacion_id>/archivo")
+@conversaciones_bp.post("/<int:conversacion_id>/foto")  # nombre anterior (solo fotos): se mantiene por compatibilidad
+def enviar_archivo_propio(conversacion_id: int):
+    """El dueño le manda al cliente un archivo de su teléfono o computadora: foto, video o documento (formulario con `archivo` y
+    `descripcion` opcional)."""
     archivo = request.files.get("archivo")
     if archivo is None:
-        return jsonify(error="Falta la foto."), 422
+        return jsonify(error="Falta el archivo."), 422
     # Se lee como mucho un byte más del máximo: alcanza para saber si se pasa sin cargar archivos enormes en memoria.
-    datos = archivo.stream.read(MAXIMO_BYTES_FOTO + 1)
+    datos = archivo.stream.read(MAXIMO_BYTES_ARCHIVO + 1)
+    if len(datos) > MAXIMO_BYTES_ARCHIVO:
+        return jsonify(error=f"El archivo pesa más de {MAXIMO_BYTES_ARCHIVO // (1024 * 1024)} MB."), 422
     try:
-        resultado = _build_service().enviar_foto_propia(
-            conversacion_id, datos, archivo.mimetype, request.form.get("descripcion")
+        resultado = _build_service().enviar_archivo_propio(
+            conversacion_id, datos, archivo.filename, request.form.get("descripcion")
         )
     except ConversacionNoEncontradaError as exc:
         return jsonify(error=str(exc)), 404
-    except FotoInvalidaError as exc:
+    except ArchivoInvalidoError as exc:
         return jsonify(error=str(exc)), 422
     except VentanaMensajeriaCerradaError as exc:
         return jsonify(error=str(exc)), 409
     except EnvioWhatsAppFallidoError as exc:
-        return jsonify(error=f"No se pudo enviar la foto: {exc}"), 502
+        return jsonify(error=f"No se pudo enviar el archivo: {exc}"), 502
     return jsonify(resultado), 200
 
 

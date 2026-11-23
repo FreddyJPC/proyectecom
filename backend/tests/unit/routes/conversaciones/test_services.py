@@ -16,7 +16,7 @@ from src.routes.conversaciones.exceptions import (
     ConversacionNoEncontradaError,
     EnvioWhatsAppFallidoError,
     VentanaMensajeriaCerradaError,
-    FotoInvalidaError,
+    ArchivoInvalidoError,
 )
 from src.routes.anuncios.servicio import AnuncioServicio
 from src.routes.conversaciones.services import ConversacionesService
@@ -707,8 +707,15 @@ class TestFotosEnviadasSeVenEnElPanel:
         assert detalle.mensajes[0].media_url is None
 
 
-class TestEnviarFotoPropia:
-    """El dueño manda una foto de su teléfono o computadora: se sube a WhatsApp y se envía por su id (nunca un enlace público)."""
+PDF = b"%PDF-1.7\n" + b"0" * 200
+MP4 = b"\x00\x00\x00\x18ftypmp42" + b"0" * 200
+MOV = b"\x00\x00\x00\x14ftypqt  " + b"0" * 200
+XLSX = b"PK\x03\x04" + b"0" * 200
+
+
+class TestEnviarArchivoPropio:
+    """El dueño manda un archivo de su teléfono o computadora (foto, video o documento): se sube a WhatsApp y se envía por su id,
+    nunca por un enlace público."""
 
     def _servicio(self, estado="manual", whatsapp=None, mensajes=None):
         if whatsapp is None:
@@ -718,52 +725,77 @@ class TestEnviarFotoPropia:
                              whatsapp=whatsapp)
         return servicio, whatsapp
 
-    def test_sube_envia_por_id_y_la_guarda_para_verla(self):
+    def _guardado(self, servicio):
+        return [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"][-1]
+
+    def test_foto_se_sube_y_se_envia_por_id(self):
         servicio, whatsapp = self._servicio()
-        resultado = servicio.enviar_foto_propia(1, JPG, "image/jpeg", "  Esta es su guía  ")
+        resultado = servicio.enviar_archivo_propio(1, JPG, "IMG_1234.JPG", "  Esta es su guía  ")
 
         assert whatsapp.subir_media.call_args.args[:2] == (JPG, "image/jpeg")
-        whatsapp.enviar_imagen_subida.assert_called_once_with(telefono="593987654321", media_id="MEDIA-1", descripcion="Esta es su guía")
+        whatsapp.enviar_media_subida.assert_called_once_with(
+            telefono="593987654321", tipo="image", media_id="MEDIA-1", descripcion="Esta es su guía", nombre_archivo="IMG_1234.jpg"
+        )
         whatsapp.enviar_imagen.assert_not_called()  # nunca por enlace
-        guardado = [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"][0]
+        guardado = self._guardado(servicio)
         assert guardado["media_id"] == "MEDIA-1" and guardado["media_mime"] == "image/jpeg" and guardado["tipo"] == "imagen"
-        assert guardado["contenido"] == "📷 Foto enviada desde el panel: Esta es su guía"
-        assert resultado == {"mensajeId": guardado["id"]}
-        # Se ve en el panel con el mismo camino que las fotos del cliente.
+        assert guardado["contenido"] == "📷 Foto enviada desde el panel — Esta es su guía"
+        assert resultado == {"mensajeId": guardado["id"], "tipo": "imagen"}
+        # Se ve en el panel con el mismo camino que los archivos del cliente.
         assert servicio.obtener_detalle(1).mensajes[-1].tiene_archivo is True
 
-    def test_png_y_sin_descripcion(self):
+    def test_pdf_va_como_documento_con_su_nombre(self):
         servicio, whatsapp = self._servicio()
-        servicio.enviar_foto_propia(1, PNG, "image/png", "")
-        assert whatsapp.subir_media.call_args.args[1] == "image/png"
-        assert whatsapp.enviar_imagen_subida.call_args.kwargs["descripcion"] is None
+        resultado = servicio.enviar_archivo_propio(1, PDF, "Catálogo Hogar y Cocina AzoShop.pdf")
+        llamada = whatsapp.enviar_media_subida.call_args.kwargs
+        assert llamada["tipo"] == "document" and llamada["nombre_archivo"] == "Catálogo Hogar y Cocina AzoShop.pdf"
+        assert whatsapp.subir_media.call_args.args[1] == "application/pdf"
+        guardado = self._guardado(servicio)
+        assert guardado["tipo"] == "documento" and guardado["media_nombre"] == "Catálogo Hogar y Cocina AzoShop.pdf"
+        assert guardado["contenido"] == "📄 Archivo enviado desde el panel: Catálogo Hogar y Cocina AzoShop.pdf"
+        assert resultado["tipo"] == "documento"
+        assert servicio.obtener_detalle(1).mensajes[-1].nombre_archivo == "Catálogo Hogar y Cocina AzoShop.pdf"
 
-    def test_el_tipo_se_decide_por_el_contenido_no_por_el_navegador(self):
+    def test_excel_y_video(self):
         servicio, whatsapp = self._servicio()
-        servicio.enviar_foto_propia(1, PNG, "image/jpeg")
-        assert whatsapp.subir_media.call_args.args[1] == "image/png"
-        with pytest.raises(FotoInvalidaError):
-            servicio.enviar_foto_propia(1, b"<html>no soy foto</html>", "image/jpeg")
-        with pytest.raises(FotoInvalidaError):
-            servicio.enviar_foto_propia(1, b"GIF89a" + b"0" * 50, "image/gif")
+        servicio.enviar_archivo_propio(1, XLSX, "lista.xlsx")
+        assert whatsapp.enviar_media_subida.call_args.kwargs["tipo"] == "document"
+        assert whatsapp.subir_media.call_args.args[1].endswith("spreadsheetml.sheet")
+        servicio.enviar_archivo_propio(1, MP4, "video.mp4")
+        assert whatsapp.enviar_media_subida.call_args.kwargs["tipo"] == "video"
+        assert self._guardado(servicio)["tipo"] == "video"
 
-    def test_mas_de_5_mb_no_se_envia(self):
+    def test_el_tipo_se_decide_por_el_contenido(self):
         servicio, whatsapp = self._servicio()
-        with pytest.raises(FotoInvalidaError, match="5 MB"):
-            servicio.enviar_foto_propia(1, JPG + b"0" * (5 * 1024 * 1024), "image/jpeg")
+        # Un PNG con nombre .jpg sale como PNG; una página web con nombre .pdf no sale.
+        servicio.enviar_archivo_propio(1, PNG, "foto.jpg")
+        assert whatsapp.subir_media.call_args.args[1] == "image/png"
+        with pytest.raises(ArchivoInvalidoError):
+            servicio.enviar_archivo_propio(1, b"<html>no soy pdf</html>", "catalogo.pdf")
+        with pytest.raises(ArchivoInvalidoError):
+            servicio.enviar_archivo_propio(1, b"GIF89a" + b"0" * 50, "x.gif")
+        with pytest.raises(ArchivoInvalidoError, match="MOV"):
+            servicio.enviar_archivo_propio(1, MOV, "video.mov")
+
+    def test_limites_de_peso(self):
+        servicio, whatsapp = self._servicio()
+        with pytest.raises(ArchivoInvalidoError, match="5 MB"):
+            servicio.enviar_archivo_propio(1, JPG + b"0" * (5 * 1024 * 1024), "grande.jpg")
+        with pytest.raises(ArchivoInvalidoError, match="16 MB"):
+            servicio.enviar_archivo_propio(1, PDF + b"0" * (16 * 1024 * 1024), "grande.pdf")
         whatsapp.subir_media.assert_not_called()
 
     def test_ventana_cerrada(self):
         vieja = {1: [{"id": 1, "rol": "cliente", "contenido": "hola", "creado_en": AHORA - timedelta(hours=30)}]}
         servicio, whatsapp = self._servicio(mensajes=vieja)
         with pytest.raises(VentanaMensajeriaCerradaError):
-            servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+            servicio.enviar_archivo_propio(1, PDF, "catalogo.pdf")
         whatsapp.subir_media.assert_not_called()
 
     def test_si_la_tenia_victoria_la_toma_el_dueno(self):
         servicio, _ = self._servicio(estado="activa")
         servicio._aprendizaje_fijo = MagicMock()
-        servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+        servicio.enviar_archivo_propio(1, PDF, "catalogo.pdf")
         assert servicio._conversaciones.obtener_por_id(1)["estado"] == "manual"
 
     def test_si_whatsapp_falla_no_queda_en_el_historial(self):
@@ -771,10 +803,10 @@ class TestEnviarFotoPropia:
         whatsapp.subir_media.side_effect = WhatsAppBusinessError("archivo rechazado")
         servicio, _ = self._servicio(whatsapp=whatsapp)
         with pytest.raises(EnvioWhatsAppFallidoError):
-            servicio.enviar_foto_propia(1, JPG, "image/jpeg")
+            servicio.enviar_archivo_propio(1, PDF, "catalogo.pdf")
         assert [m for m in servicio._mensajes.obtener_por_conversacion(1) if m["rol"] == "humano"] == []
 
     def test_conversacion_inexistente(self):
         servicio, _ = self._servicio()
         with pytest.raises(ConversacionNoEncontradaError):
-            servicio.enviar_foto_propia(99, JPG, "image/jpeg")
+            servicio.enviar_archivo_propio(99, PDF, "catalogo.pdf")
